@@ -1,0 +1,24 @@
+{
+  "name": "@pulsefield/beatmap-lens-playground",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "vue-tsc --project tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@fontsource-variable/azeret-mono": "5.3.0",
+    "beatmap-lens": "workspace:*",
+    "vue": "3.5.40"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "@vitejs/plugin-vue": "6.0.8",
+    "typescript": "6.0.3",
+    "vite": "8.2.0",
+    "vue-tsc": "3.3.8"
+  }
+}

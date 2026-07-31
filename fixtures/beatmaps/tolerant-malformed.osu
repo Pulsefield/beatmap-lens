@@ -1,0 +1,21 @@
+﻿osu file format vx
+
+[General
+Mode not-a-property
+[General]
+Mode: not-number
+
+[Metadata]
+Title:Tolerant Parse
+Artist:Beatmap Lens
+
+[Difficulty]
+CircleSize: five
+
+[HitObjects]
+bad object
+64,192,100,1,0,0:0:0:0:
+192,192,90,2,0,B|256:192,1,100
+320,192,200,128,0,150:0:0:0:
+448,192,300,128,0,600:0:0:0:
+513,192,700,1,0,0:0:0:0:

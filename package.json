@@ -1,0 +1,35 @@
+{
+  "name": "@pulsefield/beatmap-lens",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.9.0",
+  "engines": {
+    "node": "^22.18.0 || >=24.11.0",
+    "pnpm": ">=11"
+  },
+  "scripts": {
+    "benchmark": "vitest bench --run",
+    "build": "pnpm --recursive --if-present build",
+    "changeset": "changeset",
+    "check": "pnpm check:source && pnpm typecheck && pnpm test && pnpm build && pnpm test:corpus-cli",
+    "check:source": "biome ci .",
+    "dev": "pnpm --filter @pulsefield/beatmap-lens-playground dev",
+    "format": "biome check --write .",
+    "release": "pnpm build && changeset publish",
+    "test": "vitest run",
+    "test:corpus-cli": "node scripts/test-corpus-cli.mjs",
+    "test:watch": "vitest",
+    "typecheck": "pnpm --recursive --if-present typecheck",
+    "prevalidate:corpus": "pnpm --filter beatmap-lens build",
+    "validate:corpus": "node scripts/validate-corpus.mjs",
+    "version-packages": "changeset version"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.6",
+    "@changesets/cli": "2.31.1",
+    "@types/node": "22.20.1",
+    "typescript": "6.0.3",
+    "vitest": "4.1.10"
+  }
+}

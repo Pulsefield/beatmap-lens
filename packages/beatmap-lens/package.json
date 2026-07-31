@@ -1,0 +1,43 @@
+{
+  "name": "beatmap-lens",
+  "version": "0.0.0",
+  "description": "Parse, inspect, and render osu!mania beatmaps.",
+  "keywords": [
+    "osu",
+    "osu-mania",
+    "beatmap",
+    "parser",
+    "svg"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "build:watch": "tsdown --watch",
+    "typecheck": "tsc --project tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "tsdown": "0.22.14",
+    "typescript": "6.0.3"
+  }
+}

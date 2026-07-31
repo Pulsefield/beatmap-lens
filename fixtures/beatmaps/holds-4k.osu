@@ -1,0 +1,20 @@
+osu file format v14
+
+[General]
+AudioFilename: holds.mp3
+Mode: 3
+
+[Metadata]
+Title:Long Notes
+Artist:Beatmap Lens
+Creator:Codex
+Version:Hold Test
+
+[Difficulty]
+CircleSize:4
+
+[HitObjects]
+448,192,500,1,0,0:0:0:0:
+64,192,750,128,0,1250:0:0:0:
+192,192,750,1,0,0:0:0:0:
+320,192,1100,128,0,1600:0:0:0:
