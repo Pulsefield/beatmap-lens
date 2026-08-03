@@ -100,6 +100,37 @@ export interface ManiaChart {
   readonly diagnostics: readonly OsuDiagnostic[];
 }
 
+export interface BeatmapAudio {
+  readonly filename: string;
+  readonly bytes: Uint8Array;
+  readonly mimeType?: string;
+}
+
+export interface BeatmapInput {
+  readonly osuSource: string;
+  readonly osuFilename?: string;
+  readonly audio?: BeatmapAudio;
+}
+
+export interface Beatmap {
+  readonly osuSource: string;
+  readonly osuFilename?: string;
+  readonly document: ParsedOsu;
+  readonly chart: ManiaChart;
+  readonly audioFilename?: string;
+  readonly audio?: BeatmapAudio;
+}
+
+export interface BeatmapSet {
+  readonly beatmaps: readonly Beatmap[];
+  readonly audios: readonly BeatmapAudio[];
+}
+
+export interface ParseOszOptions {
+  readonly maxInflatedBytes?: number;
+  readonly maxConcurrency?: number;
+}
+
 export interface RenderPadding {
   readonly top: number;
   readonly right: number;

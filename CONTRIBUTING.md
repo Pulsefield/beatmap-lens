@@ -10,8 +10,8 @@ Two workflows guide the project:
 1. A program consumes `.osu` text and receives deterministic, explainable evidence.
 2. A human reviews a target `t ± Xs` window with synchronized audio and a chosen visual speed.
 
-Only the first workflow's parse, normalize, scene, and SVG foundation exists today. Planned behavior
-must remain labeled as planned.
+The parse, normalize, in-memory archive/resource model, scene, and SVG foundation exist today.
+Playback and the interactive review loop remain planned and must stay labeled as planned.
 
 ## Key-count boundary
 
@@ -31,6 +31,9 @@ must remain labeled as planned.
   supported key counts.
 - One scene projection should feed browser rendering and SVG serialization. Do not create a second
   note-geometry implementation in an app.
+- Keep archive resource policy explicit on each load operation. Add a longer-lived coordinator only
+  when a real consumer needs shared state or lifecycle management. Any future cache must be
+  measured, bounded, and explicitly releasable.
 - Visual falling speed and audio playback rate are independent. The browser media clock owns
   playback time.
 - Findings must remain explainable through rule, severity, note, time, and source locations. Do not

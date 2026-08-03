@@ -12,13 +12,15 @@ The package is not published, and its API can still change.
 `beatmap-lens` currently provides:
 
 - a tolerant `.osu` parser that preserves source lines and structured diagnostics;
+- an in-memory `.osz` parser that builds audio-linked beatmap sets;
+- a runtime `Beatmap` model with optional, shared audio resources;
 - a deterministic 4K-10K mania model for normal notes and long notes;
 - bounded time-range projection into a render scene;
 - DOM-free SVG serialization;
 - fixtures, unit tests, corpus invariants, and a private browser app for static inspection.
 
-It does not yet provide semantic chart-quality rules, synchronized audio playback, clickable
-findings, or a `t ± Xs` review loop. Documentation should not describe those as shipped features.
+It does not yet provide semantic chart-quality rules, audio playback, clickable findings, or a
+`t ± Xs` review loop. Documentation should not describe those as shipped features.
 
 ## Direction
 
@@ -45,13 +47,14 @@ Experiment tracking, model execution, storage, and dashboards belong outside thi
 - Keep parsing, normalization, analysis, scene creation, and serialization as explicit stages.
 - Treat key count as chart data. Package-level models and stages cover every integer key count
   from 4 through 10 without separate per-key-count APIs.
-- Keep the core synchronous, DOM-free, and free of implicit file or network access.
+- Keep the core DOM-free and free of implicit file or network access. CPU-heavy archive inflation
+  may be asynchronous and explicitly throttled.
 - Keep browser file handling and media transport in the private Inspector app.
 - Keep the Inspector's 4K-7K priority at the application boundary; it must not narrow the
   package's 4K-10K contract.
 - Let one render scene drive browser presentation and SVG output.
-- Prefer a direct default API plus composable primitives over stateful builders or service
-  containers.
+- Prefer direct, composable primitives. Put archive resource policy on each load operation until a
+  real stateful consumer proves the need for a longer-lived coordinator.
 - Add package, adapter, plugin, and backend boundaries only after a real consumer proves the
   dependency and release boundary.
 
@@ -59,7 +62,10 @@ Experiment tracking, model execution, storage, and dashboards belong outside thi
 
 ```ts
 import {
+  createBeatmap,
   createRenderScene,
+  iterateOsz,
+  parseOsz,
   parseOsu,
   renderSvg,
   serializeSvg,
@@ -68,6 +74,8 @@ import {
 
 const document = parseOsu(osuSource);
 const chart = toManiaChart(document);
+const beatmap = createBeatmap({ osuSource });
+const beatmapSet = await parseOsz(oszBytes);
 
 const viewport = {
   startTime: 60_000,
@@ -79,27 +87,45 @@ const viewport = {
 const scene = createRenderScene(chart, viewport);
 const svg = renderSvg(chart, viewport);
 const sameSvg = serializeSvg(scene);
+
+for await (const loadedBeatmap of iterateOsz(oszBytes, { maxConcurrency: 1 })) {
+  // Each yielded beatmap already points to its audio when the archive contains it.
+}
 ```
 
 The stages expose lower-level data when a caller needs it. The planned convenience inspection API
-will compose them; it will not hide I/O or browser state inside the package.
+will compose them; it will not hide I/O or browser state inside the package. `createBeatmap` accepts
+an optional `BeatmapAudio`, and `connectBeatmapAudio` returns a new beatmap that points to the exact
+audio object supplied by the caller.
+
+`await parseOsz(bytes)` returns a `BeatmapSet`. Each supported 4K-10K mania difficulty points to its
+referenced audio object, and difficulties that share one file share the same object and byte array.
+`iterateOsz(bytes)` exposes the same work as an async iterator and yields complete beatmaps one at a
+time. Archive loading extracts `.osu` entries and only their referenced audio; it does not load
+backgrounds, videos, hitsounds, or unrelated archive resources.
+
+The loader caps selected uncompressed data at 256 MiB and runs at most two inflations concurrently
+by default. Set `maxInflatedBytes` to another finite non-negative budget and `maxConcurrency` from 1
+through 8 to make the memory/throughput tradeoff explicit for a device. `File`, `Blob`, object URLs,
+media elements, playback clocks, and their cleanup remain application responsibilities. Audio byte
+arrays are shared by reference and are never copied or mutated by Beatmap Lens after connection.
+
+Archive entry names currently use the ZIP library's UTF-8 decoding. Legacy Shift-JIS filename
+fallback is not included in this first archive implementation.
 
 ## Architecture
 
 ```text
-.osu text
-   |
-   v
-parseOsu -> ParsedOsu -> toManiaChart -> ManiaChart
-                                             |
-                                             v
-                                  createRenderScene
-                                             |
-                                             v
-                                        RenderScene
-                                             |
-                                             v
-                                        serializeSvg
+.osu text -> createBeatmap ---------------------> Beatmap
+                 |                            /      \
+                 v                           v        v
+     ParsedOsu -> ManiaChart       BeatmapAudio?   RenderScene
+                                                   |
+.osz bytes -> iterateOsz -> Beatmap --------------+
+                 |                                |
+                 +-> parseOsz -> BeatmapSet       v
+                                  |        serializeSvg
+                                  +-> Beatmap[] + shared BeatmapAudio[]
 ```
 
 `renderSvg(chart, options)` is the current shortcut from a normalized chart to SVG. Future
@@ -140,11 +166,13 @@ acceptance checks should cover that range first. Valid 8K-10K charts remain pack
 requirements, but polished Inspector support for them is a later app milestone and must not block
 the first 4K-7K app release.
 
-With the package's 4K-10K normalization and rendering contract in place, the next product work is:
+With the package's 4K-10K normalization, archive, and rendering contract in place, the next product
+work is:
 
 1. add typed, explainable chart findings on the same 4K-10K model;
-2. build the Inspector's 4K-7K browser review loop with explicit `.osu` and audio selection,
-   `t ± Xs` navigation, visual speed presets, synchronized playback, seeking, and looping;
+2. connect the Inspector's 4K-7K file import to the runtime beatmap model and build the browser
+   review loop with `t ± Xs` navigation, visual speed presets, synchronized playback, seeking, and
+   looping;
 3. emit deterministic SVG and JSON evidence for the selected window.
 
 Beatmap Lens is not a beatmap editor, gameplay simulator, difficulty calculator, model runner,
