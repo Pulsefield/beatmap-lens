@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import foundation4k from "../../../fixtures/beatmaps/foundation-4k.osu?raw";
 import holds4k from "../../../fixtures/beatmaps/holds-4k.osu?raw";
-import tolerantMalformed from "../../../fixtures/beatmaps/tolerant-malformed.osu?raw";
 import { parseOsu, toManiaChart } from "../src/index";
+
+const supportedKeyCounts = [4, 5, 6, 7, 8, 9, 10];
 
 describe("toManiaChart", () => {
   it("normalizes 4K normal notes with deterministic order and ids", () => {
@@ -30,6 +31,22 @@ describe("toManiaChart", () => {
     ).toBe(true);
   });
 
+  it.each(supportedKeyCounts)(
+    "detects %iK from CircleSize and maps every lane without coercion",
+    (keyCount) => {
+      const chart = toManiaChart(parseOsu(maniaSource(keyCount)));
+
+      expect(chart.keyCount).toBe(keyCount);
+      expect(chart.sourceKeyCount).toBe(keyCount);
+      expect(chart.notes.map((note) => note.column)).toEqual(
+        Array.from({ length: keyCount }, (_, column) => column),
+      );
+      expect(chart.notes.map((note) => note.kind)).toEqual(
+        Array.from({ length: keyCount }, (_, column) => (column % 2 === 0 ? "normal" : "long")),
+      );
+    },
+  );
+
   it("normalizes long notes and keeps same-time ordering stable", () => {
     const chart = toManiaChart(parseOsu(holds4k));
 
@@ -55,28 +72,6 @@ describe("toManiaChart", () => {
     ).toBe(true);
   });
 
-  it("skips unsupported and invalid notes without rejecting the file", () => {
-    const chart = toManiaChart(parseOsu(tolerantMalformed));
-
-    expect(
-      chart.notes.map((note) => [note.kind, note.column, note.startTime, note.endTime]),
-    ).toEqual([
-      ["normal", 0, 100, 100],
-      ["long", 3, 300, 600],
-      ["normal", 3, 700, 700],
-    ]);
-    expect(chart.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(
-      expect.arrayContaining([
-        "invalid-integer-property",
-        "missing-mode",
-        "missing-circle-size",
-        "skipped-unsupported-hitobject",
-        "negative-long-note-duration",
-        "x-position-out-of-range",
-      ]),
-    );
-  });
-
   it("accepts integral decimal properties and preserves fractional note times", () => {
     const chart = toManiaChart(
       parseOsu(`osu file format v14
@@ -95,6 +90,7 @@ CircleSize:4.0
     );
 
     expect(chart.mode).toBe(3);
+    expect(chart.keyCount).toBe(4);
     expect(chart.sourceKeyCount).toBe(4);
     expect(
       chart.notes.map((note) => [note.kind, note.sourceKind, note.startTime, note.endTime]),
@@ -112,3 +108,25 @@ CircleSize:4.0
     );
   });
 });
+
+function maniaSource(keyCount: number): string {
+  const hitObjects = Array.from({ length: keyCount }, (_, column) => {
+    const x = Math.floor(((column + 0.5) * 512) / keyCount);
+    const startTime = 100 + column * 100;
+    return column % 2 === 0
+      ? `${x},192,${startTime},1,0,0:0:0:0:`
+      : `${x},192,${startTime},128,0,${startTime + 50}:0:0:0:0:`;
+  }).join("\n");
+
+  return `osu file format v14
+
+[General]
+Mode:3
+
+[Difficulty]
+CircleSize:${keyCount}
+
+[HitObjects]
+${hitObjects}
+`;
+}

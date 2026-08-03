@@ -319,7 +319,7 @@ function parseHitObjectLine(
     addDiagnostic({
       severity: "warning",
       code: "unsupported-hitobject-kind",
-      message: `Hit object type ${type} is not a 4K mania note or hold and will not convert to a note.`,
+      message: `Hit object type ${type} is not an osu!mania note or hold and will not convert to a note.`,
       line: sourceLine,
       section: "HitObjects",
       value: raw,

@@ -92,7 +92,7 @@ export interface ManiaNote {
 }
 
 export interface ManiaChart {
-  readonly keyCount: 4;
+  readonly keyCount: number;
   readonly sourceKeyCount?: number;
   readonly mode?: number;
   readonly metadata: ManiaMetadata;
@@ -119,7 +119,8 @@ export interface RenderOptions {
 }
 
 export interface RenderScene {
-  readonly kind: "mania-4k";
+  readonly kind: "mania";
+  readonly keyCount: number;
   readonly width: number;
   readonly height: number;
   readonly viewBox: readonly [number, number, number, number];

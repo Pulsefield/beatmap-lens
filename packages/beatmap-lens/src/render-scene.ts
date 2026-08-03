@@ -22,7 +22,9 @@ export function createRenderScene(chart: ManiaChart, options: RenderOptions = {}
   const laneGap = options.laneGap ?? 4;
   const noteHeight = options.noteHeight ?? 8;
   const padding = { ...defaultPadding, ...options.padding };
-  const width = round3(options.width ?? widthFromLaneWidth(options.laneWidth, laneGap, padding));
+  const width = round3(
+    options.width ?? widthFromLaneWidth(options.laneWidth, laneGap, padding, chart.keyCount),
+  );
   const pixelsPerSecond = options.pixelsPerSecond ?? defaultPixelsPerSecond;
   const pixelsPerMillisecond = pixelsPerSecond / 1000;
   const startTime = options.startTime ?? 0;
@@ -30,6 +32,7 @@ export function createRenderScene(chart: ManiaChart, options: RenderOptions = {}
   const endTime = options.endTime ?? naturalEndTime;
   validateRenderGeometry({
     endTime,
+    keyCount: chart.keyCount,
     laneGap,
     noteHeight,
     padding,
@@ -74,7 +77,8 @@ export function createRenderScene(chart: ManiaChart, options: RenderOptions = {}
   );
 
   return {
-    kind: "mania-4k",
+    kind: "mania",
+    keyCount: chart.keyCount,
     width,
     height,
     viewBox: [0, 0, width, height],
@@ -152,16 +156,18 @@ function widthFromLaneWidth(
   laneWidth: number | undefined,
   laneGap: number,
   padding: RenderPadding,
+  keyCount: ManiaChart["keyCount"],
 ): number {
   if (laneWidth === undefined) {
     return defaultWidth;
   }
 
-  return padding.left + padding.right + 4 * laneWidth + 3 * laneGap;
+  return padding.left + padding.right + keyCount * laneWidth + (keyCount - 1) * laneGap;
 }
 
 function validateRenderGeometry(options: {
   endTime: number;
+  keyCount: ManiaChart["keyCount"];
   laneGap: number;
   noteHeight: number;
   padding: RenderPadding;
@@ -192,7 +198,10 @@ function validateRenderGeometry(options: {
 
   const minimumLaneWidth = 10;
   const minimumWidth =
-    options.padding.left + options.padding.right + 3 * options.laneGap + 4 * minimumLaneWidth;
+    options.padding.left +
+    options.padding.right +
+    (options.keyCount - 1) * options.laneGap +
+    options.keyCount * minimumLaneWidth;
   if (!Number.isFinite(options.width) || options.width < minimumWidth) {
     throw new RangeError(`width must be finite and at least ${minimumWidth}.`);
   }

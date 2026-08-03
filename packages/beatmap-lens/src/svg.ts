@@ -97,7 +97,8 @@ function sceneTitle(scene: RenderScene): string {
   const parts = [scene.metadata.artist, scene.metadata.title, scene.metadata.version].filter(
     (part): part is string => typeof part === "string" && part.length > 0,
   );
-  return parts.length > 0 ? `${parts.join(" - ")} 4K mania chart` : "4K mania chart";
+  const chartLabel = `${scene.keyCount}K mania chart`;
+  return parts.length > 0 ? `${parts.join(" - ")} ${chartLabel}` : chartLabel;
 }
 
 function escapeAttribute(value: string): string {

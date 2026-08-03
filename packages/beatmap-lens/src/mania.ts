@@ -12,54 +12,11 @@ type DraftNote = Omit<ManiaNote, "id">;
 
 export function toManiaChart(parsed: ParsedOsu): ManiaChart {
   const diagnostics: OsuDiagnostic[] = [];
-  const mode = parseOptionalIntegerProperty(parsed, "General", "Mode", diagnostics);
-  const sourceKeyCount = parseOptionalIntegerProperty(
-    parsed,
-    "Difficulty",
-    "CircleSize",
-    diagnostics,
-  );
-
-  if (mode === undefined) {
-    diagnostics.push({
-      severity: "warning",
-      code: "missing-mode",
-      message: "General Mode is missing; converting with the 4K mania assumptions.",
-      section: "General",
-    });
-  } else if (mode !== 3) {
-    diagnostics.push({
-      severity: "warning",
-      code: "unsupported-mode",
-      message:
-        `General Mode ${mode} is not osu!mania Mode 3; ` +
-        "converting hit objects with 4K mania assumptions.",
-      section: "General",
-      value: String(mode),
-    });
-  }
-
-  if (sourceKeyCount === undefined) {
-    diagnostics.push({
-      severity: "warning",
-      code: "missing-circle-size",
-      message: "Difficulty CircleSize is missing; defaulting to the normalized 4K model.",
-      section: "Difficulty",
-    });
-  } else if (sourceKeyCount !== 4) {
-    diagnostics.push({
-      severity: "warning",
-      code: "unsupported-key-count",
-      message:
-        `Difficulty CircleSize ${sourceKeyCount} is not 4; ` +
-        "positions will be normalized into 4 columns.",
-      section: "Difficulty",
-      value: String(sourceKeyCount),
-    });
-  }
+  const mode = Number(getLastPropertyValue(parsed, "General", "Mode"));
+  const keyCount = Number(getLastPropertyValue(parsed, "Difficulty", "CircleSize"));
 
   const notes = parsed.hitObjects
-    .flatMap((hitObject) => convertHitObject(hitObject, diagnostics))
+    .flatMap((hitObject) => convertHitObject(hitObject, keyCount, diagnostics))
     .sort(compareDraftNotes)
     .map<ManiaNote>((note, index) => ({
       id: `note-${String(index + 1).padStart(4, "0")}`,
@@ -67,22 +24,26 @@ export function toManiaChart(parsed: ParsedOsu): ManiaChart {
     }));
 
   return {
-    keyCount: 4,
-    ...(sourceKeyCount !== undefined ? { sourceKeyCount } : {}),
-    ...(mode !== undefined ? { mode } : {}),
+    keyCount,
+    sourceKeyCount: keyCount,
+    mode,
     metadata: readMetadata(parsed),
     notes,
     diagnostics: [...parsed.diagnostics, ...diagnostics],
   };
 }
 
-function convertHitObject(hitObject: OsuHitObject, diagnostics: OsuDiagnostic[]): DraftNote[] {
+function convertHitObject(
+  hitObject: OsuHitObject,
+  keyCount: number,
+  diagnostics: OsuDiagnostic[],
+): DraftNote[] {
   if (hitObject.kind === "normal") {
     return [
       {
         kind: "normal",
         sourceKind: "normal",
-        column: columnFromX(hitObject.x, hitObject, diagnostics),
+        column: columnFromX(hitObject.x, keyCount, hitObject, diagnostics),
         startTime: hitObject.time,
         endTime: hitObject.time,
         sourceLine: hitObject.sourceLine,
@@ -131,7 +92,7 @@ function convertHitObject(hitObject: OsuHitObject, diagnostics: OsuDiagnostic[])
         {
           kind: "normal",
           sourceKind: "hold",
-          column: columnFromX(hitObject.x, hitObject, diagnostics),
+          column: columnFromX(hitObject.x, keyCount, hitObject, diagnostics),
           startTime: hitObject.time,
           endTime,
           sourceLine: hitObject.sourceLine,
@@ -156,7 +117,7 @@ function convertHitObject(hitObject: OsuHitObject, diagnostics: OsuDiagnostic[])
       {
         kind: "long",
         sourceKind: "hold",
-        column: columnFromX(hitObject.x, hitObject, diagnostics),
+        column: columnFromX(hitObject.x, keyCount, hitObject, diagnostics),
         startTime: hitObject.time,
         endTime,
         sourceLine: hitObject.sourceLine,
@@ -169,7 +130,7 @@ function convertHitObject(hitObject: OsuHitObject, diagnostics: OsuDiagnostic[])
   diagnostics.push({
     severity: "warning",
     code: "skipped-unsupported-hitobject",
-    message: `Unsupported hit object kind ${hitObject.kind} was skipped during 4K mania conversion.`,
+    message: `Unsupported hit object kind ${hitObject.kind} was skipped during ${keyCount}K mania conversion.`,
     line: hitObject.sourceLine,
     section: "HitObjects",
     value: hitObject.raw,
@@ -177,7 +138,12 @@ function convertHitObject(hitObject: OsuHitObject, diagnostics: OsuDiagnostic[])
   return [];
 }
 
-function columnFromX(x: number, hitObject: OsuHitObject, diagnostics: OsuDiagnostic[]): number {
+function columnFromX(
+  x: number,
+  keyCount: number,
+  hitObject: OsuHitObject,
+  diagnostics: OsuDiagnostic[],
+): number {
   if (x < 0 || x > 512) {
     diagnostics.push({
       severity: "warning",
@@ -189,7 +155,7 @@ function columnFromX(x: number, hitObject: OsuHitObject, diagnostics: OsuDiagnos
     });
   }
 
-  return clamp(Math.floor((x * 4) / 512), 0, 3);
+  return clamp(Math.floor((x * keyCount) / 512), 0, keyCount - 1);
 }
 
 function parseLongNoteEndTime(hitObject: OsuHitObject): number | undefined {
@@ -200,32 +166,6 @@ function parseLongNoteEndTime(hitObject: OsuHitObject): number | undefined {
 
   const endTime = Number(encodedEndTime);
   return Number.isFinite(endTime) ? endTime : undefined;
-}
-
-function parseOptionalIntegerProperty(
-  parsed: ParsedOsu,
-  sectionName: string,
-  key: string,
-  diagnostics: OsuDiagnostic[],
-): number | undefined {
-  const value = getLastPropertyValue(parsed, sectionName, key);
-  if (value === undefined) {
-    return undefined;
-  }
-
-  const parsedValue = Number(value);
-  if (!Number.isFinite(parsedValue) || !Number.isInteger(parsedValue)) {
-    diagnostics.push({
-      severity: "warning",
-      code: "invalid-integer-property",
-      message: `${sectionName} ${key} must be an integer.`,
-      section: sectionName,
-      value,
-    });
-    return undefined;
-  }
-
-  return Number.isSafeInteger(parsedValue) ? parsedValue : undefined;
 }
 
 function readMetadata(parsed: ParsedOsu): ManiaMetadata {

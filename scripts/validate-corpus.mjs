@@ -5,6 +5,8 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { extname, relative, resolve } from "node:path";
 import { parseOsu, renderSvg, toManiaChart } from "../packages/beatmap-lens/dist/index.js";
 
+const supportedManiaKeyCounts = [4, 5, 6, 7, 8, 9, 10];
+
 const { rootArgument, sampleSize } = parseArguments(process.argv.slice(2));
 
 if (!rootArgument) {
@@ -35,8 +37,11 @@ async function validateCorpus(rootArgumentValue, requestedSampleSize) {
   const summary = {
     discoveredBeatmaps: discoveredFiles.length,
     processedBeatmaps: 0,
-    mania4kBeatmaps: 0,
-    otherKeyModeBeatmaps: 0,
+    supportedKeyModeBeatmaps: 0,
+    unsupportedKeyModeBeatmaps: 0,
+    maniaKeyModeBeatmaps: Object.fromEntries(
+      supportedManiaKeyCounts.map((keyCount) => [`${keyCount}K`, 0]),
+    ),
     nonManiaBeatmaps: 0,
     unknownModeBeatmaps: 0,
     sourceHitObjects: 0,
@@ -48,21 +53,31 @@ async function validateCorpus(rootArgumentValue, requestedSampleSize) {
     try {
       const source = await readFile(path, "utf8");
       const document = parseOsu(source);
-      const chart = toManiaChart(document);
+      const mode = Number(document.properties.findLast(({ key }) => key === "Mode")?.value);
+      const keyCount = Number(
+        document.properties.findLast(({ key }) => key === "CircleSize")?.value,
+      );
 
       summary.processedBeatmaps += 1;
       summary.sourceHitObjects += document.hitObjects.length;
-      summary.normalizedNotes += chart.notes.length;
 
-      if (chart.mode === 3 && chart.sourceKeyCount === 4) {
-        summary.mania4kBeatmaps += 1;
-      } else if (chart.mode === 3) {
-        summary.otherKeyModeBeatmaps += 1;
-      } else if (chart.mode === undefined) {
+      if (!Number.isInteger(mode)) {
         summary.unknownModeBeatmaps += 1;
-      } else {
-        summary.nonManiaBeatmaps += 1;
+        continue;
       }
+      if (mode !== 3) {
+        summary.nonManiaBeatmaps += 1;
+        continue;
+      }
+      if (!supportedManiaKeyCounts.includes(keyCount)) {
+        summary.unsupportedKeyModeBeatmaps += 1;
+        continue;
+      }
+
+      const chart = toManiaChart(document);
+      summary.supportedKeyModeBeatmaps += 1;
+      summary.maniaKeyModeBeatmaps[`${keyCount}K`] += 1;
+      summary.normalizedNotes += chart.notes.length;
 
       for (const diagnostic of chart.diagnostics) {
         diagnosticCounts.set(diagnostic.code, (diagnosticCounts.get(diagnostic.code) ?? 0) + 1);

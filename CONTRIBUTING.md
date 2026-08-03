@@ -13,6 +13,13 @@ Two workflows guide the project:
 Only the first workflow's parse, normalize, scene, and SVG foundation exists today. Planned behavior
 must remain labeled as planned.
 
+## Key-count boundary
+
+- The publishable package supports every integer key count from 4K through 10K.
+- The Inspector's first-priority product and acceptance range is 4K-7K.
+- App priorities must not narrow package models, geometry, diagnostics, or tests to 4K-7K.
+- All package stages and tests must preserve the full 4K-10K range.
+
 ## Architecture rules
 
 - `packages/beatmap-lens` is the only publishable package.
@@ -20,6 +27,8 @@ must remain labeled as planned.
 - Core APIs accept strings and objects. Filesystem, upload, Blob URL, and media-element behavior
   belong at an application boundary.
 - Parser, normalized chart, findings, render scene, and serializer are separate data boundaries.
+- Key count is chart data. Do not create separate public pipelines or model variants for individual
+  supported key counts.
 - One scene projection should feed browser rendering and SVG serialization. Do not create a second
   note-geometry implementation in an app.
 - Visual falling speed and audio playback rate are independent. The browser media clock owns

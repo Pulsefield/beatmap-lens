@@ -7,10 +7,11 @@ function foundationScene() {
 }
 
 describe("render scene and SVG", () => {
-  it("creates a backend-neutral 4K scene", () => {
+  it("creates a backend-neutral mania scene", () => {
     const scene = foundationScene();
 
-    expect(scene.kind).toBe("mania-4k");
+    expect(scene.kind).toBe("mania");
+    expect(scene.keyCount).toBe(4);
     expect(scene.width).toBe(640);
     expect(scene.height).toBe(408);
     expect(scene.timeRange.pixelsPerSecond).toBe(240);
@@ -26,6 +27,17 @@ describe("render scene and SVG", () => {
       ["note-0003", 327, 260, 139, 8],
       ["note-0004", 480, 376, 139, 8],
     ]);
+  });
+
+  it("renders detected 10K charts with key-count-aware geometry and titles", () => {
+    const chart = toManiaChart(parseOsu(maniaSource(10)));
+    const scene = createRenderScene(chart, { laneWidth: 20 });
+
+    expect(scene).toMatchObject({ kind: "mania", keyCount: 10, width: 268 });
+    expect(scene.lanes).toHaveLength(10);
+    expect(scene.lanes[9]).toMatchObject({ column: 9, x: 232, width: 20 });
+    expect(scene.notes[0]).toMatchObject({ column: 9, x: 237, width: 10 });
+    expect(serializeSvg(scene)).toContain("<title>10K mania chart</title>");
   });
 
   it("serializes deterministic SVG from a scene or a chart", () => {
@@ -106,3 +118,18 @@ CircleSize:4
     ).toThrowError("endTime must be finite and greater than startTime.");
   });
 });
+
+function maniaSource(keyCount: number): string {
+  const x = Math.floor(((keyCount - 0.5) * 512) / keyCount);
+  return `osu file format v14
+
+[General]
+Mode:3
+
+[Difficulty]
+CircleSize:${keyCount}
+
+[HitObjects]
+${x},192,500,1,0,0:0:0:0:
+`;
+}

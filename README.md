@@ -1,8 +1,9 @@
 # Beatmap Lens
 
-Beatmap Lens is a small TypeScript library and browser project for examining 4K `osu!mania`
-beatmaps. Its first intended consumer is Pulsefield, but the core package contains no
-Pulsefield-specific model or run-management logic.
+Beatmap Lens is a small TypeScript package and browser project for examining `osu!mania`
+beatmaps. The core package supports 4K-10K charts, while the Inspector's first-priority product
+support targets 4K-7K. Its first intended consumer is Pulsefield, but the core package contains
+no Pulsefield-specific model or run-management logic.
 
 The package is not published, and its API can still change.
 
@@ -11,7 +12,7 @@ The package is not published, and its API can still change.
 `beatmap-lens` currently provides:
 
 - a tolerant `.osu` parser that preserves source lines and structured diagnostics;
-- a deterministic 4K mania model for normal notes and long notes;
+- a deterministic 4K-10K mania model for normal notes and long notes;
 - bounded time-range projection into a render scene;
 - DOM-free SVG serialization;
 - fixtures, unit tests, corpus invariants, and a private browser app for static inspection.
@@ -42,8 +43,12 @@ Experiment tracking, model execution, storage, and dashboards belong outside thi
 
 - Keep one publishable package with a small root export.
 - Keep parsing, normalization, analysis, scene creation, and serialization as explicit stages.
+- Treat key count as chart data. Package-level models and stages cover every integer key count
+  from 4 through 10 without separate per-key-count APIs.
 - Keep the core synchronous, DOM-free, and free of implicit file or network access.
 - Keep browser file handling and media transport in the private Inspector app.
+- Keep the Inspector's 4K-7K priority at the application boundary; it must not narrow the
+  package's 4K-10K contract.
 - Let one render scene drive browser presentation and SVG output.
 - Prefer a direct default API plus composable primitives over stateful builders or service
   containers.
@@ -118,20 +123,34 @@ not completion of the audio review workflow.
 
 ## Scope
 
-Current scope is 4K `.osu` parsing, normal and long-note normalization, source and chart
-diagnostics, bounded scene creation, and deterministic SVG output.
+The package foundation supports every integer key count from 4K through 10K across normalization,
+source and chart diagnostics, bounded scene creation, and deterministic SVG output. Valid
+`osu!mania` files derive their key count from `[Difficulty] CircleSize`.
 
-The next product work is limited to:
+The package contract is:
 
-- typed, explainable chart findings;
-- a browser review loop with explicit `.osu` and audio selection;
-- `t ± Xs` navigation, visual speed presets, synchronized playback, seeking, and looping;
-- deterministic SVG and JSON evidence for the selected window.
+- derive and preserve the supported source key count instead of coercing non-4K charts into four
+  columns;
+- use one `ManiaChart`, render-scene, analysis, and serialization pipeline for 4K-10K charts;
+- keep key count in data rather than public API names or key-count-specific model variants;
+- verify the same invariants for each supported key count from 4 through 10.
+
+The Inspector's first-priority support range is 4K-7K. Its review workflow, layout, fixtures, and
+acceptance checks should cover that range first. Valid 8K-10K charts remain package-level
+requirements, but polished Inspector support for them is a later app milestone and must not block
+the first 4K-7K app release.
+
+With the package's 4K-10K normalization and rendering contract in place, the next product work is:
+
+1. add typed, explainable chart findings on the same 4K-10K model;
+2. build the Inspector's 4K-7K browser review loop with explicit `.osu` and audio selection,
+   `t ± Xs` navigation, visual speed presets, synchronized playback, seeking, and looping;
+3. emit deterministic SVG and JSON evidence for the selected window.
 
 Beatmap Lens is not a beatmap editor, gameplay simulator, difficulty calculator, model runner,
 experiment tracker, or general-purpose rhythm-game framework. Canvas, a CLI, a plugin SDK, a query
-language, additional key modes, native bindings, and WebAssembly are not commitments. Each needs a
-concrete consumer or measured constraint before entering scope.
+language, key modes outside 4K-10K, native bindings, and WebAssembly are not commitments. Each
+needs a concrete consumer or measured constraint before entering scope.
 
 ## Development
 
