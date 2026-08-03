@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import foundation4k from "../../../fixtures/beatmaps/foundation-4k.osu?raw";
-import { createRenderScene, parseOsu, renderSvg, toManiaChart } from "../src/index";
+import { createRenderScene, parseOsu, renderSvg, serializeSvg, toManiaChart } from "../src/index";
 
 function foundationScene() {
   return createRenderScene(toManiaChart(parseOsu(foundation4k)));
@@ -28,12 +28,12 @@ describe("render scene and SVG", () => {
     ]);
   });
 
-  it("serializes deterministic SVG from either a scene or a chart", () => {
+  it("serializes deterministic SVG from a scene or a chart", () => {
     const scene = foundationScene();
-    const svg = renderSvg(scene);
+    const svg = serializeSvg(scene);
     const chartSvg = renderSvg(toManiaChart(parseOsu(foundation4k)));
 
-    expect(svg).toBe(renderSvg(scene));
+    expect(svg).toBe(serializeSvg(scene));
     expect(chartSvg).toBe(svg);
     expect(svg).toContain('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 408"');
     expect(svg).toContain("<title>Beatmap Lens - Foundation 4K - Normal 4K mania chart</title>");

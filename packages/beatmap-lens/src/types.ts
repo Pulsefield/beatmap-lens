@@ -70,10 +70,6 @@ export interface ParsedOsu {
   readonly diagnostics: readonly OsuDiagnostic[];
 }
 
-export interface ParseOsuOptions {
-  readonly filename?: string;
-}
-
 export interface ManiaMetadata {
   readonly title?: string;
   readonly artist?: string;
@@ -104,10 +100,6 @@ export interface ManiaChart {
   readonly diagnostics: readonly OsuDiagnostic[];
 }
 
-export interface ToManiaChartOptions {
-  readonly keyCount?: 4;
-}
-
 export interface RenderPadding {
   readonly top: number;
   readonly right: number;
@@ -120,14 +112,11 @@ export interface RenderOptions {
   readonly endTime?: number;
   readonly width?: number;
   readonly pixelsPerSecond?: number;
-  readonly pixelsPerMillisecond?: number;
   readonly laneWidth?: number;
   readonly laneGap?: number;
   readonly noteHeight?: number;
   readonly padding?: Partial<RenderPadding>;
 }
-
-export type RenderSceneOptions = RenderOptions;
 
 export interface RenderScene {
   readonly kind: "mania-4k";
@@ -144,7 +133,6 @@ export interface RenderScene {
   readonly metadata: ManiaMetadata;
   readonly lanes: readonly RenderLane[];
   readonly notes: readonly RenderNoteGlyph[];
-  readonly diagnostics: readonly OsuDiagnostic[];
 }
 
 export interface RenderLane {

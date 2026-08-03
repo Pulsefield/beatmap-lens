@@ -1,48 +1,57 @@
 # Contributing
 
-Beatmap Lens is in early development. Design choices are still being made, so issues and pull requests should explain the workflow they support before jumping to an implementation.
+Beatmap Lens is pre-release software. Describe the beatmap or development workflow a change serves
+before adding a new abstraction.
 
-## Project Direction
+## Product boundary
 
-The first stable path should be:
+Two workflows guide the project:
 
-```text
-.osu source -> source document -> normalized mania chart -> render scene -> SVG
+1. A program consumes `.osu` text and receives deterministic, explainable evidence.
+2. A human reviews a target `t ± Xs` window with synchronized audio and a chosen visual speed.
+
+Only the first workflow's parse, normalize, scene, and SVG foundation exists today. Planned behavior
+must remain labeled as planned.
+
+## Architecture rules
+
+- `packages/beatmap-lens` is the only publishable package.
+- The public root export is curated. Internal convenience helpers are not public by default.
+- Core APIs accept strings and objects. Filesystem, upload, Blob URL, and media-element behavior
+  belong at an application boundary.
+- Parser, normalized chart, findings, render scene, and serializer are separate data boundaries.
+- One scene projection should feed browser rendering and SVG serialization. Do not create a second
+  note-geometry implementation in an app.
+- Visual falling speed and audio playback rate are independent. The browser media clock owns
+  playback time.
+- Findings must remain explainable through rule, severity, note, time, and source locations. Do not
+  replace them with an unexplained total score.
+- Do not add a package, adapter, plugin system, or rendering backend for a hypothetical consumer.
+
+A new published package needs a second real consumer, its own runtime or dependency boundary, and an
+independent release lifecycle. A folder name is not a package boundary.
+
+## Changes
+
+- Add or update tests at the boundary being changed.
+- Keep public options honest. Do not expose a setting that the implementation ignores.
+- Prefer structured results and discriminated types over string protocols.
+- Include benchmark evidence when performance is the reason for added complexity.
+- Keep local corpus data private. Pass paths at runtime and do not commit filenames or reports.
+- Keep project documentation in English and separate current behavior from direction.
+
+For a public behavior change, include compatibility notes and a Changeset. Documentation-only and
+repository-maintenance changes do not need one unless they alter the published package.
+
+## Verification
+
+```bash
+pnpm check
 ```
 
-Keep that path small and testable. CLI commands, Canvas rendering, watch mode, textual query syntax, Python bindings, and native acceleration belong on the roadmap until the core library has stable behavior.
-
-## Expected Stack
-
-The stack is TypeScript, ESM, pnpm workspaces, tsdown, Vitest, Biome, Changesets, Vue 3, and Vite for the playground. Commands are defined in the root `package.json`.
-
-## Contribution Guidelines
-
-- Keep parser, model, analysis, and rendering changes separate when possible.
-- Add or update tests near the behavior being changed.
-- Prefer typed APIs and structured results over stringly-typed protocols.
-- Keep the public API usable without a UI framework or browser DOM.
-- Do not document CLI, Canvas, watch mode, textual query syntax, Python bindings, or native acceleration as implemented before they exist.
-- Include benchmark evidence for performance-driven complexity.
-- Keep corpus validation opt-in and pass local dataset paths at runtime. Do not commit corpus
-  files, filenames, or generated indexes.
-
-## Documentation Changes
-
-Documentation should be explicit about status. Use "planned", "intended", or "roadmap" for behavior that is not implemented. Project documentation should stay in English.
-
-## Pull Requests
-
-For a significant change, include:
-
-- the user workflow or development workflow being improved;
-- the public behavior that should change;
-- tests or fixtures that prove the behavior;
-- compatibility notes if an API shape changes;
-- benchmark results when performance is the reason for the change.
-
-Small documentation fixes do not need a long proposal. Keep them focused and avoid changing unrelated files.
+The root check covers source formatting, types, tests, builds, package contents, and the corpus
+validator privacy smoke test.
 
 ## License
 
-Contributions are expected to be compatible with the MIT License.
+Contributions must be compatible with the MIT License.

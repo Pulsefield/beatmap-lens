@@ -16,7 +16,6 @@
   --muted: oklch(67% 0.032 79);
   --muted-strong: oklch(78% 0.035 82);
   --accent: oklch(85% 0.19 124);
-  --accent-deep: oklch(55% 0.145 126);
   --amber: oklch(77% 0.12 70);
   --danger: oklch(65% 0.18 32);
   --radius-sm: 4px;
@@ -208,7 +207,6 @@ h2 {
 .source-pane,
 .svg-surface,
 .facts-pane,
-.lane-surface,
 .diagnostic-strip {
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-lg);
@@ -306,8 +304,7 @@ h2 {
 
 .output-pane {
   display: grid;
-  grid-template-rows: minmax(280px, 1fr) minmax(184px, 0.56fr);
-  gap: 12px;
+  grid-template-rows: minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
 }
@@ -320,8 +317,7 @@ h2 {
 }
 
 .svg-surface,
-.facts-pane,
-.lane-surface {
+.facts-pane {
   min-width: 0;
   overflow: hidden;
 }
@@ -411,57 +407,6 @@ h2 {
   overflow-wrap: anywhere;
 }
 
-.lane-surface {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-}
-
-.lane-preview {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
-  min-height: 178px;
-  padding: 10px;
-  background:
-    linear-gradient(180deg, transparent 0, oklch(85% 0.19 124 / 0.055) 100%), oklch(10% 0.018 58);
-}
-
-.lane {
-  position: relative;
-  min-width: 0;
-  overflow: hidden;
-  border-radius: var(--radius-md);
-  background:
-    linear-gradient(180deg, oklch(100% 0 0 / 0.055), transparent),
-    repeating-linear-gradient(180deg, transparent 0, transparent 23px, oklch(100% 0 0 / 0.04) 24px),
-    oklch(16% 0.02 56);
-}
-
-.lane-label {
-  position: absolute;
-  right: 6px;
-  bottom: 6px;
-  z-index: 1;
-  color: oklch(91% 0.026 86 / 0.42);
-  font-size: 0.65rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.note {
-  position: absolute;
-  left: 7px;
-  right: 7px;
-  min-height: 8px;
-  border-radius: var(--radius-sm);
-  background: var(--accent);
-  box-shadow: 0 0 18px oklch(85% 0.19 124 / 0.26);
-}
-
-.note--hold {
-  background: linear-gradient(180deg, var(--accent), var(--accent-deep));
-  box-shadow: inset 0 0 0 1px oklch(100% 0 0 / 0.12);
-}
-
 .diagnostic-strip {
   margin-top: 12px;
   padding: 8px;
@@ -528,7 +473,7 @@ h2 {
 
   .output-pane,
   .preview-grid {
-    grid-template-rows: auto auto;
+    grid-template-rows: auto;
   }
 
   .svg-output {
@@ -577,17 +522,6 @@ h2 {
 
   .preview-grid {
     gap: 10px;
-  }
-
-  .lane-preview {
-    min-height: 168px;
-    gap: 4px;
-    padding: 8px;
-  }
-
-  .note {
-    left: 5px;
-    right: 5px;
   }
 
   .diagnostic-items {

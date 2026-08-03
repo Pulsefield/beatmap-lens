@@ -7,7 +7,6 @@ import type {
   OsuSourceLine,
   OsuSourceLineKind,
   ParsedOsu,
-  ParseOsuOptions,
 } from "./types.js";
 
 interface MutableSection {
@@ -20,7 +19,7 @@ interface MutableSection {
 
 const dataOnlySections = new Set(["events", "timingpoints", "hitobjects"]);
 
-export function parseOsu(source: string, _options: ParseOsuOptions = {}): ParsedOsu {
+export function parseOsu(source: string): ParsedOsu {
   const normalizedSource = source.startsWith("\uFEFF") ? source.slice(1) : source;
   const rawLines = splitSourceLines(normalizedSource);
   const lines: OsuSourceLine[] = [];

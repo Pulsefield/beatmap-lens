@@ -8,13 +8,11 @@ import type {
   RenderSvgOptions,
 } from "./types.js";
 
-export function renderSvg(chart: ManiaChart, options?: RenderOptions & RenderSvgOptions): string;
-export function renderSvg(scene: RenderScene, options?: RenderSvgOptions): string;
 export function renderSvg(
-  input: ManiaChart | RenderScene,
-  options: (RenderOptions & RenderSvgOptions) | RenderSvgOptions = {},
+  chart: ManiaChart,
+  options: RenderOptions & RenderSvgOptions = {},
 ): string {
-  const scene = isRenderScene(input) ? input : createRenderScene(input, options as RenderOptions);
+  const scene = createRenderScene(chart, options);
   return serializeSvg(scene, options);
 }
 
@@ -51,10 +49,6 @@ export function serializeSvg(scene: RenderScene, options: RenderSvgOptions = {})
   ];
 
   return `${lines.join("\n")}\n`;
-}
-
-function isRenderScene(input: ManiaChart | RenderScene): input is RenderScene {
-  return "kind" in input && input.kind === "mania-4k";
 }
 
 function renderLane(lane: RenderLane): string {

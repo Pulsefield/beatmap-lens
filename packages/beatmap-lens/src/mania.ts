@@ -6,12 +6,11 @@ import type {
   OsuDiagnostic,
   OsuHitObject,
   ParsedOsu,
-  ToManiaChartOptions,
 } from "./types.js";
 
 type DraftNote = Omit<ManiaNote, "id">;
 
-export function toManiaChart(parsed: ParsedOsu, _options: ToManiaChartOptions = {}): ManiaChart {
+export function toManiaChart(parsed: ParsedOsu): ManiaChart {
   const diagnostics: OsuDiagnostic[] = [];
   const mode = parseOptionalIntegerProperty(parsed, "General", "Mode", diagnostics);
   const sourceKeyCount = parseOptionalIntegerProperty(

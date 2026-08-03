@@ -1,12 +1,10 @@
 <script setup lang="ts">
 import {
   type ManiaChart,
-  type ManiaNote,
   parseOsu,
   renderSvg,
   toManiaChart,
 } from "beatmap-lens";
-import type { CSSProperties } from "vue";
 import { nextTick, onMounted, ref } from "vue";
 import { chartRenderRange } from "./chart-range";
 
@@ -24,19 +22,6 @@ type StatusItem = {
   detail?: string;
 };
 
-type LaneNote = {
-  id: string;
-  kind: ManiaNote["kind"];
-  style: CSSProperties;
-  title: string;
-};
-
-type Lane = {
-  column: number;
-  label: string;
-  notes: LaneNote[];
-};
-
 const sampleMap = `osu file format v14
 
 [General]
@@ -46,7 +31,7 @@ Mode: 3
 [Metadata]
 Title: Night Switchback
 Artist: beatmap-lens
-Creator: playground
+Creator: inspector
 Version: Original 4K smoke
 
 [Difficulty]
@@ -88,9 +73,7 @@ const healthText = ref("Idle");
 const healthTone = ref<HealthTone>("idle");
 const facts = ref<Fact[]>([]);
 const statuses = ref<StatusItem[]>([]);
-const lanes = ref<Lane[]>([]);
 const renderTime = ref("0.0 ms");
-const rangeMetric = ref("0 ms");
 let runCount = 0;
 
 onMounted(runPipeline);
@@ -120,7 +103,6 @@ function runPipeline(): void {
     const renderDuration = performance.now() - renderStartedAt;
 
     mountSvg(svg);
-    renderLanePreview(chart.notes);
     facts.value = chartFacts(chart);
     statuses.value = statusItems(
       chart,
@@ -138,7 +120,6 @@ function runPipeline(): void {
     const message = formatError(error);
     renderSvgError(message);
     facts.value = [{ label: "Pipeline error", value: message }];
-    renderLanePreview([]);
     statuses.value = [{ label: "pipeline", value: message, tone: "error" }];
     renderTime.value = "0.0 ms";
     setHealth("Error", "error");
@@ -225,55 +206,6 @@ function renderSvgError(message: string): void {
   getSvgOutput().replaceChildren(element);
 }
 
-function renderLanePreview(notes: readonly ManiaNote[]): void {
-  const range = noteRange(notes);
-  rangeMetric.value = `${Math.round(range.endTime - range.startTime).toLocaleString()} ms`;
-  lanes.value = Array.from({ length: 4 }, (_, column): Lane => {
-    const laneNotes = notes
-      .filter((note) => note.column === column)
-      .map((note): LaneNote => {
-        const top = ((note.startTime - range.startTime) / range.duration) * 92 + 4;
-        const height = Math.max(
-          ((note.endTime - note.startTime) / range.duration) * 92,
-          note.kind === "long" ? 5.5 : 2.2,
-        );
-        return {
-          id: note.id,
-          kind: note.kind,
-          style: {
-            top: `${top}%`,
-            height: `${height}%`,
-          },
-          title: `${Math.round(note.startTime)} ms`,
-        };
-      });
-
-    return {
-      column,
-      label: `K${column + 1}`,
-      notes: laneNotes,
-    };
-  });
-}
-
-function noteRange(notes: readonly ManiaNote[]): {
-  startTime: number;
-  endTime: number;
-  duration: number;
-} {
-  if (notes.length === 0) {
-    return { startTime: 0, endTime: 1, duration: 1 };
-  }
-
-  const startTime = Math.min(...notes.map((note) => note.startTime));
-  const endTime = Math.max(...notes.map((note) => note.endTime));
-  return {
-    startTime,
-    endTime,
-    duration: Math.max(endTime - startTime, 1),
-  };
-}
-
 function getSvgOutput(): HTMLDivElement {
   if (!svgOutput.value) {
     throw new Error("Missing SVG output mount point.");
@@ -295,7 +227,7 @@ function formatError(error: unknown): string {
   <main id="main-content" class="bench" tabindex="-1">
     <header class="bench-header">
       <div class="title-block">
-        <p class="eyebrow">beatmap-lens playground</p>
+        <p class="eyebrow">beatmap-lens inspector</p>
         <h1>Mania inspection bench</h1>
       </div>
       <div class="run-stack">
@@ -363,30 +295,6 @@ function formatError(error: unknown): string {
           </aside>
         </div>
 
-        <section class="lane-surface" aria-labelledby="lane-heading">
-          <div class="surface-head">
-            <h2 id="lane-heading">Four-lane timing</h2>
-            <span class="metric">{{ rangeMetric }}</span>
-          </div>
-          <div class="lane-preview">
-            <div
-              v-for="lane in lanes"
-              :key="lane.column"
-              class="lane"
-            >
-              <span class="sr-only">Lane {{ lane.column + 1 }}</span>
-              <span class="lane-label">{{ lane.label }}</span>
-              <span
-                v-for="note in lane.notes"
-                :key="note.id"
-                class="note"
-                :class="{ 'note--hold': note.kind === 'long' }"
-                :style="note.style"
-                :title="note.title"
-              ></span>
-            </div>
-          </div>
-        </section>
       </section>
     </div>
 

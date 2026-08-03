@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import foundation4k from "../../../fixtures/beatmaps/foundation-4k.osu?raw";
 import tolerantMalformed from "../../../fixtures/beatmaps/tolerant-malformed.osu?raw";
-import { findSection, getLastPropertyValue, parseOsu } from "../src/index";
+import { parseOsu } from "../src/index";
+import { findSection, getLastPropertyValue } from "../src/parser";
 
 describe("parseOsu", () => {
   it("preserves source lines, sections, properties, and hit object rows", () => {

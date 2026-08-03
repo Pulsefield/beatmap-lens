@@ -1,7 +1,9 @@
 {
-  "name": "@pulsefield/beatmap-lens-playground",
+  "name": "@pulsefield/beatmap-lens-inspector",
   "version": "0.0.0",
+  "description": "Private browser inspection surface for Beatmap Lens.",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite",

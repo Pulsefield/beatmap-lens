@@ -1,7 +1,7 @@
 {
   "name": "beatmap-lens",
   "version": "0.0.0",
-  "description": "Parse, inspect, and render osu!mania beatmaps.",
+  "description": "Parse, normalize, and render 4K osu!mania beatmaps.",
   "keywords": [
     "osu",
     "osu-mania",
@@ -10,6 +10,15 @@
     "svg"
   ],
   "license": "MIT",
+  "homepage": "https://github.com/Pulsefield/beatmap-lens#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Pulsefield/beatmap-lens.git",
+    "directory": "packages/beatmap-lens"
+  },
+  "bugs": {
+    "url": "https://github.com/Pulsefield/beatmap-lens/issues"
+  },
   "type": "module",
   "sideEffects": false,
   "files": [
@@ -26,7 +35,7 @@
     }
   },
   "engines": {
-    "node": ">=22"
+    "node": "^22.18.0 || >=24.11.0"
   },
   "publishConfig": {
     "access": "public"

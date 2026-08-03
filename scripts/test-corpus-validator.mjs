@@ -21,4 +21,4 @@ if (!output.includes("Corpus validation could not start")) {
   throw new Error("Corpus validation did not emit the expected redacted failure.");
 }
 
-console.log("Corpus CLI privacy smoke test passed.");
+console.log("Corpus validator privacy smoke test passed.");

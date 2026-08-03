@@ -3,9 +3,9 @@ import type {
   ManiaNote,
   RenderLane,
   RenderNoteGlyph,
+  RenderOptions,
   RenderPadding,
   RenderScene,
-  RenderSceneOptions,
 } from "./types.js";
 
 const defaultPadding: RenderPadding = {
@@ -18,19 +18,12 @@ const defaultPadding: RenderPadding = {
 const defaultWidth = 640;
 const defaultPixelsPerSecond = 240;
 
-export function createRenderScene(
-  chart: ManiaChart,
-  options: RenderSceneOptions = {},
-): RenderScene {
+export function createRenderScene(chart: ManiaChart, options: RenderOptions = {}): RenderScene {
   const laneGap = options.laneGap ?? 4;
   const noteHeight = options.noteHeight ?? 8;
   const padding = { ...defaultPadding, ...options.padding };
   const width = round3(options.width ?? widthFromLaneWidth(options.laneWidth, laneGap, padding));
-  const pixelsPerSecond =
-    options.pixelsPerSecond ??
-    (options.pixelsPerMillisecond !== undefined
-      ? options.pixelsPerMillisecond * 1000
-      : defaultPixelsPerSecond);
+  const pixelsPerSecond = options.pixelsPerSecond ?? defaultPixelsPerSecond;
   const pixelsPerMillisecond = pixelsPerSecond / 1000;
   const startTime = options.startTime ?? 0;
   const naturalEndTime = Math.max(startTime + 1000, ...chart.notes.map((note) => note.endTime));
@@ -95,7 +88,6 @@ export function createRenderScene(
     metadata: chart.metadata,
     lanes,
     notes,
-    diagnostics: chart.diagnostics,
   };
 }
 

@@ -1,53 +1,56 @@
 # Beatmap Lens
 
-Beatmap Lens is an early-stage TypeScript toolkit for parsing, inspecting, and rendering `osu!mania` beatmaps.
+Beatmap Lens is a small TypeScript library and browser project for examining 4K `osu!mania`
+beatmaps. Its first intended consumer is Pulsefield, but the core package contains no
+Pulsefield-specific model or run-management logic.
 
-The project is designed for workflows where beatmaps need to be checked programmatically: generated charts, fixture suites, review tools, lightweight previews, and diagnostics that another program can consume.
+The package is not published, and its API can still change.
 
-## Status
+## What works today
 
-Beatmap Lens is being bootstrapped. The package is not published to npm, the public API is not stable, and no command-line interface is implemented.
+`beatmap-lens` currently provides:
 
-The current foundation is the repository and package shape:
+- a tolerant `.osu` parser that preserves source lines and structured diagnostics;
+- a deterministic 4K mania model for normal notes and long notes;
+- bounded time-range projection into a render scene;
+- DOM-free SVG serialization;
+- fixtures, unit tests, corpus invariants, and a private browser app for static inspection.
 
-- TypeScript-first, ESM-first library design.
-- One public package at `packages/beatmap-lens`.
-- pnpm workspace scripts for build, test, source checks, benchmarks, and release preparation.
-- MIT licensing.
+It does not yet provide semantic chart-quality rules, synchronized audio playback, clickable
+findings, or a `t ± Xs` review loop. Documentation should not describe those as shipped features.
 
-The current code foundation includes:
+## Direction
 
-- `parseOsu`, a tolerant `.osu` parser that preserves source lines, sections, properties, hit objects, and diagnostics.
-- `toManiaChart`, a 4K `osu!mania` normalizer for normal notes, long notes, metadata, and chart diagnostics.
-- `createRenderScene`, a backend-neutral render scene builder for lanes, note glyphs, viewport timing, and diagnostics.
-- `renderSvg`, a convenience renderer from a chart or scene to SVG.
-- `serializeSvg`, the DOM-free serializer for an existing render scene.
-- Parser, mania conversion, render scene, and SVG tests.
-- A Vue 3 and Vite playground with an editable sample map and SVG preview.
+Beatmap Lens is an evidence layer for generated beatmaps. Two workflows define the product.
 
-The roadmap includes analysis rules, query helpers, a thin CLI, Canvas rendering, watch mode, broader benchmarks, and possible Python or native bindings later. Those are not current capabilities.
+### Programmatic inspection
 
-## Installation
+Pulsefield or another generator supplies `.osu` text. Beatmap Lens should return typed,
+explainable findings with note, time, and source locations. A finding is useful in generation
+tests and CI without reducing chart quality to one opaque score.
 
-Beatmap Lens has not been published yet.
+### Human review
 
-Once an initial package is released:
+A reviewer supplies a `.osu` file, its audio, a target time, a window radius, and a visual speed
+preset. The Inspector should play, seek, and loop the `t ± Xs` region while one media clock keeps
+audio and notes synchronized. Visual speed must not change audio playback rate.
 
-```bash
-pnpm add beatmap-lens
-```
+Model-version and corpus comparisons should compose programmatic inspection with human review.
+Experiment tracking, model execution, storage, and dashboards belong outside this repository.
 
-or:
+## Design constraints
 
-```bash
-npm install beatmap-lens
-```
-
-Until then, use this repository as design documentation and local development source.
+- Keep one publishable package with a small root export.
+- Keep parsing, normalization, analysis, scene creation, and serialization as explicit stages.
+- Keep the core synchronous, DOM-free, and free of implicit file or network access.
+- Keep browser file handling and media transport in the private Inspector app.
+- Let one render scene drive browser presentation and SVG output.
+- Prefer a direct default API plus composable primitives over stateful builders or service
+  containers.
+- Add package, adapter, plugin, and backend boundaries only after a real consumer proves the
+  dependency and release boundary.
 
 ## Current API
-
-The API is early and may change before the first release.
 
 ```ts
 import {
@@ -61,210 +64,99 @@ import {
 const document = parseOsu(osuSource);
 const chart = toManiaChart(document);
 
-const scene = createRenderScene(chart, {
+const viewport = {
   startTime: 60_000,
   endTime: 75_000,
   width: 640,
   pixelsPerSecond: 240,
-});
+};
 
-const svg = renderSvg(chart, {
-  startTime: 60_000,
-  endTime: 75_000,
-  width: 640,
-  pixelsPerSecond: 240,
-});
-
+const scene = createRenderScene(chart, viewport);
+const svg = renderSvg(chart, viewport);
 const sameSvg = serializeSvg(scene);
 ```
 
-The core API does not read files implicitly. Applications can supply beatmap text from the filesystem, uploads, archives, network requests, or generated output.
-
-Current parser and chart diagnostics use structured data rather than only drawing warnings on an image:
-
-```ts
-interface OsuDiagnostic {
-  code: string;
-  severity: "warning" | "error";
-  message: string;
-  line?: number;
-  section?: string;
-  value?: string;
-}
-```
+The stages expose lower-level data when a caller needs it. The planned convenience inspection API
+will compose them; it will not hide I/O or browser state inside the package.
 
 ## Architecture
 
 ```text
-.osu source
-    |
-    v
-tolerant parser
-    |
-    v
-source document
-    |
-    v
-normalized mania chart
-    |
-    +---------------------> planned analysis and query rules
-    |                              |
-    |                              v
-    |                         diagnostics
-    |
-    v
-viewport projection
-    |
-    v
-backend-neutral render scene
-    |
-    +---------------------> SVG renderer
-    |
-    +---------------------> future Canvas renderer
+.osu text
+   |
+   v
+parseOsu -> ParsedOsu -> toManiaChart -> ManiaChart
+                                             |
+                                             v
+                                  createRenderScene
+                                             |
+                                             v
+                                        RenderScene
+                                             |
+                                             v
+                                        serializeSvg
 ```
 
-Parser, normalization, analysis, scene creation, and serialization are separate boundaries. A malformed source file can still produce source diagnostics. A renderer should consume a scene, not reinterpret raw `.osu` text.
+`renderSvg(chart, options)` is the current shortcut from a normalized chart to SVG. Future
+analysis will read `ManiaChart` and produce structured findings beside the rendering path.
+
+The workspace has one release boundary:
+
+```text
+apps/
+  inspector/          private first-party browser surface
+
+packages/
+  beatmap-lens/       only publishable package
+
+fixtures/
+  beatmaps/           redistributable parser and render fixtures
+```
+
+The current Inspector is a static development surface. Its name describes the product boundary,
+not completion of the audio review workflow.
 
 ## Scope
 
-Current scope:
+Current scope is 4K `.osu` parsing, normal and long-note normalization, source and chart
+diagnostics, bounded scene creation, and deterministic SVG output.
 
-- `.osu` file parsing.
-- `osu!mania` charts, with 4K as the first supported target.
-- Normal notes and long notes.
-- Time-range rendering.
-- Backend-neutral scene creation.
-- SVG serialization.
-- Structured diagnostics for source and chart problems.
-- Fixtures and tests for parser, normalization, and rendering behavior.
-- Basic browser playground for a bundled 4K sample.
+The next product work is limited to:
 
-Later scope:
+- typed, explainable chart findings;
+- a browser review loop with explicit `.osu` and audio selection;
+- `t ± Xs` navigation, visual speed presets, synchronized playback, seeking, and looping;
+- deterministic SVG and JSON evidence for the selected window.
 
-- Typed analysis rules.
-- Structured query helpers.
-- A thin Node.js CLI over the public library API.
-- Canvas rendering.
-- Benchmarks for parser, analysis, and rendering paths.
-
-## Non-goals
-
-Beatmap Lens is not planned as:
-
-- a complete beatmap editor;
-- an `osu!` client or gameplay simulator;
-- a replacement for every difficulty or performance calculator;
-- a large desktop application;
-- a visual programming environment for analysis rules;
-- an exact reimplementation of every internal `osu!` behavior.
-
-A textual query language is also not an immediate goal. Typed rules and structured results should come first.
+Beatmap Lens is not a beatmap editor, gameplay simulator, difficulty calculator, model runner,
+experiment tracker, or general-purpose rhythm-game framework. Canvas, a CLI, a plugin SDK, a query
+language, additional key modes, native bindings, and WebAssembly are not commitments. Each needs a
+concrete consumer or measured constraint before entering scope.
 
 ## Development
 
 Requirements:
 
-- Node.js 22.18 or newer on the 22.x line, or Node.js 24.11 or newer.
+- Node.js 22.18 or newer on the 22.x line, or Node.js 24.11 or newer;
 - pnpm 11 or newer.
-
-The repository uses pnpm workspaces, tsdown, Vitest, Biome, Changesets, Vue 3, and Vite. The root scripts currently define this local interface:
 
 ```bash
 pnpm install
-pnpm check:source
 pnpm check
-pnpm test
-pnpm test:watch
-pnpm build
 pnpm dev
 pnpm benchmark
 ```
 
-To exercise the parser, normalizer, and a bounded SVG viewport against a local beatmap corpus,
-pass its directory at runtime:
-
-```bash
-pnpm validate:corpus -- /path/to/beatmaps
-```
-
-For a faster deterministic sample:
+To run deterministic parser, model, and SVG checks against a local corpus:
 
 ```bash
 pnpm validate:corpus -- /path/to/beatmaps --sample 512
 ```
 
-The corpus path is never stored in project configuration. Local beatmaps, filenames, and generated
-corpus reports should not be committed.
+The corpus path stays local. Do not commit local beatmaps, filenames, indexes, or generated reports.
 
-Repository shape:
-
-```text
-apps/
-  playground/
-
-packages/
-  beatmap-lens/
-
-fixtures/
-  beatmaps/
-
-```
-
-## Testing
-
-Testing should cover behavior at each boundary:
-
-- parser fixtures for valid input, malformed input, timing sections, normal notes, and long notes;
-- golden normalization tests for stable `ManiaChart` output;
-- scene and SVG snapshots that prefer semantic stability over formatting details;
-- invariants such as sorted objects, valid columns, long notes ending after they start, and rendering without chart mutation;
-- benchmarks before introducing Rust, WebAssembly, worker threads, TypedArrays, or native bindings.
-
-## Roadmap
-
-### 0.1 Foundation
-
-- [x] tolerant `.osu` parser;
-- [x] source document model;
-- [x] normalized `ManiaChart`;
-- [x] 4K note and long-note support;
-- [x] backend-neutral render scene;
-- [x] SVG renderer;
-- [x] parser and renderer fixtures.
-
-### 0.2 Inspection
-
-- [ ] typed analysis rules;
-- [ ] structured query matches;
-- [ ] minimum note interval rule;
-- [ ] empty-span rule;
-- [ ] same-column overlap rule;
-- [ ] JSON diagnostics output;
-- [ ] basic CLI.
-
-### 0.3 Interactive Workflow
-
-- [x] basic browser playground;
-- [ ] Canvas renderer;
-- [ ] time-range navigation;
-- [ ] clickable diagnostics;
-- [ ] incremental directory watching;
-- [ ] rendering and analysis benchmarks.
-
-### Later
-
-- [ ] plugin API for custom rules;
-- [ ] corpus-level summaries;
-- [ ] comparison between generated beatmaps;
-- [ ] additional key modes;
-- [ ] stable textual query syntax, if the typed API proves the semantics;
-- [ ] Python integration, if a concrete consumer needs it;
-- [ ] native or WebAssembly acceleration, if profiling justifies it.
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md). In short, proposed changes should describe the beatmap workflow they improve and should keep parser, model, analysis, and rendering concerns separate.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for boundary and verification rules.
 
 ## License
 
-Beatmap Lens is licensed under the MIT License. See [LICENSE](LICENSE).
+MIT
