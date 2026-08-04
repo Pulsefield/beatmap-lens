@@ -4,6 +4,9 @@
 
 Accepted
 
+Partially superseded by [ADR 0003](0003-section-annotation-v1-canonical-revision.md) for candidate
+tags, Foundation exemplars, and per-HitObject line digests.
+
 ## Context
 
 Beatmap Lens needs a private expert workflow for producing section-level osu!mania judgments without
