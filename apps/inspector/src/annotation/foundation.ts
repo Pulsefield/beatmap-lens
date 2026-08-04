@@ -99,17 +99,21 @@ export async function activateFoundationTagV1(
   if (existing?.status === "retired")
     throw new Error(`Retired tag ${input.tagId} cannot be activated`);
 
+  const exclusionCues = uniqueNonEmpty([
+    ...(existing?.exclusionCues ?? []),
+    ...(input.exclusionCues ?? []),
+  ]);
+  const salienceClarification =
+    input.salienceClarification?.trim() || existing?.salienceClarification;
   const activated: FoundationTagV1 = {
     id: input.tagId,
     displayName: input.displayName?.trim() || existing?.displayName || input.tagId,
     status: "active",
     definition,
-    inclusionCues,
-    ...(input.exclusionCues ? { exclusionCues: cleanNonEmpty(input.exclusionCues) } : {}),
-    aliases: cleanNonEmpty(input.aliases ?? existing?.aliases ?? []),
-    ...(input.salienceClarification?.trim()
-      ? { salienceClarification: input.salienceClarification.trim() }
-      : {}),
+    inclusionCues: uniqueNonEmpty([...(existing?.inclusionCues ?? []), ...inclusionCues]),
+    ...(exclusionCues.length > 0 ? { exclusionCues } : {}),
+    aliases: uniqueNonEmpty([...(existing?.aliases ?? []), ...(input.aliases ?? [])]),
+    ...(salienceClarification ? { salienceClarification } : {}),
     exemplars: existing?.exemplars ?? [],
   };
 
@@ -175,6 +179,10 @@ function assertCanonicalTagId(value: string): void {
 
 function cleanNonEmpty(values: readonly string[]): string[] {
   return values.map((value) => value.trim()).filter(Boolean);
+}
+
+function uniqueNonEmpty(values: readonly string[]): string[] {
+  return [...new Set(cleanNonEmpty(values))];
 }
 
 function assertUnique(values: readonly string[], label: string): void {

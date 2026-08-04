@@ -11,6 +11,7 @@ export interface DraftBaseVersion {
 }
 
 export interface AnnotationDraft {
+  annotationEditorDirty?: boolean;
   base: DraftBaseVersion | null;
   datasetId: string;
   editorText: string;
@@ -18,6 +19,8 @@ export interface AnnotationDraft {
   labels: readonly DraftLabel[];
   noteRefs: readonly StableNoteRefV1[];
   playheadMs: number;
+  reviewNoteIncludeSelection?: boolean;
+  reviewNoteText?: string;
   range: TimeRangeV1 | null;
   rangeEditor?: {
     readonly start: string;

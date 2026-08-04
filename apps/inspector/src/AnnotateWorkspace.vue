@@ -36,6 +36,7 @@ import {
 import type {
   AnnotationDocumentV1,
   AnnotationLabelV1,
+  FoundationExemplarKindV1,
   FoundationRefV1,
   FoundationTagV1,
   GoldAnnotationV1,
@@ -45,7 +46,7 @@ import type {
 import {
   createDatasetDirectory,
   type DatasetDirectory,
-  type FileSystemDatasetDirectory,
+  FileSystemDatasetDirectory,
   openDatasetDirectoryAnyVersion,
   type ReadonlyFutureDatasetDirectory,
 } from "./annotation/dataset-directory";
@@ -61,6 +62,7 @@ import {
 import {
   activateFoundationTagV1,
   bootstrapFoundationV1,
+  canonicalTagId,
 } from "./annotation/foundation";
 import {
   changeNoteSelectionRange,
@@ -72,7 +74,20 @@ import { createOverviewDensityPath } from "./annotation/overview-density";
 import type {
   PlaybackClockState,
 } from "./annotation/playback-clock";
+import {
+  addReviewNoteV1,
+  completeAnnotationDocumentV1,
+  promoteFoundationExemplarV1,
+  resolveReviewNoteV1,
+  sameTagOverlapWarningsV1,
+} from "./annotation/quality";
 import { rangeCandidates } from "./annotation/range";
+import {
+  buildGoldRelease,
+  type GoldReleaseArtifact,
+  sameGoldReleaseArtifact,
+  writeGoldRelease,
+} from "./annotation/release";
 import {
   type AnnotationDraft,
   type DraftBaseVersion,
@@ -166,10 +181,26 @@ const judgmentNote = ref("");
 const tagQuery = ref("");
 const editingAnnotationId = ref<string>();
 const activationTag = ref<FoundationTagV1>();
+const activationIsCustom = ref(false);
+const activationTagId = ref("");
+const activationDisplayName = ref("");
 const activationDefinition = ref("");
-const activationCue = ref("");
+const activationInclusionCues = ref("");
+const activationExclusionCues = ref("");
+const activationAliases = ref("");
+const activationSalienceClarification = ref("");
 const activationError = ref("");
 const activationBusy = ref(false);
+const qualityBusy = ref(false);
+const qualityMessage = ref("");
+const reviewNoteText = ref("");
+const reviewNoteIncludeSelection = ref(true);
+const exemplarAnnotationId = ref<string>();
+const exemplarTagId = ref("");
+const exemplarKind = ref<FoundationExemplarKindV1>("strong");
+const releaseBusy = ref(false);
+const releasePreview = shallowRef<GoldReleaseArtifact>();
+const releaseMessage = ref("");
 const playheadMs = ref(0);
 const visualSpeed = ref(240);
 const visualSpeedDraft = ref("240");
@@ -221,6 +252,11 @@ const candidateNoteIds = computed(() => new Set(candidateNotes.value.map((note) 
 const selectedCount = computed(() => selectedNoteIds.value.size);
 const activeTags = computed(() => filterTags("active"));
 const candidateTags = computed(() => filterTags("candidate"));
+const customTagId = computed(() => canonicalTagId(tagQuery.value.trim()));
+const canCreateCustomTag = computed(() => {
+  const id = customTagId.value;
+  return Boolean(id && !session.value?.foundation.tags.some((tag) => tag.id === id));
+});
 const suggestedTags = computed(() => {
   if (!session.value) return [];
   const suggestions = new Set(session.value.document.seedContext.suggestedTags);
@@ -229,8 +265,76 @@ const suggestedTags = computed(() => {
 const annotationList = computed(
   () => session.value?.document.annotations ?? [],
 );
+const reviewNotes = computed(() => session.value?.document.reviewNotes ?? []);
+const openReviewNoteCount = computed(
+  () => reviewNotes.value.filter((note) => note.state === "open").length,
+);
+const pendingPredictionCount = computed(
+  () =>
+    session.value?.document.predictions.filter(
+      (prediction) => prediction.reviewStatus === "pending",
+    ).length ?? 0,
+);
+const hasUncommittedDraft = computed(
+  () => editorDirty.value || Boolean(reviewNoteText.value.trim()),
+);
 const operationLocked = computed(
-  () => saveState.value === "saving" || activationBusy.value || taskLoading.value,
+  () =>
+    saveState.value === "saving" ||
+    activationBusy.value ||
+    qualityBusy.value ||
+    releaseBusy.value ||
+    taskLoading.value,
+);
+const overlapWarnings = computed(() => {
+  const current = session.value;
+  const currentDirectory = directory.value;
+  if (!current || !currentDirectory) return [];
+
+  const range = parsedRange.value;
+  if (!range || draftLabels.value.length === 0 || selectedNoteIds.value.size === 0) {
+    return sameTagOverlapWarningsV1(current.document);
+  }
+  try {
+    const existing = current.document.annotations.find(
+      (annotation) => annotation.id === editingAnnotationId.value,
+    );
+    const candidate = createGoldAnnotation(
+      current,
+      {
+        ...(existing ? { existing } : { createId: () => "draft" }),
+        annotatorId: annotatorId.value.trim() || "draft",
+        judgmentNote: judgmentNote.value,
+        labels: draftLabels.value,
+        noteIds: [...selectedNoteIds.value],
+        now: () => existing?.updatedAt ?? current.document.updatedAt,
+        range,
+      },
+      currentDirectory.manifest.currentFoundation,
+    );
+    return sameTagOverlapWarningsV1(current.document, candidate);
+  } catch {
+    return sameTagOverlapWarningsV1(current.document);
+  }
+});
+const exemplarAnnotation = computed(() =>
+  annotationList.value.find((annotation) => annotation.id === exemplarAnnotationId.value),
+);
+const exemplarTagOptions = computed(() => {
+  const current = session.value;
+  const annotation = exemplarAnnotation.value;
+  if (!current || !annotation) return [];
+  const annotationTags = new Set(annotation.labels.map((label) => label.tagId));
+  return current.foundation.tags.filter(
+    (tag) =>
+      tag.status === "active" &&
+      (exemplarKind.value === "counterexample"
+        ? !annotationTags.has(tag.id)
+        : annotationTags.has(tag.id)),
+  );
+});
+const releaseTagCounts = computed(() =>
+  Object.entries(releasePreview.value?.manifest.tagCounts ?? {}),
 );
 const overviewDensity = computed(() =>
   session.value
@@ -327,7 +431,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   if (draftTimer !== undefined) window.clearTimeout(draftTimer);
-  if (editorDirty.value) void persistDraftNow();
+  if (hasUncommittedDraft.value) void persistDraftNow(true);
   window.removeEventListener("keydown", handleWorkspaceKeydown);
   disposeInteractiveSession();
   viewportResizeObserver?.disconnect();
@@ -446,9 +550,7 @@ async function openTask(task: TaskQueueItem): Promise<void> {
   if (!catalog.value || !corpusHandle.value || !directory.value) return;
   if (
     task.status === "missing-source" ||
-    saveState.value === "saving" ||
-    activationBusy.value ||
-    taskLoading.value
+    operationLocked.value
   ) {
     return;
   }
@@ -462,6 +564,7 @@ async function openTask(task: TaskQueueItem): Promise<void> {
     if (task.status === "readonly-future") {
       session.value = undefined;
       interactiveSessionGeneration.value++;
+      resetTaskQualityState();
       readonlyTask.value = task;
       activeTaskId.value = task.id;
       saveState.value = "idle";
@@ -479,6 +582,7 @@ async function openTask(task: TaskQueueItem): Promise<void> {
     if (generation !== taskOpenGeneration) return;
     session.value = next;
     activeTaskId.value = task.id;
+    resetTaskQualityState();
     restoreEditor(next);
     interactiveSessionGeneration.value++;
     await nextTick();
@@ -503,6 +607,8 @@ function restoreEditor(next: BeatmapSession): void {
   visualSpeed.value = draft?.visualSpeed ?? visualSpeed.value;
   visualSpeedDraft.value = String(visualSpeed.value);
   judgmentNote.value = draft?.editorText ?? "";
+  reviewNoteIncludeSelection.value = draft?.reviewNoteIncludeSelection ?? true;
+  reviewNoteText.value = draft?.reviewNoteText ?? "";
   draftLabels.value = draft?.labels ?? [];
   const selected = new Set(draft ? noteIdsForRefs(next, draft.noteRefs) : []);
   selectedNoteIds.value = selected;
@@ -527,7 +633,7 @@ function restoreEditor(next: BeatmapSession): void {
     : next.base
       ? `Revision ${next.base.revision}`
       : "Unseen chart";
-  editorDirty.value = Boolean(draft);
+  editorDirty.value = draft?.annotationEditorDirty ?? Boolean(draft);
   editorUndoStack.value = readUndoState(draft?.undoState);
 }
 
@@ -1100,8 +1206,51 @@ function beginTagActivation(tag: FoundationTagV1): void {
   if (tag.status !== "candidate") return;
   pauseForEdit();
   activationTag.value = tag;
+  activationIsCustom.value = false;
+  activationTagId.value = tag.id;
+  activationDisplayName.value = tag.displayName;
   activationDefinition.value = tag.definition;
-  activationCue.value = tag.inclusionCues[0] ?? "";
+  activationInclusionCues.value = tag.inclusionCues.join("\n");
+  activationExclusionCues.value = tag.exclusionCues?.join("\n") ?? "";
+  activationAliases.value = tag.aliases.join("\n");
+  activationSalienceClarification.value = tag.salienceClarification ?? "";
+  activationError.value = "";
+}
+
+function beginCustomTagActivation(): void {
+  if (operationLocked.value || !canCreateCustomTag.value) return;
+  pauseForEdit();
+  const displayName = tagQuery.value.trim();
+  activationTag.value = {
+    aliases: [],
+    definition: "",
+    displayName,
+    exemplars: [],
+    id: customTagId.value,
+    inclusionCues: [],
+    status: "candidate",
+  };
+  activationIsCustom.value = true;
+  activationTagId.value = customTagId.value;
+  activationDisplayName.value = displayName;
+  activationDefinition.value = "";
+  activationInclusionCues.value = "";
+  activationExclusionCues.value = "";
+  activationAliases.value = "";
+  activationSalienceClarification.value = "";
+  activationError.value = "";
+}
+
+function cancelTagActivation(): void {
+  activationTag.value = undefined;
+  activationIsCustom.value = false;
+  activationTagId.value = "";
+  activationDisplayName.value = "";
+  activationDefinition.value = "";
+  activationInclusionCues.value = "";
+  activationExclusionCues.value = "";
+  activationAliases.value = "";
+  activationSalienceClarification.value = "";
   activationError.value = "";
 }
 
@@ -1118,30 +1267,36 @@ async function activateTag(): Promise<void> {
   activationBusy.value = true;
   const activatingSession = session.value;
   const activatingTag = activationTag.value;
+  const activatingDirectory = directory.value;
   try {
+    const tagId = activationIsCustom.value
+      ? canonicalTagId(activationTagId.value)
+      : activatingTag.id;
     const nextFoundation = await activateFoundationTagV1(
       activatingSession.foundation,
       {
-        tagId: activatingTag.id,
-        displayName: activatingTag.displayName,
+        aliases: linesFromText(activationAliases.value),
         definition: activationDefinition.value,
-        inclusionCues: [activationCue.value],
+        displayName: activationDisplayName.value,
+        exclusionCues: linesFromText(activationExclusionCues.value),
+        inclusionCues: linesFromText(activationInclusionCues.value),
+        salienceClarification: activationSalienceClarification.value,
+        tagId,
       },
       {
         creatorId: annotatorId.value.trim(),
         createdAt: new Date().toISOString(),
       },
     );
-    await directory.value.setCurrentFoundation(nextFoundation);
+    await activatingDirectory.setCurrentFoundation(nextFoundation);
     session.value = { ...activatingSession, foundation: nextFoundation };
     const activated = nextFoundation.tags.find(
-      (tag) => tag.id === activatingTag.id,
+      (tag) => tag.id === tagId,
     );
     activationBusy.value = false;
     if (activated) addTag(activated);
-    activationTag.value = undefined;
-    activationDefinition.value = "";
-    activationCue.value = "";
+    cancelTagActivation();
+    invalidateReleasePreview();
     saveState.value = "draft";
     saveMessage.value = `Foundation r${nextFoundation.revision} verified · annotation draft pending`;
   } catch (error) {
@@ -1206,15 +1361,23 @@ async function commitAnnotation(): Promise<void> {
         annotation.id === existing.id ? gold : annotation,
       )
     : [...session.value.document.annotations, gold];
-  const saved = await persistDocument({
-    ...session.value.document,
-    annotations,
-    reviewState: "in-progress",
-  });
+  const preserveReviewComposer = Boolean(reviewNoteText.value.trim());
+  const saved = await persistDocument(
+    {
+      ...session.value.document,
+      annotations,
+      reviewState: "in-progress",
+    },
+    {
+      hasUncommittedDraft: preserveReviewComposer,
+      preserveDraft: preserveReviewComposer,
+    },
+  );
   if (!saved) return;
 
   seekPlayhead(range.endMs);
   clearEditor(range.endMs);
+  if (preserveReviewComposer) await persistDraftNow(true);
 }
 
 function editAnnotation(annotation: GoldAnnotationV1): void {
@@ -1256,7 +1419,9 @@ async function playAnnotation(annotation: GoldAnnotationV1): Promise<void> {
 async function deleteAnnotation(annotation: GoldAnnotationV1): Promise<void> {
   if (!session.value || operationLocked.value) return;
   pauseForEdit();
-  const preserveEditor = editorDirty.value && editingAnnotationId.value !== annotation.id;
+  const preserveDraft =
+    (editorDirty.value && editingAnnotationId.value !== annotation.id) ||
+    Boolean(reviewNoteText.value.trim());
   const saved = await persistDocument(
     {
       ...session.value.document,
@@ -1265,14 +1430,241 @@ async function deleteAnnotation(annotation: GoldAnnotationV1): Promise<void> {
       ),
       reviewState: "in-progress",
     },
-    { preserveEditor },
+    { hasUncommittedDraft: preserveDraft, preserveDraft },
   );
-  if (saved && editingAnnotationId.value === annotation.id) clearEditor(playheadMs.value);
+  if (saved && editingAnnotationId.value === annotation.id) {
+    clearEditor(playheadMs.value);
+    if (reviewNoteText.value.trim()) await persistDraftNow(true);
+  }
+}
+
+function beginExemplarPromotion(annotation: GoldAnnotationV1): void {
+  if (operationLocked.value) return;
+  exemplarAnnotationId.value = annotation.id;
+  exemplarKind.value = "strong";
+  syncExemplarTag();
+  qualityMessage.value = "";
+}
+
+function syncExemplarTag(): void {
+  const options = exemplarTagOptions.value;
+  if (!options.some((tag) => tag.id === exemplarTagId.value)) {
+    exemplarTagId.value = options[0]?.id ?? "";
+  }
+}
+
+function cancelExemplarPromotion(): void {
+  exemplarAnnotationId.value = undefined;
+  exemplarTagId.value = "";
+  exemplarKind.value = "strong";
+}
+
+function resetTaskQualityState(): void {
+  cancelTagActivation();
+  cancelExemplarPromotion();
+  reviewNoteText.value = "";
+  reviewNoteIncludeSelection.value = true;
+  qualityMessage.value = "";
+}
+
+async function promoteExemplar(): Promise<void> {
+  const current = session.value;
+  const currentDirectory = directory.value;
+  const annotation = exemplarAnnotation.value;
+  if (
+    !current ||
+    !currentDirectory ||
+    !annotation ||
+    !exemplarTagId.value ||
+    operationLocked.value
+  ) {
+    return;
+  }
+
+  qualityBusy.value = true;
+  qualityMessage.value = "Promoting exemplar into a verified Foundation revision";
+  try {
+    const nextFoundation = await promoteFoundationExemplarV1(
+      current.foundation,
+      current.document,
+      {
+        annotationId: annotation.id,
+        kind: exemplarKind.value,
+        tagId: exemplarTagId.value,
+      },
+      {
+        createdAt: new Date().toISOString(),
+        creatorId: annotatorId.value.trim(),
+      },
+    );
+    const reference = await currentDirectory.setCurrentFoundation(nextFoundation);
+    session.value = { ...current, foundation: nextFoundation };
+    cancelExemplarPromotion();
+    invalidateReleasePreview();
+    qualityMessage.value = `Foundation r${reference.revision} verified · exemplar promoted`;
+  } catch (error) {
+    qualityMessage.value = errorMessage(error);
+  } finally {
+    qualityBusy.value = false;
+  }
+}
+
+async function addReviewNote(): Promise<void> {
+  const current = session.value;
+  if (!current || !directory.value || operationLocked.value) return;
+  const range = reviewNoteIncludeSelection.value ? readDraftRange(false) : undefined;
+  if (reviewNoteIncludeSelection.value && !range) {
+    qualityMessage.value = "Fix the selection range before attaching it to a review note.";
+    return;
+  }
+
+  qualityBusy.value = true;
+  qualityMessage.value = "Saving review note";
+  const preserveAnnotationDraft = editorDirty.value;
+  try {
+    const noteRefs = reviewNoteIncludeSelection.value
+      ? [...selectedNoteIds.value].flatMap((id) => {
+          const reference = current.noteRefs.get(id);
+          return reference ? [reference] : [];
+        })
+      : [];
+    const document = addReviewNoteV1(current.document, {
+      ...(range ? { range } : {}),
+      ...(noteRefs.length > 0 ? { noteRefs } : {}),
+      text: reviewNoteText.value,
+    });
+    const saved = await persistDocument(document, {
+      hasUncommittedDraft: preserveAnnotationDraft,
+      preserveDraft: preserveAnnotationDraft,
+    });
+    if (!saved) {
+      qualityMessage.value = saveMessage.value;
+      return;
+    }
+    reviewNoteText.value = "";
+    if (preserveAnnotationDraft) await persistDraftNow(true);
+    qualityMessage.value = "Open review note saved outside training exports";
+  } catch (error) {
+    qualityMessage.value = errorMessage(error);
+  } finally {
+    qualityBusy.value = false;
+  }
+}
+
+async function resolveReviewNote(noteId: string): Promise<void> {
+  const current = session.value;
+  if (!current || !directory.value || operationLocked.value) return;
+
+  qualityBusy.value = true;
+  qualityMessage.value = "Resolving review note";
+  try {
+    const document = resolveReviewNoteV1(current.document, { id: noteId });
+    const saved = await persistDocument(document, {
+      hasUncommittedDraft: hasUncommittedDraft.value,
+      preserveDraft: hasUncommittedDraft.value,
+    });
+    qualityMessage.value = saved ? "Review note resolved" : saveMessage.value;
+  } catch (error) {
+    qualityMessage.value = errorMessage(error);
+  } finally {
+    qualityBusy.value = false;
+  }
+}
+
+function seekReviewNote(noteId: string): void {
+  const range = reviewNotes.value.find((note) => note.id === noteId)?.range;
+  if (range) seekPlayhead(range.startMs);
+}
+
+async function markChartComplete(): Promise<void> {
+  const current = session.value;
+  if (!current || !directory.value || operationLocked.value) return;
+  const completion = completeAnnotationDocumentV1(current.document, {
+    hasUncommittedDraft: hasUncommittedDraft.value,
+  });
+  if (!completion.ok) {
+    qualityMessage.value = completion.blockers.map(completionBlockerText).join(" · ");
+    return;
+  }
+
+  qualityBusy.value = true;
+  qualityMessage.value = "Verifying chart completion";
+  try {
+    const saved = await persistDocument(completion.document, {
+      hasUncommittedDraft: false,
+    });
+    qualityMessage.value = saved ? "Chart marked complete" : saveMessage.value;
+  } finally {
+    qualityBusy.value = false;
+  }
+}
+
+async function previewGoldRelease(): Promise<void> {
+  const currentDirectory = directory.value;
+  if (!currentDirectory || operationLocked.value) return;
+  releaseBusy.value = true;
+  releaseMessage.value = "Scanning verified canonical sidecars";
+  try {
+    releasePreview.value = await buildGoldRelease(currentDirectory);
+    releaseMessage.value = hasUncommittedDraft.value
+      ? "Preview ready · the current local draft is intentionally excluded"
+      : "Preview ready · confirm to write this exact artifact";
+  } catch (error) {
+    releasePreview.value = undefined;
+    releaseMessage.value = errorMessage(error);
+  } finally {
+    releaseBusy.value = false;
+  }
+}
+
+async function confirmGoldRelease(): Promise<void> {
+  const currentDirectory = directory.value;
+  const artifact = releasePreview.value;
+  if (hasUncommittedDraft.value) {
+    releasePreview.value = undefined;
+    releaseMessage.value = "Release preview cleared · finish or clear the current draft first";
+    return;
+  }
+  if (
+    !(currentDirectory instanceof FileSystemDatasetDirectory) ||
+    !artifact ||
+    operationLocked.value
+  ) {
+    return;
+  }
+
+  releaseBusy.value = true;
+  releaseMessage.value = "Rechecking canonical sidecars before export";
+  try {
+    const currentArtifact = await buildGoldRelease(
+      currentDirectory,
+      artifact.manifest.exportedAt,
+    );
+    if (!sameGoldReleaseArtifact(artifact, currentArtifact)) {
+      releasePreview.value = currentArtifact;
+      releaseMessage.value = "Canonical data changed · refreshed preview requires confirmation";
+      return;
+    }
+    releaseMessage.value = "Writing release and verifying read-back";
+    const written = await writeGoldRelease(currentDirectory.root, artifact);
+    releasePreview.value = undefined;
+    releaseMessage.value = `Release ${written.releaseId} verified in exports/`;
+  } catch (error) {
+    releaseMessage.value = errorMessage(error);
+  } finally {
+    releaseBusy.value = false;
+  }
+}
+
+function invalidateReleasePreview(): void {
+  if (!releasePreview.value) return;
+  releasePreview.value = undefined;
+  releaseMessage.value = "Release preview invalidated by newer canonical data";
 }
 
 async function persistDocument(
   document: AnnotationDocumentV1,
-  options: { preserveEditor?: boolean } = {},
+  options: { hasUncommittedDraft?: boolean; preserveDraft?: boolean } = {},
 ): Promise<boolean> {
   if (
     !session.value ||
@@ -1294,16 +1686,22 @@ async function persistDocument(
       window.clearTimeout(draftTimer);
       draftTimer = undefined;
     }
-    if (editorDirty.value) await persistDraftNow();
+    if (hasUncommittedDraft.value) await persistDraftNow(true);
     const foundations = await loadReferencedFoundations(document, savingDirectory);
+    const draftContext =
+      options.hasUncommittedDraft === undefined
+        ? {}
+        : { hasUncommittedDraft: options.hasUncommittedDraft };
     await assertAnnotationWorkflowV1(document, {
       sourceBytes: savingSession.sourceBytes,
       chart: savingSession.chart,
       foundations,
+      ...draftContext,
     });
     const result = await savingDirectory.saveAnnotation(document, draftBase.value, {
       sourceBytes: savingSession.sourceBytes,
       chart: savingSession.chart,
+      ...draftContext,
     });
     if (result.status === "conflict") {
       saveState.value = "conflict";
@@ -1326,16 +1724,17 @@ async function persistDocument(
     };
     saveState.value = "saved";
     saveMessage.value = `Revision ${result.version.revision} verified`;
+    invalidateReleasePreview();
     queue.value = updateQueueItemStatus(
       queue.value,
       savingTaskId,
       result.document.reviewState,
     );
-    if (options.preserveEditor && editorDirty.value) {
+    if (options.preserveDraft && hasUncommittedDraft.value) {
       await persistDraftNow(true);
       queue.value = updateQueueItemStatus(queue.value, savingTaskId, "draft");
       saveState.value = "draft";
-      saveMessage.value = "Draft journal saved after verified delete";
+      saveMessage.value = "Draft journal saved after verified canonical update";
     } else {
       editorDirty.value = false;
       await sessions.deleteDraft(
@@ -1368,6 +1767,7 @@ function markDraft(): void {
   }
   saveState.value = "draft";
   editorDirty.value = true;
+  invalidateReleasePreview();
   saveMessage.value = "Draft journal pending";
   queue.value = updateQueueItemStatus(queue.value, activeTaskId.value, "draft");
   if (draftTimer !== undefined) window.clearTimeout(draftTimer);
@@ -1377,8 +1777,38 @@ function markDraft(): void {
   }, 160);
 }
 
+function markReviewNoteDraft(): void {
+  if (!session.value || !directory.value || !activeTaskId.value || operationLocked.value) return;
+  invalidateReleasePreview();
+  if (!hasUncommittedDraft.value) {
+    if (draftTimer !== undefined) {
+      window.clearTimeout(draftTimer);
+      draftTimer = undefined;
+    }
+    saveState.value = session.value.base ? "saved" : "idle";
+    saveMessage.value = session.value.base
+      ? `Revision ${session.value.base.revision} verified`
+      : "Local draft only";
+    queue.value = updateQueueItemStatus(
+      queue.value,
+      activeTaskId.value,
+      session.value.base ? session.value.document.reviewState : "unseen",
+    );
+    void sessions.deleteDraft(directory.value.manifest.datasetId, session.value.source.sha256);
+    return;
+  }
+  saveState.value = "draft";
+  saveMessage.value = "Draft journal pending";
+  queue.value = updateQueueItemStatus(queue.value, activeTaskId.value, "draft");
+  if (draftTimer !== undefined) window.clearTimeout(draftTimer);
+  draftTimer = window.setTimeout(() => {
+    draftTimer = undefined;
+    void persistDraftNow(true);
+  }, 160);
+}
+
 async function persistDraftNow(force = false): Promise<void> {
-  if (!session.value || !directory.value || (!editorDirty.value && !force)) return;
+  if (!session.value || !directory.value || (!hasUncommittedDraft.value && !force)) return;
   const draft = buildDraft(session.value, directory.value.manifest.datasetId);
   await sessions.putDraft(draft);
   if (saveState.value === "draft") saveMessage.value = "Draft journal saved";
@@ -1389,11 +1819,12 @@ async function flushDraft(): Promise<void> {
     window.clearTimeout(draftTimer);
     draftTimer = undefined;
   }
-  if (editorDirty.value) await persistDraftNow(true);
+  if (hasUncommittedDraft.value) await persistDraftNow(true);
 }
 
 function buildDraft(current: BeatmapSession, datasetId: string): AnnotationDraft {
   return {
+    annotationEditorDirty: editorDirty.value,
     base: draftBase.value,
     datasetId,
     editorText: judgmentNote.value,
@@ -1408,6 +1839,8 @@ function buildDraft(current: BeatmapSession, datasetId: string): AnnotationDraft
     playheadMs: playheadMs.value,
     range: readDraftRange(false),
     rangeEditor: { start: draftStart.value, end: draftEnd.value },
+    reviewNoteIncludeSelection: reviewNoteIncludeSelection.value,
+    reviewNoteText: reviewNoteText.value,
     sourceSha256: current.source.sha256,
     undoState: editorUndoStack.value,
     visualSpeed: visualSpeed.value,
@@ -1596,6 +2029,18 @@ function formatMetric(value: number, digits = 1): string {
 
 function statusLabel(status: TaskQueueStatus): string {
   return status.replaceAll("-", " ");
+}
+
+function linesFromText(value: string): string[] {
+  return [...new Set(value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean))];
+}
+
+function completionBlockerText(
+  blocker: "open-review-note" | "pending-prediction" | "uncommitted-draft",
+): string {
+  if (blocker === "uncommitted-draft") return "Commit or clear the current draft first";
+  if (blocker === "open-review-note") return "Resolve every open review note";
+  return "Review every pending silver prediction";
 }
 
 function setSetupError(message: string): void {
@@ -2277,6 +2722,12 @@ function errorMessage(error: unknown): string {
                 type="search"
                 placeholder="Find an active or candidate tag"
               />
+              <button
+                v-if="canCreateCustomTag"
+                class="custom-tag-button"
+                type="button"
+                @click="beginCustomTagActivation"
+              >Create and activate <strong>{{ customTagId }}</strong></button>
               <ul v-if="activeTags.length" class="tag-option-list" aria-label="Active Foundation tags">
                 <li v-for="tag in activeTags" :key="tag.id">
                   <button class="tag-option" type="button" @click="addTag(tag)">
@@ -2320,20 +2771,46 @@ function errorMessage(error: unknown): string {
 
               <form v-if="activationTag" class="activation-form" @submit.prevent="activateTag">
                 <div class="activation-form-heading">
-                  <span>Activate candidate</span>
-                  <strong>{{ activationTag.id }}</strong>
+                  <span>{{ activationIsCustom ? "Activate custom tag" : "Activate candidate" }}</span>
+                  <strong>{{ activationTagId }}</strong>
+                </div>
+                <div class="activation-identity">
+                  <label class="field-stack">
+                    <span>Canonical ID</span>
+                    <input
+                      v-model="activationTagId"
+                      :readonly="!activationIsCustom"
+                      required
+                    />
+                  </label>
+                  <label class="field-stack">
+                    <span>Display name</span>
+                    <input v-model="activationDisplayName" required />
+                  </label>
                 </div>
                 <label class="field-stack">
                   <span>Definition</span>
                   <textarea v-model="activationDefinition" rows="3" required></textarea>
                 </label>
                 <label class="field-stack">
-                  <span>Inclusion cue</span>
-                  <textarea v-model="activationCue" rows="2" required></textarea>
+                  <span>Inclusion cues · one per line</span>
+                  <textarea v-model="activationInclusionCues" rows="3" required></textarea>
+                </label>
+                <label class="field-stack">
+                  <span>Exclusion cues · optional, one per line</span>
+                  <textarea v-model="activationExclusionCues" rows="2"></textarea>
+                </label>
+                <label class="field-stack">
+                  <span>Aliases · optional, one per line</span>
+                  <textarea v-model="activationAliases" rows="2"></textarea>
+                </label>
+                <label class="field-stack">
+                  <span>Salience clarification · optional</span>
+                  <textarea v-model="activationSalienceClarification" rows="2"></textarea>
                 </label>
                 <p v-if="activationError" class="field-error" role="alert">{{ activationError }}</p>
                 <div class="activation-actions">
-                  <button class="button button--quiet" type="button" @click="activationTag = undefined">
+                  <button class="button button--quiet" type="button" @click="cancelTagActivation">
                     Cancel
                   </button>
                   <button class="button button--primary" type="submit" :disabled="activationBusy">
@@ -2368,6 +2845,51 @@ function errorMessage(error: unknown): string {
                   </button>
                 </div>
               </div>
+              <div v-if="overlapWarnings.length" class="overlap-warning" role="status">
+                <strong>Same-tag overlap</strong>
+                <span v-for="warning in overlapWarnings" :key="`${warning.leftAnnotationId}:${warning.rightAnnotationId}:${warning.tagId}`">
+                  {{ warning.tagId }} · {{ formatTime(warning.overlap.startMs) }}–{{ formatTime(warning.overlap.endMs) }}
+                </span>
+                <small>Valid and non-blocking. Review the neighboring gold sections.</small>
+              </div>
+            </section>
+
+            <section class="editor-section" aria-labelledby="foundation-heading">
+              <div class="editor-section-heading">
+                <h3 id="foundation-heading">Judgment Foundation</h3>
+                <span>r{{ session.foundation.revision }} · {{ directory?.manifest.currentFoundation.sha256.slice(0, 10) }}</span>
+              </div>
+              <details class="foundation-panel">
+                <summary>
+                  <strong>{{ session.foundation.tags.filter((tag) => tag.status === "active").length }} active</strong>
+                  <span>{{ session.foundation.tags.filter((tag) => tag.status === "candidate").length }} candidate</span>
+                </summary>
+                <dl class="foundation-policy-grid">
+                  <div><dt>Coordinates</dt><dd>source ms · half-open</dd></div>
+                  <div><dt>Dataset</dt><dd>positive-only · overlap allowed</dd></div>
+                  <div><dt>Evidence</dt><dd>explicit notes · multi-label</dd></div>
+                  <div><dt>Audio</dt><dd>optional context only</dd></div>
+                </dl>
+                <div class="foundation-tag-details">
+                  <details
+                    v-for="tag in session.foundation.tags.filter((entry) => entry.status === 'active')"
+                    :key="tag.id"
+                  >
+                    <summary><strong>{{ tag.id }}</strong><span>{{ tag.exemplars.length }} ex.</span></summary>
+                    <p>{{ tag.definition }}</p>
+                    <div class="foundation-cue-list">
+                      <span>Include</span>
+                      <ul><li v-for="cue in tag.inclusionCues" :key="cue">{{ cue }}</li></ul>
+                    </div>
+                    <div v-if="tag.exclusionCues?.length" class="foundation-cue-list">
+                      <span>Exclude</span>
+                      <ul><li v-for="cue in tag.exclusionCues" :key="cue">{{ cue }}</li></ul>
+                    </div>
+                    <small v-if="tag.aliases.length">Aliases · {{ tag.aliases.join(", ") }}</small>
+                    <small v-if="tag.salienceClarification">Salience · {{ tag.salienceClarification }}</small>
+                  </details>
+                </div>
+              </details>
             </section>
 
             <section class="editor-section">
@@ -2411,11 +2933,136 @@ function errorMessage(error: unknown): string {
                   <div class="annotation-row-actions">
                     <button type="button" @click="playAnnotation(annotation)">Play</button>
                     <button type="button" @click="editAnnotation(annotation)">Edit</button>
+                    <button type="button" @click="beginExemplarPromotion(annotation)">Exemplar</button>
                     <button type="button" @click="deleteAnnotation(annotation)">Delete</button>
                   </div>
+                  <form
+                    v-if="exemplarAnnotationId === annotation.id"
+                    class="exemplar-form"
+                    @submit.prevent="promoteExemplar"
+                  >
+                    <label>
+                      <span>Kind</span>
+                      <select v-model="exemplarKind" @change="syncExemplarTag">
+                        <option value="strong">Strong</option>
+                        <option value="weak">Weak</option>
+                        <option value="counterexample">Counterexample</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>Foundation tag</span>
+                      <select v-model="exemplarTagId" :disabled="!exemplarTagOptions.length">
+                        <option v-for="tag in exemplarTagOptions" :key="tag.id" :value="tag.id">
+                          {{ tag.id }}
+                        </option>
+                      </select>
+                    </label>
+                    <p v-if="!exemplarTagOptions.length" class="empty-copy exemplar-empty">
+                      No compatible active tag is available for this exemplar kind.
+                    </p>
+                    <div class="exemplar-actions">
+                      <button type="button" @click="cancelExemplarPromotion">Cancel</button>
+                      <button type="submit" :disabled="!exemplarTagId">Promote</button>
+                    </div>
+                  </form>
                 </article>
               </div>
               <p v-else class="empty-copy">No gold sections saved for this chart.</p>
+            </section>
+
+            <section class="editor-section" aria-labelledby="review-notes-heading">
+              <div class="editor-section-heading">
+                <h3 id="review-notes-heading">Review notes</h3>
+                <span>{{ openReviewNoteCount }} open</span>
+              </div>
+              <form class="review-note-form" @submit.prevent="addReviewNote">
+                <label class="field-stack">
+                  <span>Expert observation · excluded from releases</span>
+                  <textarea
+                    v-model="reviewNoteText"
+                    rows="3"
+                    required
+                    @input="markReviewNoteDraft"
+                  ></textarea>
+                </label>
+                <label class="review-note-selection">
+                  <input
+                    v-model="reviewNoteIncludeSelection"
+                    type="checkbox"
+                    @change="markReviewNoteDraft"
+                  />
+                  <span>Attach current valid range and selected notes</span>
+                </label>
+                <button class="button button--quiet" type="submit">Add review note</button>
+              </form>
+              <div v-if="reviewNotes.length" class="review-note-list">
+                <article v-for="note in reviewNotes" :key="note.id" class="review-note-row">
+                  <div>
+                    <strong>{{ note.state }}</strong>
+                    <span v-if="note.range">{{ formatTime(note.range.startMs) }}–{{ formatTime(note.range.endMs) }}</span>
+                  </div>
+                  <p>{{ note.text }}</p>
+                  <div class="review-note-actions">
+                    <button v-if="note.range" type="button" @click="seekReviewNote(note.id)">Seek</button>
+                    <button v-if="note.state === 'open'" type="button" @click="resolveReviewNote(note.id)">Resolve</button>
+                  </div>
+                </article>
+              </div>
+              <p v-if="qualityMessage" class="quality-message" role="status">{{ qualityMessage }}</p>
+            </section>
+
+            <section class="editor-section completion-section" aria-labelledby="completion-heading">
+              <div class="editor-section-heading">
+                <h3 id="completion-heading">Chart review</h3>
+                <span>{{ session.document.reviewState }}</span>
+              </div>
+              <p class="empty-copy">
+                Completion requires no draft, no open review note, and no pending silver prediction.
+              </p>
+              <div class="completion-facts">
+                <span :class="{ 'is-clear': !hasUncommittedDraft }">Draft · {{ hasUncommittedDraft ? "open" : "clear" }}</span>
+                <span :class="{ 'is-clear': !openReviewNoteCount }">Notes · {{ openReviewNoteCount }}</span>
+                <span :class="{ 'is-clear': !pendingPredictionCount }">
+                  Silver · {{ pendingPredictionCount }}
+                </span>
+              </div>
+              <button
+                class="button button--primary completion-button"
+                type="button"
+                :disabled="session.document.reviewState === 'complete'"
+                @click="markChartComplete"
+              >{{ session.document.reviewState === "complete" ? "Chart complete" : "Mark chart complete" }}</button>
+            </section>
+
+            <section class="editor-section release-section" aria-labelledby="release-heading">
+              <div class="editor-section-heading">
+                <h3 id="release-heading">Gold release</h3>
+                <span>Canonical complete charts only</span>
+              </div>
+              <button class="button button--quiet release-preview-button" type="button" @click="previewGoldRelease">
+                Build release preview
+              </button>
+              <p v-if="releaseMessage" class="quality-message" role="status">{{ releaseMessage }}</p>
+              <div v-if="releasePreview" class="release-preview">
+                <dl>
+                  <div><dt>Documents</dt><dd>{{ releasePreview.manifest.documentCount }}</dd></div>
+                  <div><dt>Sections</dt><dd>{{ releasePreview.manifest.annotationCount }}</dd></div>
+                  <div><dt>Salience 2 / 1</dt><dd>{{ releasePreview.manifest.salienceCounts["2"] }} / {{ releasePreview.manifest.salienceCounts["1"] }}</dd></div>
+                  <div><dt>Median / p90</dt><dd>{{ formatMs(releasePreview.manifest.durationDistribution.medianMs) }} / {{ formatMs(releasePreview.manifest.durationDistribution.p90Ms) }} ms</dd></div>
+                  <div><dt>Foundations</dt><dd>{{ releasePreview.manifest.foundationDigests.length }}</dd></div>
+                </dl>
+                <div v-if="releaseTagCounts.length" class="release-tags">
+                  <span v-for="[tagId, count] in releaseTagCounts" :key="tagId">{{ tagId }} · {{ count }}</span>
+                </div>
+                <button
+                  class="button button--primary"
+                  type="button"
+                  :disabled="hasUncommittedDraft"
+                  @click="confirmGoldRelease"
+                >
+                  {{ hasUncommittedDraft ? "Finish draft before export" : "Confirm and write export" }}
+                </button>
+              </div>
             </section>
           </fieldset>
           <div v-else-if="readonlyTask" class="rail-empty readonly-rail-copy">

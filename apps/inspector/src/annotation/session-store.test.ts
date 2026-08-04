@@ -6,6 +6,7 @@ describe("MemorySessionStore", () => {
     const store = new MemorySessionStore();
     const handle = { kind: "directory", name: "dataset" };
     const draft: AnnotationDraft = {
+      annotationEditorDirty: true,
       base: null,
       datasetId: "dataset-a",
       editorText: "unfinished",
@@ -14,6 +15,8 @@ describe("MemorySessionStore", () => {
       playheadMs: 1_000,
       range: { endMs: 2_000, startMs: 500 },
       rangeEditor: { end: "broken", start: "01:02." },
+      reviewNoteIncludeSelection: false,
+      reviewNoteText: "definition still needs review",
       sourceSha256: "a".repeat(64),
       undoState: [{ action: "select" }],
       visualSpeed: 480,

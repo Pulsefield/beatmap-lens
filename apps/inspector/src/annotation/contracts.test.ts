@@ -5,7 +5,12 @@ import {
   serializeAnnotationDocumentV1,
   serializeFoundationV1,
 } from "./canonical-json";
-import type { AnnotationDocumentV1, FoundationTagV1, GoldAnnotationV1 } from "./contracts";
+import type {
+  AnnotationDocumentV1,
+  FoundationTagV1,
+  GoldAnnotationV1,
+  JudgmentFoundationV1,
+} from "./contracts";
 import { activateFoundationTagV1, bootstrapFoundationV1, foundationRefV1 } from "./foundation";
 import { assertSourceBytesMatch, inspectOsuSourceV1 } from "./source-identity";
 import { createStableNoteRefV1, resolveStableNoteRefsV1 } from "./stable-note-ref";
@@ -117,6 +122,80 @@ describe("annotation v1 contracts", () => {
     expect(serializeFoundationV1({ ...active, tags: [...active.tags].reverse() })).toBe(
       serializeFoundationV1(active),
     );
+  });
+
+  it("preserves curated candidate cues and clarification during activation", async () => {
+    const candidate = bootstrapFoundationV1({
+      foundationId,
+      creatorId: "expert-a",
+      createdAt: now,
+      catalogTags: ["Streams"],
+    });
+    const candidateTag = candidate.tags[0];
+    if (!candidateTag) throw new Error("Expected the candidate tag");
+    const curated: JudgmentFoundationV1 = {
+      ...candidate,
+      tags: [
+        {
+          ...candidateTag,
+          inclusionCues: ["已有线索"],
+          exclusionCues: ["排除线索"],
+          aliases: ["flow"],
+          salienceClarification: "持续出现时为强",
+        },
+      ],
+    };
+    const active = await activateFoundationTagV1(
+      curated,
+      {
+        tagId: "streams",
+        definition: "连续音流",
+        inclusionCues: ["新增线索"],
+        exclusionCues: ["新增排除"],
+      },
+      { creatorId: "expert-a", createdAt: now },
+    );
+
+    expect(active.tags[0]).toMatchObject({
+      aliases: ["flow"],
+      exclusionCues: ["排除线索", "新增排除"],
+      inclusionCues: ["已有线索", "新增线索"],
+      salienceClarification: "持续出现时为强",
+      status: "active",
+    });
+  });
+
+  it("activates a new custom tag through the same compatible Foundation revision", async () => {
+    const foundation = bootstrapFoundationV1({
+      foundationId,
+      creatorId: "expert-a",
+      createdAt: now,
+      catalogTags: [],
+    });
+    const parentSha256 = await hashFoundationV1(foundation);
+    const active = await activateFoundationTagV1(
+      foundation,
+      {
+        aliases: ["anchor"],
+        definition: "A custom anchor pattern.",
+        displayName: "Anchor pattern",
+        exclusionCues: ["A single isolated note."],
+        inclusionCues: ["Repeated anchored movement."],
+        salienceClarification: "Strong when it structures the whole section.",
+        tagId: "anchor-pattern",
+      },
+      { creatorId: "expert-a", createdAt: "2026-08-04T00:02:00.000Z" },
+    );
+
+    expect(active.tags).toEqual([
+      expect.objectContaining({
+        aliases: ["anchor"],
+        displayName: "Anchor pattern",
+        id: "anchor-pattern",
+        status: "active",
+      }),
+    ]);
+    expect(validateCompatibleFoundationRevisionV1(foundation, active, parentSha256)).toEqual([]);
   });
 
   it("rejects a gold annotation pinned to the wrong Foundation digest", async () => {

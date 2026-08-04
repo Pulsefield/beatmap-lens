@@ -678,6 +678,9 @@ async function readPinnedFoundation(
 }
 
 function hasMeaningfulEditorState(draft: AnnotationDraft): boolean {
+  if (draft.annotationEditorDirty !== undefined) {
+    return draft.annotationEditorDirty || Boolean(draft.reviewNoteText?.trim());
+  }
   return (
     draft.range !== null ||
     draft.noteRefs.length > 0 ||
