@@ -91,6 +91,7 @@ import {
   resolveReviewNoteV1,
   sameTagOverlapWarningsV1,
 } from "./annotation/quality";
+import { RafMetrics } from "./annotation/raf-metrics";
 import { rangeCandidates } from "./annotation/range";
 import {
   buildGoldRelease,
@@ -275,11 +276,10 @@ let viewportResizeObserver: ResizeObserver | undefined;
 let timelineDrag: TimelineDragState | undefined;
 let viewportDrag: ViewportDragState | undefined;
 let gestureFrame: number | undefined;
+let playbackAnimationFrame: number | undefined;
 let pendingTextUndo: EditorUndoState | undefined;
 let preferenceWrite = Promise.resolve();
-let previousAnimationFrameTime: number | undefined;
-let lastFrameMetricReport = 0;
-const frameDurations: number[] = [];
+const rafMetrics = new RafMetrics();
 
 const activeTask = computed(() =>
   queue.value.find((task) => task.id === activeTaskId.value),
@@ -546,7 +546,12 @@ async function changeWorkspaceMode(mode: WorkspaceMode): Promise<void> {
 }
 
 function handleVisibilityChange(): void {
-  if (document.visibilityState !== "hidden" || draftCleanupBlocked.value) return;
+  if (document.visibilityState !== "hidden") {
+    syncPlaybackInstrumentation(playbackState.value.playing);
+    return;
+  }
+  resetPlaybackInstrumentation();
+  if (draftCleanupBlocked.value) return;
   void flushDraft().catch((error) => {
     saveState.value = "error";
     saveMessage.value = errorMessage(error);
@@ -772,15 +777,16 @@ async function initializeInteractiveSession(): Promise<void> {
     const active = session.value;
     if (!active || active.source.sha256 !== current.source.sha256) return;
     if (state.currentTimeMs > active.chartEndMs) {
+      resetPlaybackInstrumentation();
       controller.seek(active.chartEndMs);
       controller.pause();
       return;
     }
 
-    recordAnimationFrame(performance.now(), state.playing);
     playbackState.value = state;
     playheadMs.value = state.currentTimeMs;
     updateViewportFrame(state.currentTimeMs);
+    syncPlaybackInstrumentation(state.playing);
   });
   unsubscribeAudio = controller.subscribeAudio((state) => {
     if (playbackClock !== controller) return;
@@ -801,7 +807,12 @@ async function initializeInteractiveSession(): Promise<void> {
       current.parsed,
     );
     if (playbackClock === controller && session.value?.source.sha256 === current.source.sha256) {
-      await controller.loadBeatmapAudio(context);
+      resetPlaybackInstrumentation();
+      try {
+        await controller.loadBeatmapAudio(context);
+      } finally {
+        if (playbackClock === controller) restartPlaybackInstrumentation();
+      }
     }
   } catch (error) {
     if (playbackClock === controller) {
@@ -812,6 +823,7 @@ async function initializeInteractiveSession(): Promise<void> {
 
 function disposeInteractiveSession(): void {
   rollbackActiveGesturesForDispose();
+  resetPlaybackInstrumentation();
   viewportResizeObserver?.disconnect();
   unsubscribePlayback?.();
   unsubscribePlayback = undefined;
@@ -828,10 +840,6 @@ function disposeInteractiveSession(): void {
   timelineDrag = undefined;
   viewportDrag = undefined;
   pendingTextUndo = undefined;
-  frameDurations.length = 0;
-  frameP95Ms.value = 0;
-  previousAnimationFrameTime = undefined;
-  lastFrameMetricReport = 0;
 }
 
 function rebuildViewportController(): void {
@@ -857,6 +865,7 @@ function rebuildViewportController(): void {
     pixelsPerSecond: visualSpeed.value,
   });
   updateViewportFrame(playheadMs.value);
+  restartPlaybackInstrumentation();
 }
 
 function refreshInteractiveGeometry(): void {
@@ -873,58 +882,100 @@ function updateViewportFrame(timeMs: number): void {
   viewportInstrumentation.value = viewportController.instrumentation();
 }
 
-function recordAnimationFrame(timestamp: number, playing: boolean): void {
-  const previous = previousAnimationFrameTime;
-  previousAnimationFrameTime = timestamp;
-  if (!playing || previous === undefined) return;
-  frameDurations.push(timestamp - previous);
-  if (frameDurations.length > 120) frameDurations.shift();
-  if (timestamp - lastFrameMetricReport < 250) return;
-  lastFrameMetricReport = timestamp;
-  const sorted = [...frameDurations].sort((left, right) => left - right);
-  frameP95Ms.value = sorted[Math.ceil(sorted.length * 0.95) - 1] ?? 0;
+function syncPlaybackInstrumentation(playing: boolean): void {
+  if (!playing || document.visibilityState === "hidden") {
+    resetPlaybackInstrumentation();
+    return;
+  }
+  if (playbackAnimationFrame !== undefined) return;
+  playbackAnimationFrame = requestAnimationFrame(samplePlaybackAnimationFrame);
+}
+
+function samplePlaybackAnimationFrame(timestamp: number): void {
+  playbackAnimationFrame = undefined;
+  if (!playbackState.value.playing || document.visibilityState === "hidden") {
+    resetPlaybackInstrumentation();
+    return;
+  }
+  const report = rafMetrics.recordFrame(timestamp);
+  if (report !== undefined) frameP95Ms.value = report;
+  playbackAnimationFrame = requestAnimationFrame(samplePlaybackAnimationFrame);
+}
+
+function resetPlaybackInstrumentation(): void {
+  if (playbackAnimationFrame !== undefined) cancelAnimationFrame(playbackAnimationFrame);
+  playbackAnimationFrame = undefined;
+  rafMetrics.reset();
+  frameP95Ms.value = 0;
+}
+
+function restartPlaybackInstrumentation(): void {
+  resetPlaybackInstrumentation();
+  syncPlaybackInstrumentation(playbackState.value.playing);
 }
 
 async function togglePlayback(): Promise<void> {
-  if (!playbackClock || !session.value || operationLocked.value) return;
-  if (playbackClock.playing) {
-    playbackClock.pause();
+  const controller = playbackClock;
+  if (!controller || !session.value || operationLocked.value) return;
+  if (controller.playing) {
+    resetPlaybackInstrumentation();
+    controller.pause();
     return;
   }
-  if (playbackClock.currentTimeMs >= session.value.chartEndMs) playbackClock.seek(0);
-  await playbackClock.play();
+  if (controller.currentTimeMs >= session.value.chartEndMs) seekPlayhead(0);
+  await runPlaybackDiscontinuity(controller, () => controller.play());
 }
 
 async function toggleMusic(): Promise<void> {
   const controller = playbackClock;
   if (!controller || operationLocked.value) return;
-  await controller.setMusicEnabled(!musicEnabled.value);
+  await runPlaybackDiscontinuity(controller, () =>
+    controller.setMusicEnabled(!musicEnabled.value),
+  );
   await persistSessionPreferences();
 }
 
 async function playSelectionOnce(): Promise<void> {
   const range = parsedRange.value;
-  if (!playbackClock || !range || operationLocked.value) return;
-  await playbackClock.playSelection(range);
+  const controller = playbackClock;
+  if (!controller || !range || operationLocked.value) return;
+  await runPlaybackDiscontinuity(controller, () => controller.playSelection(range));
 }
 
 async function toggleSelectionLoop(): Promise<void> {
   const range = parsedRange.value;
-  if (!playbackClock || !range || operationLocked.value) return;
+  const controller = playbackClock;
+  if (!controller || !range || operationLocked.value) return;
   if (playbackState.value.looping) {
-    playbackClock.pause();
+    resetPlaybackInstrumentation();
+    controller.pause();
     return;
   }
-  await playbackClock.loopSelection(range);
+  await runPlaybackDiscontinuity(controller, () => controller.loopSelection(range));
+}
+
+async function runPlaybackDiscontinuity(
+  controller: AudioPlaybackController,
+  operation: () => Promise<void>,
+): Promise<void> {
+  resetPlaybackInstrumentation();
+  try {
+    await operation();
+  } finally {
+    if (playbackClock === controller) restartPlaybackInstrumentation();
+  }
 }
 
 function pauseForEdit(): void {
-  if (playbackClock?.playing) playbackClock.pause();
+  if (!playbackClock?.playing) return;
+  resetPlaybackInstrumentation();
+  playbackClock.pause();
 }
 
 function seekPlayhead(timeMs: number): void {
   const endMs = session.value?.chartEndMs ?? 0;
   const time = Math.min(Math.max(0, timeMs), endMs);
+  resetPlaybackInstrumentation();
   if (playbackClock) playbackClock.seek(time);
   else {
     playheadMs.value = time;
@@ -955,6 +1006,7 @@ async function applyVisualSpeed(): Promise<void> {
     viewportFrame.value = viewportController.setVisualSpeed(speed, playheadMs.value);
     viewportInstrumentation.value = viewportController.instrumentation();
   }
+  restartPlaybackInstrumentation();
   await persistSessionPreferences();
   if (editorDirty.value) await persistDraftNow(true);
 }
@@ -1840,8 +1892,9 @@ function seekAnnotation(annotation: GoldAnnotationV1): void {
 }
 
 async function playAnnotation(annotation: GoldAnnotationV1): Promise<void> {
-  if (!playbackClock || operationLocked.value) return;
-  await playbackClock.playSelection(annotation.range);
+  const controller = playbackClock;
+  if (!controller || operationLocked.value) return;
+  await runPlaybackDiscontinuity(controller, () => controller.playSelection(annotation.range));
 }
 
 async function deleteAnnotation(annotation: GoldAnnotationV1): Promise<void> {
