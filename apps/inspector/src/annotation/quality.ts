@@ -1,23 +1,29 @@
-import { hashFoundationV1, type Sha256DigestFunction } from "./canonical-json";
+import type { Sha256DigestFunction } from "./canonical-json";
 import type {
   AnnotationDocumentV1,
-  FoundationExemplarKindV1,
-  FoundationExemplarV1,
   FoundationRefV1,
   GoldAnnotationV1,
+  GoldExemplarRoleKindV1,
+  GoldExemplarRoleV1,
   JudgmentFoundationV1,
   ReviewNoteStateV1,
   StableNoteRefV1,
   TimeRangeV1,
 } from "./contracts";
-import { assertActiveFoundationTagV1, type FoundationRevisionMetadataV1 } from "./foundation";
+import { assertActiveFoundationTagV1, foundationRefV1 } from "./foundation";
 import { intersectRanges } from "./range";
-import { validateCompatibleFoundationRevisionV1 } from "./validation";
 
-export interface PromoteFoundationExemplarInputV1 {
+export interface SetGoldExemplarRoleInputV1 {
   readonly tagId: string;
   readonly annotationId: string;
-  readonly kind: FoundationExemplarKindV1;
+  readonly kind: GoldExemplarRoleKindV1;
+  readonly now?: () => string;
+}
+
+export interface RemoveGoldExemplarRoleInputV1 {
+  readonly tagId: string;
+  readonly annotationId: string;
+  readonly now?: () => string;
 }
 
 export interface AddReviewNoteInputV1 {
@@ -66,52 +72,45 @@ export type CompleteAnnotationDocumentResultV1 =
       readonly blockers: readonly ChartCompletionBlockerV1[];
     };
 
-export async function promoteFoundationExemplarV1(
-  foundation: JudgmentFoundationV1,
+export async function setGoldExemplarRoleV1(
   document: AnnotationDocumentV1,
-  input: PromoteFoundationExemplarInputV1,
-  revision: FoundationRevisionMetadataV1,
+  foundation: JudgmentFoundationV1,
+  input: SetGoldExemplarRoleInputV1,
   digest?: Sha256DigestFunction,
-): Promise<JudgmentFoundationV1> {
-  const tag = assertActiveFoundationTagV1(foundation, input.tagId);
-  const annotation = document.annotations.find((entry) => entry.id === input.annotationId);
-  if (!annotation) throw new Error(`Gold annotation ${input.annotationId} does not exist`);
-  if (annotation.foundation.foundationId !== foundation.foundationId) {
-    throw new Error("Exemplar annotation is pinned to a different Foundation");
-  }
-  const hasTag = annotation.labels.some((label) => label.tagId === input.tagId);
-  if (input.kind === "counterexample" && hasTag) {
-    throw new Error(`Counterexample annotation ${annotation.id} is labeled ${input.tagId}`);
-  }
-  if (input.kind !== "counterexample" && !hasTag) {
-    throw new Error(`Gold annotation ${annotation.id} is not labeled ${input.tagId}`);
+): Promise<AnnotationDocumentV1> {
+  const annotation = findGoldAnnotation(document, input.annotationId);
+  const role = { kind: input.kind, tagId: input.tagId };
+  const exemplarRoles = sortRoles([
+    ...annotation.exemplarRoles.filter((candidate) => candidate.tagId !== role.tagId),
+    role,
+  ]);
+  assertGoldAnnotationSupportedByFoundation({ ...annotation, exemplarRoles }, foundation);
+
+  const updatedAt = input.now?.() ?? new Date().toISOString();
+  const currentFoundation = await foundationRefV1(foundation, digest);
+  return reviseGoldAnnotation(document, annotation.id, updatedAt, (entry) => ({
+    ...entry,
+    foundation: currentFoundation,
+    exemplarRoles,
+    updatedAt,
+  }));
+}
+
+export function removeGoldExemplarRoleV1(
+  document: AnnotationDocumentV1,
+  input: RemoveGoldExemplarRoleInputV1,
+): AnnotationDocumentV1 {
+  const annotation = findGoldAnnotation(document, input.annotationId);
+  if (!annotation.exemplarRoles.some((role) => role.tagId === input.tagId)) {
+    throw new Error(`Gold annotation ${input.annotationId} does not have role ${input.tagId}`);
   }
 
-  const exemplar: FoundationExemplarV1 = {
-    annotationId: annotation.id,
-    kind: input.kind,
-    sourceSha256: document.source.sha256,
-  };
-  if (tag.exemplars.some((entry) => sameExemplarTarget(entry, exemplar))) {
-    throw new Error(`Tag ${input.tagId} already has this exemplar`);
-  }
-
-  const parentSha256 = await hashFoundationV1(foundation, digest);
-  const next: JudgmentFoundationV1 = {
-    ...foundation,
-    revision: foundation.revision + 1,
-    parentSha256,
-    creatorId: revision.creatorId,
-    createdAt: revision.createdAt,
-    tags: foundation.tags.map((entry) =>
-      entry.id === input.tagId ? { ...entry, exemplars: [...entry.exemplars, exemplar] } : entry,
-    ),
-  };
-  const issues = validateCompatibleFoundationRevisionV1(foundation, next, parentSha256);
-  if (issues.length > 0) {
-    throw new TypeError(`Incompatible Foundation exemplar revision: ${issues[0]?.message}`);
-  }
-  return next;
+  const updatedAt = input.now?.() ?? new Date().toISOString();
+  return reviseGoldAnnotation(document, annotation.id, updatedAt, (entry) => ({
+    ...entry,
+    exemplarRoles: entry.exemplarRoles.filter((role) => role.tagId !== input.tagId),
+    updatedAt,
+  }));
 }
 
 export function addReviewNoteV1(
@@ -229,7 +228,7 @@ export function completeAnnotationDocumentV1(
 function reviseDocument(
   document: AnnotationDocumentV1,
   updatedAt: string,
-  patch: Partial<Pick<AnnotationDocumentV1, "reviewNotes" | "reviewState">>,
+  patch: Partial<Pick<AnnotationDocumentV1, "annotations" | "reviewNotes" | "reviewState">>,
 ): AnnotationDocumentV1 {
   return {
     ...document,
@@ -237,6 +236,19 @@ function reviseDocument(
     revision: document.revision + 1,
     updatedAt,
   };
+}
+
+function reviseGoldAnnotation(
+  document: AnnotationDocumentV1,
+  annotationId: string,
+  updatedAt: string,
+  update: (annotation: GoldAnnotationV1) => GoldAnnotationV1,
+): AnnotationDocumentV1 {
+  return reviseDocument(document, updatedAt, {
+    annotations: document.annotations.map((annotation) =>
+      annotation.id === annotationId ? update(annotation) : annotation,
+    ),
+  });
 }
 
 function assertResultingGoldAnnotation(
@@ -248,8 +260,51 @@ function assertResultingGoldAnnotation(
   }
 }
 
-function sameExemplarTarget(left: FoundationExemplarV1, right: FoundationExemplarV1): boolean {
-  return left.sourceSha256 === right.sourceSha256 && left.annotationId === right.annotationId;
+function findGoldAnnotation(
+  document: AnnotationDocumentV1,
+  annotationId: string,
+): GoldAnnotationV1 {
+  const annotation = document.annotations.find((entry) => entry.id === annotationId);
+  if (!annotation) throw new Error(`Gold annotation ${annotationId} does not exist`);
+  return annotation;
+}
+
+function assertRoleCompatibleWithLabels(
+  annotation: GoldAnnotationV1,
+  role: GoldExemplarRoleV1,
+): void {
+  const hasLabel = annotation.labels.some((label) => label.tagId === role.tagId);
+  if (role.kind === "counterexample" && hasLabel) {
+    throw new Error(`Counterexample annotation ${annotation.id} is labeled ${role.tagId}`);
+  }
+  if (role.kind !== "counterexample" && !hasLabel) {
+    throw new Error(`Gold annotation ${annotation.id} is not labeled ${role.tagId}`);
+  }
+}
+
+function assertGoldAnnotationSupportedByFoundation(
+  annotation: GoldAnnotationV1,
+  foundation: JudgmentFoundationV1,
+): void {
+  for (const label of annotation.labels) assertActiveFoundationTagV1(foundation, label.tagId);
+  for (const role of annotation.exemplarRoles) {
+    assertActiveFoundationTagV1(foundation, role.tagId);
+    assertRoleCompatibleWithLabels(annotation, role);
+  }
+}
+
+function sortRoles(roles: readonly GoldExemplarRoleV1[]): readonly GoldExemplarRoleV1[] {
+  return [...roles].sort((left, right) =>
+    left.tagId < right.tagId
+      ? -1
+      : left.tagId > right.tagId
+        ? 1
+        : left.kind < right.kind
+          ? -1
+          : left.kind > right.kind
+            ? 1
+            : 0,
+  );
 }
 
 function copyRange(range: TimeRangeV1): TimeRangeV1 {
@@ -261,7 +316,6 @@ function copyNoteRef(ref: StableNoteRefV1): StableNoteRefV1 {
     column: ref.column,
     endMs: ref.endMs,
     kind: ref.kind,
-    objectSha256: ref.objectSha256,
     sourceLine: ref.sourceLine,
     startMs: ref.startMs,
   };

@@ -11,6 +11,7 @@ import type {
   DatasetDirectoryHandle,
   DatasetFileHandle,
 } from "./dataset-directory";
+import { hasMeaningfulDraft, type SessionStore } from "./session-store";
 
 export interface ReleaseDurationStatistics {
   readonly maximumMs: number;
@@ -78,6 +79,7 @@ export function sameGoldReleaseArtifact(
 
 export async function buildGoldRelease(
   directory: DatasetDirectory,
+  sessions: SessionStore,
   exportedAt = new Date().toISOString(),
 ): Promise<GoldReleaseArtifact> {
   const scanned = await directory.scanAnnotations();
@@ -108,6 +110,8 @@ export async function buildGoldRelease(
       entry.status === "ok" && entry.document.reviewState === "complete" ? [entry.document] : [],
     )
     .sort((left, right) => left.source.sha256.localeCompare(right.source.sha256));
+  await assertNoCompleteDraftBlockers(directory, sessions, documents);
+
   const rows = documents.flatMap((document) => releaseRows(directory.manifest.datasetId, document));
   const references = uniqueFoundationReferences(rows.map((row) => row.annotation.foundation));
   const foundations = await Promise.all(
@@ -147,13 +151,32 @@ export async function writeGoldRelease(
     create: true,
   });
 
-  await writeTextFile(releaseDirectory, "gold-sections.v1.jsonl", artifact.goldJsonl);
-  await writeTextFile(releaseDirectory, "release.json", artifact.releaseJson);
   for (const foundation of artifact.foundations) {
     await writeTextFile(foundationDirectory, foundation.filename, foundation.source);
   }
+  await writeTextFile(releaseDirectory, "gold-sections.v1.jsonl", artifact.goldJsonl);
+  await writeTextFile(releaseDirectory, "release.json", artifact.releaseJson);
 
   return { ...artifact, releaseId };
+}
+
+async function assertNoCompleteDraftBlockers(
+  directory: DatasetDirectory,
+  sessions: SessionStore,
+  documents: readonly AnnotationDocumentV1[],
+): Promise<void> {
+  const completeSources = new Set(documents.map((document) => document.source.sha256));
+  const blockedSources = new Set(
+    (await sessions.listDrafts(directory.manifest.datasetId))
+      .filter(hasMeaningfulDraft)
+      .flatMap((draft) => (completeSources.has(draft.sourceSha256) ? [draft.sourceSha256] : [])),
+  );
+  if (blockedSources.size === 0) return;
+
+  const plural = blockedSources.size === 1 ? "" : "s";
+  throw new TypeError(
+    `Cannot export ${blockedSources.size} complete chart${plural} with uncommitted draft${plural}.`,
+  );
 }
 
 async function assertReleaseDataset(
@@ -221,6 +244,7 @@ function copyGoldAnnotation(annotation: GoldAnnotationV1): GoldAnnotationV1 {
     foundation: { ...annotation.foundation },
     id: annotation.id,
     ...(annotation.judgmentNote === undefined ? {} : { judgmentNote: annotation.judgmentNote }),
+    exemplarRoles: annotation.exemplarRoles.map((role) => ({ ...role })),
     labels: annotation.labels.map((label) => ({
       salience: label.salience,
       tagId: label.tagId,
@@ -229,7 +253,6 @@ function copyGoldAnnotation(annotation: GoldAnnotationV1): GoldAnnotationV1 {
       column: note.column,
       endMs: note.endMs,
       kind: note.kind,
-      objectSha256: note.objectSha256,
       sourceLine: note.sourceLine,
       startMs: note.startMs,
     })),

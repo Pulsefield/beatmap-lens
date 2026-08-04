@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { serializeFoundationV1 } from "./canonical-json";
-import type { AnnotationDocumentV1 } from "./contracts";
+import type { AnnotationDocumentV1, JudgmentFoundationV1 } from "./contracts";
 import {
   type AnnotationSaveContext,
   createDatasetDirectory,
@@ -29,6 +29,38 @@ describe("FileSystemDatasetDirectory", () => {
     expect([...foundations.children.keys()]).toEqual([
       `${reopened.manifest.currentFoundation.sha256}.judgment-foundation.v1.json`,
     ]);
+  });
+
+  it("caches a verified Foundation read by digest for the directory session", async () => {
+    const root = new FakeDirectoryHandle();
+    const directory = await createFixtureDataset(root);
+    const reference = directory.manifest.currentFoundation;
+    const reads = await instrumentFoundationByteReads(root, reference.sha256);
+
+    await expectCanonicalFoundationRead(directory.readFoundation(reference));
+    await expect(
+      directory.readFoundation({ ...reference, revision: reference.revision + 1 }),
+    ).rejects.toThrow("pinned identity");
+    reads.file.setText("corrupt");
+
+    await expectCanonicalFoundationRead(directory.readFoundation(reference));
+    expect(reads.arrayBufferReads).toBe(1);
+  });
+
+  it("evicts failed Foundation reads so corrected bytes can be retried", async () => {
+    const root = new FakeDirectoryHandle();
+    const directory = await createFixtureDataset(root);
+    const reference = directory.manifest.currentFoundation;
+    const reads = await instrumentFoundationByteReads(root, reference.sha256);
+
+    reads.file.setText("corrupt");
+    await expect(directory.readFoundation(reference)).rejects.toThrow();
+    expect(reads.arrayBufferReads).toBe(1);
+
+    reads.file.setText(serializeFoundationV1(fixtureFoundation()));
+    await expectCanonicalFoundationRead(directory.readFoundation(reference));
+    await expectCanonicalFoundationRead(directory.readFoundation(reference));
+    expect(reads.arrayBufferReads).toBe(2);
   });
 
   it("opens an unknown future dataset as a minimal read-only summary", async () => {
@@ -153,7 +185,7 @@ describe("FileSystemDatasetDirectory", () => {
     expect(await directory.readAnnotation(invalid.source.sha256)).toBeNull();
   });
 
-  it("rejects a stable note reference that does not resolve to the exact source object", async () => {
+  it("rejects a stable note reference that does not resolve to the exact source tuple", async () => {
     const root = new FakeDirectoryHandle();
     const directory = await createFixtureDataset(root);
     const { context, document } = await noteWorkflowDocument(directory.manifest.currentFoundation);
@@ -163,13 +195,13 @@ describe("FileSystemDatasetDirectory", () => {
         ...annotation,
         noteRefs: annotation.noteRefs.map((note) => ({
           ...note,
-          objectSha256: "0".repeat(64),
+          column: note.column + 1,
         })),
       })),
     };
 
     await expect(directory.saveAnnotation(invalid, null, context)).rejects.toThrow(
-      "SHA-256 mismatch",
+      "does not resolve",
     );
     expect(await directory.readAnnotation(invalid.source.sha256)).toBeNull();
   });
@@ -330,6 +362,34 @@ async function createFixtureDataset(root: FakeDirectoryHandle) {
   });
 }
 
+async function instrumentFoundationByteReads(root: FakeDirectoryHandle, sha256: string) {
+  const foundations = await root.getDirectoryHandle("foundations");
+  const file = await foundations.getFileHandle(`${sha256}.judgment-foundation.v1.json`);
+  const getFile = file.getFile.bind(file);
+  let arrayBufferReads = 0;
+  file.getFile = async () => {
+    const snapshot = await getFile();
+    return {
+      arrayBuffer: async () => {
+        arrayBufferReads += 1;
+        return snapshot.arrayBuffer();
+      },
+      text: () => snapshot.text(),
+    };
+  };
+
+  return {
+    file,
+    get arrayBufferReads() {
+      return arrayBufferReads;
+    },
+  };
+}
+
+async function expectCanonicalFoundationRead(read: Promise<JudgmentFoundationV1>) {
+  expect(serializeFoundationV1(await read)).toBe(serializeFoundationV1(fixtureFoundation()));
+}
+
 function draftFor(
   datasetId: string,
   sourceSha256: string,
@@ -339,6 +399,7 @@ function draftFor(
     base,
     datasetId,
     editorText: "local unsaved judgment",
+    exemplarRoles: [],
     labels: [{ salience: 2, tagId: "stream" }],
     noteRefs: [],
     playheadMs: 1_000,
@@ -371,7 +432,7 @@ async function noteWorkflowDocument(
 ): Promise<{ document: AnnotationDocumentV1; context: AnnotationSaveContext }> {
   const sourceBytes = new TextEncoder().encode(osuSource("64,192,1000,1,0,0:0:0:0:"));
   const inspected = await inspectOsuSourceV1(sourceBytes);
-  const [noteRef] = await createStableNoteRefsV1(sourceBytes, inspected.chart);
+  const [noteRef] = createStableNoteRefsV1(inspected.chart);
   if (!noteRef) throw new Error("expected stable note reference");
   const base = fixtureDocument(foundation);
   const annotation = base.annotations[0];

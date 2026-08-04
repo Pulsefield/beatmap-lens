@@ -7,7 +7,7 @@ import {
 import type { SourceIdentityV1 } from "./contracts";
 import type { DatasetDirectory } from "./dataset-directory";
 import { deriveQueue, type QueueStatus } from "./queue";
-import type { SessionStore } from "./session-store";
+import { hasMeaningfulDraft, type SessionStore } from "./session-store";
 import { inspectOsuSourceV1 } from "./source-identity";
 
 export type TaskQueueStatus = QueueStatus;
@@ -55,6 +55,11 @@ export async function loadTaskQueue(
         : [],
     ),
   );
+  const drafts = new Map(
+    (await sessions.listDrafts(directory.manifest.datasetId))
+      .filter(hasMeaningfulDraft)
+      .map((draft) => [draft.sourceSha256, draft] as const),
+  );
 
   const loaded: Array<Omit<TaskQueueItem, "status"> & { sourceAvailable: boolean }> = [];
   const draftSourceHashes = new Set<string>();
@@ -65,10 +70,10 @@ export async function loadTaskQueue(
     try {
       const file = await readCatalogTask(corpus, task);
       const inspected = await inspectOsuSourceV1(new Uint8Array(await file.arrayBuffer()));
-      const draft = await sessions.getDraft(directory.manifest.datasetId, inspected.source.sha256);
+      const draft = drafts.get(inspected.source.sha256);
       const error = scanErrors.get(inspected.source.sha256);
       const future = futureBySource.get(inspected.source.sha256);
-      if (draft) {
+      if (draft && !future) {
         if (sameVersion(draft.base, versions.get(inspected.source.sha256) ?? null)) {
           draftSourceHashes.add(inspected.source.sha256);
         } else {

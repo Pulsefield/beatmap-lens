@@ -4,6 +4,7 @@ import type { AnnotationDocumentV1, DatasetManifestV1 } from "./contracts";
 import { DATASET_CONTRACT } from "./contracts";
 import type { DatasetDirectory } from "./dataset-directory";
 import { buildGoldRelease, sameGoldReleaseArtifact, writeGoldRelease } from "./release";
+import { type AnnotationDraft, MemorySessionStore } from "./session-store";
 import { FakeDirectoryHandle, fixtureDocument, fixtureFoundation } from "./test-helpers";
 
 describe("buildGoldRelease", () => {
@@ -16,8 +17,13 @@ describe("buildGoldRelease", () => {
     };
     const localRoot = "/Users/expert/private/osu";
     const localFilename = "secret-chart.osu";
+    const completeFixture = fixtureDocument(foundationRef, { reviewState: "complete" });
     const complete = {
-      ...fixtureDocument(foundationRef, { reviewState: "complete" }),
+      ...completeFixture,
+      annotations: completeFixture.annotations.map((annotation) => ({
+        ...annotation,
+        exemplarRoles: [{ kind: "strong" as const, tagId: "stream" }],
+      })),
       localCorpusRoot: localRoot,
       predictions: [
         {
@@ -31,7 +37,6 @@ describe("buildGoldRelease", () => {
               column: 0,
               endMs: 1_000,
               kind: "normal" as const,
-              objectSha256: "c".repeat(64),
               sourceLine: 42,
               startMs: 1_000,
             },
@@ -59,12 +64,13 @@ describe("buildGoldRelease", () => {
       sourceSha256: "e".repeat(64),
     });
     const directory = releaseDataset(complete, inProgress, foundationRef.sha256);
+    const sessions = new MemorySessionStore();
 
-    const artifact = await buildGoldRelease(directory, "2026-08-04T01:02:03.000Z");
+    const artifact = await buildGoldRelease(directory, sessions, "2026-08-04T01:02:03.000Z");
     expect(
       sameGoldReleaseArtifact(
         artifact,
-        await buildGoldRelease(directory, artifact.manifest.exportedAt),
+        await buildGoldRelease(directory, sessions, artifact.manifest.exportedAt),
       ),
     ).toBe(true);
     expect(sameGoldReleaseArtifact(artifact, { ...artifact, goldJsonl: "" })).toBe(false);
@@ -74,6 +80,9 @@ describe("buildGoldRelease", () => {
       .map((line) => JSON.parse(line) as Record<string, unknown>);
 
     expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      annotation: { exemplarRoles: [{ kind: "strong", tagId: "stream" }] },
+    });
     expect(rows[0]).not.toHaveProperty("predictions");
     expect(rows[0]).not.toHaveProperty("reviewNotes");
     expect(artifact.manifest).toMatchObject({
@@ -176,10 +185,91 @@ describe("buildGoldRelease", () => {
           fixtureDocument(foundationRef, { sourceSha256: "e".repeat(64) }),
           foundationRef.sha256,
         ),
+        new MemorySessionStore(),
       ),
     ).rejects.toThrow(/incompletely reviewed chart/);
   });
+
+  it("blocks only complete canonical charts that have meaningful dataset drafts", async () => {
+    const foundation = fixtureFoundation();
+    const foundationRef = {
+      foundationId: foundation.foundationId,
+      revision: foundation.revision,
+      sha256: await hashFoundationV1(foundation),
+    };
+    const complete = fixtureDocument(foundationRef, { reviewState: "complete" });
+    const inProgress = fixtureDocument(foundationRef, { sourceSha256: "e".repeat(64) });
+    const directory = releaseDataset(complete, inProgress, foundationRef.sha256);
+    const sessions = new MemorySessionStore();
+    await sessions.putDraft({
+      annotationEditorDirty: false,
+      base: null,
+      datasetId: directory.manifest.datasetId,
+      editorText: "",
+      exemplarRoles: [],
+      labels: [],
+      noteRefs: [],
+      playheadMs: 42_000,
+      range: { endMs: 1_000, startMs: 0 },
+      sourceSha256: complete.source.sha256,
+      undoState: [],
+      visualSpeed: 240,
+    });
+    await sessions.putDraft({
+      base: null,
+      datasetId: directory.manifest.datasetId,
+      editorText: "unfinished in-progress work",
+      exemplarRoles: [],
+      labels: [],
+      noteRefs: [],
+      playheadMs: 0,
+      range: null,
+      sourceSha256: inProgress.source.sha256,
+      undoState: [],
+      visualSpeed: 240,
+    });
+    await sessions.putDraft({
+      base: null,
+      datasetId: "00000000-0000-4000-8000-000000000099",
+      editorText: "other dataset",
+      exemplarRoles: [],
+      labels: [],
+      noteRefs: [],
+      playheadMs: 0,
+      range: null,
+      sourceSha256: complete.source.sha256,
+      undoState: [],
+      visualSpeed: 240,
+    });
+
+    const preview = await buildGoldRelease(directory, sessions, "2026-08-04T01:02:03.000Z");
+    expect(preview.manifest.documentCount).toBe(1);
+
+    await sessions.putDraft(
+      legacyDraft({
+        annotationEditorDirty: true,
+        base: null,
+        datasetId: directory.manifest.datasetId,
+        editorText: "",
+        labels: [],
+        noteRefs: [],
+        playheadMs: 0,
+        range: null,
+        sourceSha256: complete.source.sha256,
+        undoState: [],
+        visualSpeed: 240,
+      }),
+    );
+
+    await expect(
+      buildGoldRelease(directory, sessions, preview.manifest.exportedAt),
+    ).rejects.toThrow(/1 complete chart with uncommitted draft/);
+  });
 });
+
+function legacyDraft(draft: Omit<AnnotationDraft, "exemplarRoles">): AnnotationDraft {
+  return draft as AnnotationDraft;
+}
 
 function releaseDataset(
   complete: AnnotationDocumentV1,

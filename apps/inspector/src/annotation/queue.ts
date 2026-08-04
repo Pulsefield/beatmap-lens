@@ -68,11 +68,11 @@ export function deriveQueue(
     const issue = sourceSha256 ? issueBySource.get(sourceSha256) : undefined;
     let status: QueueStatus;
 
-    if (issue === "conflict") status = "save-conflict";
+    if (sourceSha256 && futureSources.has(sourceSha256)) status = "readonly-future";
+    else if (issue === "conflict") status = "save-conflict";
     else if (issue === "error" || (sourceSha256 && scanErrors.has(sourceSha256))) {
       status = "save-error";
-    } else if (sourceSha256 && futureSources.has(sourceSha256)) status = "readonly-future";
-    else if (!task.sourceAvailable) status = "missing-source";
+    } else if (!task.sourceAvailable) status = "missing-source";
     else if (sourceSha256 && draftSourceHashes.has(sourceSha256)) status = "draft";
     else status = sourceSha256 ? (documents.get(sourceSha256) ?? "unseen") : "unseen";
 

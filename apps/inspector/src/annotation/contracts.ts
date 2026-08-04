@@ -4,7 +4,7 @@ export const ANNOTATION_CONTRACT = "beatmap-lens-section-annotations" as const;
 export const ANNOTATION_CONTRACT_VERSION = 1 as const;
 
 export type Sha256Digest = string;
-export type TagStatusV1 = "candidate" | "active" | "retired";
+export type TagStatusV1 = "active" | "retired";
 export type SalienceV1 = 1 | 2;
 
 export interface FoundationRefV1 {
@@ -47,7 +47,6 @@ export interface SourceIdentityV1 {
 
 export interface StableNoteRefV1 {
   readonly sourceLine: number;
-  readonly objectSha256: Sha256Digest;
   readonly column: number;
   readonly kind: "normal" | "long";
   readonly startMs: number;
@@ -74,14 +73,6 @@ export interface FoundationPoliciesV1 {
   readonly overlappingSectionsAllowed: true;
 }
 
-export type FoundationExemplarKindV1 = "strong" | "weak" | "counterexample";
-
-export interface FoundationExemplarV1 {
-  readonly kind: FoundationExemplarKindV1;
-  readonly sourceSha256: Sha256Digest;
-  readonly annotationId: string;
-}
-
 export interface FoundationTagV1 {
   readonly id: string;
   readonly displayName: string;
@@ -91,7 +82,6 @@ export interface FoundationTagV1 {
   readonly exclusionCues?: readonly string[];
   readonly aliases: readonly string[];
   readonly salienceClarification?: string;
-  readonly exemplars: readonly FoundationExemplarV1[];
 }
 
 export interface JudgmentFoundationV1 {
@@ -112,11 +102,19 @@ export interface AnnotationLabelV1 {
   readonly salience: SalienceV1;
 }
 
+export type GoldExemplarRoleKindV1 = "strong" | "weak" | "counterexample";
+
+export interface GoldExemplarRoleV1 {
+  readonly tagId: string;
+  readonly kind: GoldExemplarRoleKindV1;
+}
+
 export interface GoldAnnotationV1 {
   readonly id: string;
   readonly range: TimeRangeV1;
   readonly noteRefs: readonly StableNoteRefV1[];
   readonly labels: readonly AnnotationLabelV1[];
+  readonly exemplarRoles: readonly GoldExemplarRoleV1[];
   readonly foundation: FoundationRefV1;
   readonly annotatorId: string;
   readonly createdAt: string;

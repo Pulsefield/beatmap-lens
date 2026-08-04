@@ -1,6 +1,10 @@
 import type { ManiaChart, ManiaNote } from "beatmap-lens";
 import { describe, expect, it } from "vitest";
-import { BufferedSceneController } from "./buffered-scene";
+import {
+  BufferedSceneController,
+  viewportYRangeToSourceRange,
+  viewportYToSourceTime,
+} from "./buffered-scene";
 
 describe("BufferedSceneController", () => {
   it("builds only a three-viewport note buffer for a dense 7K chart", () => {
@@ -83,6 +87,38 @@ describe("BufferedSceneController", () => {
     expect(faster.refreshed).toBe(true);
     expect(faster.revision).toBe(initial.revision + 1);
     expect(faster.bufferRange.endMs - faster.bufferRange.startMs).toBe(1_500);
+  });
+});
+
+describe("viewport source-time projection", () => {
+  const options = {
+    playheadMs: 10_000,
+    viewportHeight: 500,
+    pixelsPerSecond: 250,
+    chartEndMs: 20_000,
+    judgmentLineRatio: 0.8,
+  };
+
+  it("maps the judgment line to the fixed playhead time", () => {
+    expect(viewportYToSourceTime({ ...options, viewportY: 400 })).toBe(10_000);
+  });
+
+  it("maps the viewport top and bottom to the visible source-time bounds", () => {
+    expect(viewportYToSourceTime({ ...options, viewportY: 0 })).toBe(11_600);
+    expect(viewportYToSourceTime({ ...options, viewportY: 500 })).toBe(9_600);
+  });
+
+  it("clamps projected source time to the chart range", () => {
+    expect(viewportYToSourceTime({ ...options, playheadMs: 100, viewportY: 500 })).toBe(0);
+    expect(viewportYToSourceTime({ ...options, playheadMs: 19_000, viewportY: 0 })).toBe(20_000);
+  });
+
+  it("creates the same source range for upward and downward drags", () => {
+    const upward = viewportYRangeToSourceRange({ ...options, anchorY: 500, focusY: 0 });
+    const downward = viewportYRangeToSourceRange({ ...options, anchorY: 0, focusY: 500 });
+
+    expect(upward).toEqual({ startMs: 9_600, endMs: 11_600 });
+    expect(downward).toEqual(upward);
   });
 });
 

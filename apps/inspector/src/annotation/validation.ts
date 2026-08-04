@@ -16,7 +16,12 @@ import { ANNOTATION_CONTRACT, DATASET_CONTRACT, FOUNDATION_CONTRACT } from "./co
 import { FOUNDATION_POLICIES_V1, isCanonicalTagId } from "./foundation";
 import { chartEndMs, noteIntersectsRange } from "./range";
 import { inspectOsuSourceV1 } from "./source-identity";
-import { resolveStableNoteRefsV1, stableNoteRefKey } from "./stable-note-ref";
+import {
+  createStableNoteRefIndexV1,
+  resolveStableNoteRefsV1,
+  type StableNoteRefIndexV1,
+  stableNoteRefKey,
+} from "./stable-note-ref";
 
 export interface FoundationSnapshotV1 {
   readonly foundation: JudgmentFoundationV1;
@@ -28,6 +33,11 @@ export interface AnnotationWorkflowValidationContextV1 {
   readonly chart: Pick<ManiaChart, "notes">;
   readonly foundations: readonly FoundationSnapshotV1[];
   readonly hasUncommittedDraft?: boolean;
+  readonly inspected?: {
+    readonly chart: Pick<ManiaChart, "notes">;
+    readonly source: SourceIdentityV1;
+  };
+  readonly noteRefIndex?: StableNoteRefIndexV1;
 }
 
 export function validateDatasetManifestV1(value: unknown): ValidationResult<DatasetManifestV1> {
@@ -202,7 +212,7 @@ export async function validateAnnotationWorkflowV1(
 
   const issues: ValidationIssue[] = [];
   try {
-    const inspected = await inspectOsuSourceV1(context.sourceBytes);
+    const inspected = context.inspected ?? (await inspectOsuSourceV1(context.sourceBytes));
     assertSourceIdentityMatches(document.source, inspected.source);
     if (!sameNormalizedNotes(context.chart.notes, inspected.chart.notes)) {
       add(
@@ -235,6 +245,7 @@ export async function validateAnnotationWorkflowV1(
     }),
   );
   const endMs = chartEndMs(context.chart);
+  const noteRefIndex = context.noteRefIndex ?? createStableNoteRefIndexV1(context.chart);
   if (document.source.noteCount !== context.chart.notes.length) {
     add(issues, "$.source.noteCount", "Source note count does not match the normalized chart");
   }
@@ -243,24 +254,20 @@ export async function validateAnnotationWorkflowV1(
     await validateTargetWorkflow(
       annotation,
       `$.annotations[${index}]`,
-      document,
-      context,
+      noteRefIndex,
       foundations,
       endMs,
       issues,
-      true,
     );
   }
   for (const [index, prediction] of document.predictions.entries()) {
     await validateTargetWorkflow(
       prediction,
       `$.predictions[${index}]`,
-      document,
-      context,
+      noteRefIndex,
       foundations,
       endMs,
       issues,
-      false,
     );
   }
   for (const [index, reviewNote] of document.reviewNotes.entries()) {
@@ -271,12 +278,7 @@ export async function validateAnnotationWorkflowV1(
     if (reviewNote.noteRefs) {
       const range = reviewNote.range;
       try {
-        const notes = await resolveStableNoteRefsV1(
-          context.sourceBytes,
-          context.chart,
-          reviewNote.noteRefs,
-          document.source.sha256,
-        );
+        const notes = resolveStableNoteRefsV1(noteRefIndex, reviewNote.noteRefs);
         if (range && notes.some((note) => !noteIntersectsRange(note, range))) {
           add(issues, `${path}.noteRefs`, "Every selected note must intersect the half-open range");
         }
@@ -423,7 +425,6 @@ function validateFoundationTag(value: unknown, path: string, issues: ValidationI
       "exclusionCues",
       "aliases",
       "salienceClarification",
-      "exemplars",
     ],
     path,
     issues,
@@ -432,7 +433,7 @@ function validateFoundationTag(value: unknown, path: string, issues: ValidationI
     add(issues, `${path}.id`, "Expected a lowercase kebab-case tag ID");
   }
   nonEmptyString(value.displayName, `${path}.displayName`, issues);
-  oneOf(value.status, ["candidate", "active", "retired"], `${path}.status`, issues);
+  oneOf(value.status, ["active", "retired"], `${path}.status`, issues);
   string(value.definition, `${path}.definition`, issues);
   stringArray(value.inclusionCues, `${path}.inclusionCues`, issues);
   if (value.exclusionCues !== undefined) {
@@ -447,22 +448,6 @@ function validateFoundationTag(value: unknown, path: string, issues: ValidationI
     if (!Array.isArray(value.inclusionCues) || value.inclusionCues.length === 0) {
       add(issues, `${path}.inclusionCues`, "An active or retired tag requires an inclusion cue");
     }
-  }
-
-  if (!Array.isArray(value.exemplars)) {
-    add(issues, `${path}.exemplars`, "Expected an array");
-  } else {
-    value.exemplars.forEach((exemplar, index) => {
-      const exemplarPath = `${path}.exemplars[${index}]`;
-      if (!isRecord(exemplar)) {
-        add(issues, exemplarPath, "Expected an object");
-        return;
-      }
-      exactKeys(exemplar, ["kind", "sourceSha256", "annotationId"], exemplarPath, issues);
-      oneOf(exemplar.kind, ["strong", "weak", "counterexample"], `${exemplarPath}.kind`, issues);
-      sha256(exemplar.sourceSha256, `${exemplarPath}.sourceSha256`, issues);
-      uuid(exemplar.annotationId, `${exemplarPath}.annotationId`, issues);
-    });
   }
 }
 
@@ -535,6 +520,7 @@ function validateGoldAnnotation(value: unknown, path: string, issues: Validation
       "range",
       "noteRefs",
       "labels",
+      "exemplarRoles",
       "foundation",
       "annotatorId",
       "createdAt",
@@ -549,6 +535,7 @@ function validateGoldAnnotation(value: unknown, path: string, issues: Validation
   validateRange(value.range, `${path}.range`, issues);
   validateNoteRefs(value.noteRefs, `${path}.noteRefs`, issues, true);
   validateLabels(value.labels, `${path}.labels`, issues, true);
+  validateGoldExemplarRoles(value.exemplarRoles, `${path}.exemplarRoles`, issues);
   foundationRef(value.foundation, `${path}.foundation`, issues);
   nonEmptyString(value.annotatorId, `${path}.annotatorId`, issues);
   timestamp(value.createdAt, `${path}.createdAt`, issues);
@@ -654,12 +641,10 @@ function validateReviewNote(value: unknown, path: string, issues: ValidationIssu
 async function validateTargetWorkflow(
   target: GoldAnnotationV1 | SilverPredictionV1,
   path: string,
-  document: AnnotationDocumentV1,
-  context: AnnotationWorkflowValidationContextV1,
+  noteRefIndex: StableNoteRefIndexV1,
   foundations: readonly Required<FoundationSnapshotV1>[],
   endMs: number,
   issues: ValidationIssue[],
-  requireActiveTags: boolean,
 ): Promise<void> {
   if (target.range.startMs < 0 || target.range.endMs > endMs) {
     add(issues, `${path}.range`, `Expected 0 <= startMs < endMs <= ${endMs}`);
@@ -667,12 +652,7 @@ async function validateTargetWorkflow(
 
   let notes: Awaited<ReturnType<typeof resolveStableNoteRefsV1>> = [];
   try {
-    notes = await resolveStableNoteRefsV1(
-      context.sourceBytes,
-      context.chart,
-      target.noteRefs,
-      document.source.sha256,
-    );
+    notes = resolveStableNoteRefsV1(noteRefIndex, target.noteRefs);
   } catch (error) {
     add(issues, `${path}.noteRefs`, errorMessage(error));
   }
@@ -692,16 +672,20 @@ async function validateTargetWorkflow(
   }
 
   for (const [index, label] of target.labels.entries()) {
-    const tag = snapshot.foundation.tags.find((candidate) => candidate.id === label.tagId);
+    const tag = snapshot.foundation.tags.find((entry) => entry.id === label.tagId);
     if (!tag) {
       add(issues, `${path}.labels[${index}].tagId`, `Foundation does not define ${label.tagId}`);
-    } else if (requireActiveTags && tag.status !== "active") {
+    } else if (tag.status !== "active") {
       add(
         issues,
         `${path}.labels[${index}].tagId`,
-        `Gold labels require an active tag; ${tag.id} is ${tag.status}`,
+        `Labels require an active tag; ${tag.id} is ${tag.status}`,
       );
     }
+  }
+
+  if (isGoldAnnotation(target)) {
+    validateGoldExemplarRolesWorkflow(target, path, snapshot.foundation, issues);
   }
 }
 
@@ -760,9 +744,6 @@ function validateActiveTagCompatibility(
   issues: ValidationIssue[],
 ): void {
   const path = `$.tags.${oldTag.id}`;
-  if (newTag.status !== "active" && newTag.status !== "retired") {
-    add(issues, `${path}.status`, "An active tag may only remain active or become retired");
-  }
   if (
     newTag.displayName !== oldTag.displayName ||
     newTag.definition !== oldTag.definition ||
@@ -778,12 +759,6 @@ function validateActiveTagCompatibility(
     if (oldValues.some((value) => !newValues.includes(value))) {
       add(issues, `${path}.${field}`, `A compatible revision may add but not remove ${field}`);
     }
-  }
-  const exemplarKeys = (tag: FoundationTagV1) =>
-    tag.exemplars.map((entry) => `${entry.kind}:${entry.sourceSha256}:${entry.annotationId}`);
-  const nextExemplars = exemplarKeys(newTag);
-  if (exemplarKeys(oldTag).some((value) => !nextExemplars.includes(value))) {
-    add(issues, `${path}.exemplars`, "A compatible revision may add but not remove exemplars");
   }
 }
 
@@ -831,14 +806,8 @@ function validateNoteRef(value: unknown, path: string, issues: ValidationIssue[]
     add(issues, path, "Expected an object");
     return;
   }
-  exactKeys(
-    value,
-    ["sourceLine", "objectSha256", "column", "kind", "startMs", "endMs"],
-    path,
-    issues,
-  );
+  exactKeys(value, ["sourceLine", "column", "kind", "startMs", "endMs"], path, issues);
   positiveInteger(value.sourceLine, `${path}.sourceLine`, issues);
-  sha256(value.objectSha256, `${path}.objectSha256`, issues);
   nonNegativeInteger(value.column, `${path}.column`, issues);
   oneOf(value.kind, ["normal", "long"], `${path}.kind`, issues);
   finiteNumber(value.startMs, `${path}.startMs`, issues);
@@ -850,6 +819,34 @@ function validateNoteRef(value: unknown, path: string, issues: ValidationIssue[]
   ) {
     add(issues, path, "Stable note timing does not match its kind");
   }
+}
+
+function validateGoldExemplarRoles(value: unknown, path: string, issues: ValidationIssue[]): void {
+  if (!Array.isArray(value)) {
+    add(issues, path, "Expected an array");
+    return;
+  }
+  value.forEach((role, index) => {
+    validateGoldExemplarRole(role, `${path}[${index}]`, issues);
+  });
+  unique(
+    value.flatMap((role) => (isRecord(role) && typeof role.tagId === "string" ? [role.tagId] : [])),
+    path,
+    "exemplar role tag ID",
+    issues,
+  );
+}
+
+function validateGoldExemplarRole(value: unknown, path: string, issues: ValidationIssue[]): void {
+  if (!isRecord(value)) {
+    add(issues, path, "Expected an object");
+    return;
+  }
+  exactKeys(value, ["tagId", "kind"], path, issues);
+  if (typeof value.tagId !== "string" || !isCanonicalTagId(value.tagId)) {
+    add(issues, `${path}.tagId`, "Expected a lowercase kebab-case tag ID");
+  }
+  oneOf(value.kind, ["strong", "weak", "counterexample"], `${path}.kind`, issues);
 }
 
 function validateLabels(
@@ -948,12 +945,46 @@ function isStableNoteRefLike(value: unknown): value is StableNoteRefV1 {
   return (
     isRecord(value) &&
     typeof value.sourceLine === "number" &&
-    typeof value.objectSha256 === "string" &&
     typeof value.column === "number" &&
     (value.kind === "normal" || value.kind === "long") &&
     typeof value.startMs === "number" &&
     typeof value.endMs === "number"
   );
+}
+
+function isGoldAnnotation(
+  target: GoldAnnotationV1 | SilverPredictionV1,
+): target is GoldAnnotationV1 {
+  return "exemplarRoles" in target;
+}
+
+function validateGoldExemplarRolesWorkflow(
+  annotation: GoldAnnotationV1,
+  path: string,
+  foundation: JudgmentFoundationV1,
+  issues: ValidationIssue[],
+): void {
+  const labels = new Set(annotation.labels.map((label) => label.tagId));
+  annotation.exemplarRoles.forEach((role, index) => {
+    const rolePath = `${path}.exemplarRoles[${index}]`;
+    const tag = foundation.tags.find((entry) => entry.id === role.tagId);
+    if (!tag) {
+      add(issues, `${rolePath}.tagId`, `Foundation does not define ${role.tagId}`);
+    } else if (tag.status !== "active") {
+      add(
+        issues,
+        `${rolePath}.tagId`,
+        `Exemplar roles require an active tag; ${tag.id} is ${tag.status}`,
+      );
+    }
+
+    if (role.kind === "counterexample" && labels.has(role.tagId)) {
+      add(issues, rolePath, "Counterexample role cannot target a label on the same gold");
+    }
+    if (role.kind !== "counterexample" && !labels.has(role.tagId)) {
+      add(issues, rolePath, "Strong and weak roles require the same tag label");
+    }
+  });
 }
 
 function collectIds(value: unknown): unknown[] {

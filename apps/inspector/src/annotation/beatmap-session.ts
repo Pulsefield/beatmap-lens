@@ -10,17 +10,20 @@ import {
   type AnnotationDocumentV1,
   type FoundationRefV1,
   type GoldAnnotationV1,
+  type GoldExemplarRoleV1,
   type JudgmentFoundationV1,
   type SourceIdentityV1,
   type StableNoteRefV1,
 } from "./contracts";
 import type { DatasetDirectory, StoredAnnotation } from "./dataset-directory";
+import { assertActiveFoundationTagV1 } from "./foundation";
 import { chartEndMs } from "./range";
 import type { AnnotationDraft, DraftBaseVersion, SessionStore } from "./session-store";
 import { inspectOsuSourceV1 } from "./source-identity";
 import {
+  createStableNoteRefIndexV1,
   createStableNoteRefsV1,
-  resolveStableNoteRefsV1,
+  type StableNoteRefIndexV1,
   stableNoteRefKey,
 } from "./stable-note-ref";
 import { assertAnnotationWorkflowV1, assertSourceIdentityMatches } from "./validation";
@@ -34,6 +37,7 @@ export interface BeatmapSession {
   readonly source: SourceIdentityV1;
   readonly chartEndMs: number;
   readonly noteRefs: ReadonlyMap<string, StableNoteRefV1>;
+  readonly noteRefIndex: StableNoteRefIndexV1;
   readonly foundation: JudgmentFoundationV1;
   readonly document: AnnotationDocumentV1;
   readonly base: DraftBaseVersion | null;
@@ -46,6 +50,7 @@ export interface CreateGoldAnnotationInput {
   readonly range: GoldAnnotationV1["range"];
   readonly noteIds: readonly string[];
   readonly labels: GoldAnnotationV1["labels"];
+  readonly exemplarRoles?: readonly GoldExemplarRoleV1[];
   readonly judgmentNote?: string;
   readonly annotatorId: string;
   readonly now?: () => string;
@@ -64,7 +69,8 @@ export async function loadBeatmapSession(
   const file = await readCatalogTask(corpus, task);
   const sourceBytes = new Uint8Array(await file.arrayBuffer());
   const inspected = await inspectOsuSourceV1(sourceBytes);
-  const refs = await createStableNoteRefsV1(sourceBytes, inspected.chart);
+  const refs = createStableNoteRefsV1(inspected.chart);
+  const noteRefIndex = createStableNoteRefIndexV1(inspected.chart);
   const noteRefs = new Map(
     inspected.chart.notes.map((note, index) => [note.id, refs[index] as StableNoteRefV1]),
   );
@@ -76,7 +82,14 @@ export async function loadBeatmapSession(
 
   if (stored) {
     assertSourceIdentityMatches(stored.document.source, inspected.source);
-    await validateStoredDocument(stored, sourceBytes, inspected.chart, directory, foundation);
+    await validateStoredDocument(
+      stored,
+      sourceBytes,
+      inspected,
+      noteRefIndex,
+      directory,
+      foundation,
+    );
   }
 
   const restoredDraft = await sessions.getDraft(
@@ -93,6 +106,7 @@ export async function loadBeatmapSession(
     source: inspected.source,
     chartEndMs: chartEndMs(inspected.chart),
     noteRefs,
+    noteRefIndex,
     foundation,
     document,
     base: stored?.version ?? null,
@@ -113,13 +127,26 @@ export function createGoldAnnotation(
     if (!ref) throw new Error(`Unknown runtime note ${id}`);
     return ref;
   });
+  const labels = [...input.labels];
+  const exemplarRoles = cleanExemplarRoles(
+    input.exemplarRoles ?? input.existing?.exemplarRoles ?? [],
+    labels,
+  );
+  const useCurrentFoundation =
+    !input.existing ||
+    !sameLabels(input.existing.labels, labels) ||
+    hasAddedOrChangedRole(input.existing.exemplarRoles, exemplarRoles);
+  if (useCurrentFoundation) {
+    assertCurrentFoundationSupports(session.foundation, labels, exemplarRoles);
+  }
 
   return {
     id: input.existing?.id ?? input.annotationId ?? createId(),
     range: input.range,
     noteRefs: dedupeRefs(noteRefs),
-    labels: [...input.labels],
-    foundation,
+    labels,
+    exemplarRoles,
+    foundation: useCurrentFoundation ? foundation : input.existing.foundation,
     annotatorId: input.annotatorId,
     createdAt: input.existing?.createdAt ?? updatedAt,
     updatedAt,
@@ -176,7 +203,8 @@ export function notesForIds(
 async function validateStoredDocument(
   stored: StoredAnnotation,
   sourceBytes: Uint8Array,
-  chart: ManiaChart,
+  inspected: Pick<BeatmapSession, "chart" | "source">,
+  noteRefIndex: StableNoteRefIndexV1,
   directory: DatasetDirectory,
   currentFoundation: JudgmentFoundationV1,
 ): Promise<void> {
@@ -192,15 +220,11 @@ async function validateStoredDocument(
   );
   await assertAnnotationWorkflowV1(stored.document, {
     sourceBytes,
-    chart,
+    chart: inspected.chart,
     foundations,
+    inspected,
+    noteRefIndex,
   });
-  await resolveStableNoteRefsV1(
-    sourceBytes,
-    chart,
-    stored.document.annotations.flatMap((annotation) => annotation.noteRefs),
-    stored.document.source.sha256,
-  );
 }
 
 function uniqueFoundationRefs(
@@ -220,4 +244,64 @@ function uniqueFoundationRefs(
 
 function dedupeRefs(refs: readonly StableNoteRefV1[]): readonly StableNoteRefV1[] {
   return [...new Map(refs.map((ref) => [stableNoteRefKey(ref), ref])).values()];
+}
+
+function cleanExemplarRoles(
+  roles: readonly GoldExemplarRoleV1[],
+  labels: GoldAnnotationV1["labels"],
+): readonly GoldExemplarRoleV1[] {
+  const labelIds = new Set(labels.map((label) => label.tagId));
+  const byTag = new Map(roles.map((role) => [role.tagId, role]));
+  return [...byTag.values()]
+    .filter((role) =>
+      role.kind === "counterexample" ? !labelIds.has(role.tagId) : labelIds.has(role.tagId),
+    )
+    .sort(compareRoles);
+}
+
+function hasAddedOrChangedRole(
+  existing: readonly GoldExemplarRoleV1[],
+  next: readonly GoldExemplarRoleV1[],
+): boolean {
+  const existingKinds = new Map(existing.map((role) => [role.tagId, role.kind]));
+  return next.some((role) => existingKinds.get(role.tagId) !== role.kind);
+}
+
+function sameLabels(left: GoldAnnotationV1["labels"], right: GoldAnnotationV1["labels"]): boolean {
+  const sortedLeft = sortedLabels(left);
+  const sortedRight = sortedLabels(right);
+  return (
+    sortedLeft.length === sortedRight.length &&
+    sortedLeft.every((label, index) => {
+      const other = sortedRight[index];
+      return other?.tagId === label.tagId && other.salience === label.salience;
+    })
+  );
+}
+
+function sortedLabels(labels: GoldAnnotationV1["labels"]): GoldAnnotationV1["labels"] {
+  return [...labels].sort((left, right) =>
+    left.tagId < right.tagId ? -1 : left.tagId > right.tagId ? 1 : 0,
+  );
+}
+
+function assertCurrentFoundationSupports(
+  foundation: JudgmentFoundationV1,
+  labels: GoldAnnotationV1["labels"],
+  roles: readonly GoldExemplarRoleV1[],
+): void {
+  for (const label of labels) assertActiveFoundationTagV1(foundation, label.tagId);
+  for (const role of roles) assertActiveFoundationTagV1(foundation, role.tagId);
+}
+
+function compareRoles(left: GoldExemplarRoleV1, right: GoldExemplarRoleV1): number {
+  return left.tagId < right.tagId
+    ? -1
+    : left.tagId > right.tagId
+      ? 1
+      : left.kind < right.kind
+        ? -1
+        : left.kind > right.kind
+          ? 1
+          : 0;
 }

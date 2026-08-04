@@ -25,6 +25,20 @@ export interface BufferedSceneOptions {
   readonly padding?: RenderOptions["padding"];
 }
 
+export interface ViewportSourceTimeOptions {
+  readonly playheadMs: number;
+  readonly viewportY: number;
+  readonly viewportHeight: number;
+  readonly pixelsPerSecond: number;
+  readonly chartEndMs: number;
+  readonly judgmentLineRatio?: number;
+}
+
+export interface ViewportSourceRangeOptions extends Omit<ViewportSourceTimeOptions, "viewportY"> {
+  readonly anchorY: number;
+  readonly focusY: number;
+}
+
 export interface KeyedRenderNote {
   readonly key: string;
   readonly glyph: RenderNoteGlyph;
@@ -71,6 +85,24 @@ interface SceneBuffer {
   readonly keyedLanes: readonly KeyedRenderLane[];
   readonly range: TimeRangeV1;
   readonly refreshThreshold: BufferRefreshThreshold;
+}
+
+export function viewportYToSourceTime(options: ViewportSourceTimeOptions): number {
+  const lineRatio = options.judgmentLineRatio ?? judgmentLineRatio;
+  const judgmentY = options.viewportHeight * lineRatio;
+  const sourceTimeMs =
+    options.playheadMs + ((judgmentY - options.viewportY) / options.pixelsPerSecond) * 1_000;
+  return clamp(sourceTimeMs, 0, options.chartEndMs);
+}
+
+export function viewportYRangeToSourceRange(
+  options: ViewportSourceRangeOptions,
+): TimeRangeV1 | undefined {
+  const anchorMs = viewportYToSourceTime({ ...options, viewportY: options.anchorY });
+  const focusMs = viewportYToSourceTime({ ...options, viewportY: options.focusY });
+  const startMs = Math.min(anchorMs, focusMs);
+  const endMs = Math.max(anchorMs, focusMs);
+  return startMs < endMs ? { startMs, endMs } : undefined;
 }
 
 /**
@@ -256,4 +288,8 @@ function validateVisualSpeed(pixelsPerSecond: number): void {
 
 function round3(value: number): number {
   return Math.round(value * 1_000) / 1_000;
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(Math.max(value, minimum), maximum);
 }

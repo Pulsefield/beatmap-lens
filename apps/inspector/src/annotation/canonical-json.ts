@@ -1,7 +1,7 @@
 import type {
   AnnotationDocumentV1,
-  FoundationExemplarV1,
   GoldAnnotationV1,
+  GoldExemplarRoleV1,
   JudgmentFoundationV1,
   ReviewNoteV1,
   SilverPredictionV1,
@@ -59,12 +59,11 @@ export function annotationDocumentBytesV1(document: AnnotationDocumentV1): Uint8
 
 export function compareStableNoteRefs(left: StableNoteRefV1, right: StableNoteRefV1): number {
   return (
-    left.startMs - right.startMs ||
-    left.endMs - right.endMs ||
-    left.column - right.column ||
     left.sourceLine - right.sourceLine ||
+    left.column - right.column ||
     compareText(left.kind, right.kind) ||
-    compareText(left.objectSha256, right.objectSha256)
+    left.startMs - right.startMs ||
+    left.endMs - right.endMs
   );
 }
 
@@ -78,7 +77,6 @@ function sortFoundation(foundation: JudgmentFoundationV1): JudgmentFoundationV1 
         inclusionCues: sortedStrings(tag.inclusionCues),
         ...(tag.exclusionCues ? { exclusionCues: sortedStrings(tag.exclusionCues) } : {}),
         aliases: sortedStrings(tag.aliases),
-        exemplars: [...tag.exemplars].sort(compareExemplars),
       })),
   };
 }
@@ -101,6 +99,7 @@ function sortGoldAnnotation(annotation: GoldAnnotationV1): GoldAnnotationV1 {
     ...annotation,
     noteRefs: [...annotation.noteRefs].sort(compareStableNoteRefs),
     labels: [...annotation.labels].sort((left, right) => compareText(left.tagId, right.tagId)),
+    exemplarRoles: [...annotation.exemplarRoles].sort(compareGoldExemplarRoles),
     derivedFromPredictionIds: sortedStrings(annotation.derivedFromPredictionIds),
   };
 }
@@ -141,12 +140,8 @@ function compareReviewNotes(left: ReviewNoteV1, right: ReviewNoteV1): number {
   );
 }
 
-function compareExemplars(left: FoundationExemplarV1, right: FoundationExemplarV1): number {
-  return (
-    compareText(left.kind, right.kind) ||
-    compareText(left.sourceSha256, right.sourceSha256) ||
-    compareText(left.annotationId, right.annotationId)
-  );
+function compareGoldExemplarRoles(left: GoldExemplarRoleV1, right: GoldExemplarRoleV1): number {
+  return compareText(left.tagId, right.tagId) || compareText(left.kind, right.kind);
 }
 
 function sortedStrings(values: readonly string[]): string[] {

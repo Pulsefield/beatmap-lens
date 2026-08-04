@@ -1,4 +1,4 @@
-import type { StableNoteRefV1, TimeRangeV1 } from "./contracts";
+import type { GoldExemplarRoleV1, StableNoteRefV1, TimeRangeV1 } from "./contracts";
 
 export interface DraftLabel {
   salience: 1 | 2;
@@ -16,6 +16,7 @@ export interface AnnotationDraft {
   datasetId: string;
   editorText: string;
   editingAnnotationId?: string;
+  exemplarRoles: readonly GoldExemplarRoleV1[];
   labels: readonly DraftLabel[];
   noteRefs: readonly StableNoteRefV1[];
   playheadMs: number;
@@ -31,6 +32,10 @@ export interface AnnotationDraft {
   visualSpeed: number;
 }
 
+type StoredAnnotationDraft = Omit<AnnotationDraft, "exemplarRoles"> & {
+  readonly exemplarRoles?: readonly GoldExemplarRoleV1[];
+};
+
 export interface SessionPreferences {
   annotatorId: string;
   musicEnabled: boolean;
@@ -44,6 +49,7 @@ export interface SessionStore {
   getDirectoryHandle<T = unknown>(kind: DirectoryHandleKind): Promise<T | undefined>;
   getDraft(datasetId: string, sourceSha256: string): Promise<AnnotationDraft | undefined>;
   getPreferences(): Promise<SessionPreferences | undefined>;
+  listDrafts(datasetId: string): Promise<readonly AnnotationDraft[]>;
   putDraft(draft: AnnotationDraft): Promise<void>;
   setDirectoryHandle(kind: DirectoryHandleKind, handle: unknown): Promise<void>;
   setPreferences(preferences: SessionPreferences): Promise<void>;
@@ -70,8 +76,15 @@ export class MemorySessionStore implements SessionStore {
     return clone(this.#preferences);
   }
 
+  async listDrafts(datasetId: string): Promise<readonly AnnotationDraft[]> {
+    return [...this.#drafts.values()]
+      .filter((draft) => draft.datasetId === datasetId)
+      .sort(compareDrafts)
+      .map(clone);
+  }
+
   async putDraft(draft: AnnotationDraft): Promise<void> {
-    this.#drafts.set(draftKey(draft.datasetId, draft.sourceSha256), clone(draft));
+    this.#drafts.set(draftKey(draft.datasetId, draft.sourceSha256), clone(normalizeDraft(draft)));
   }
 
   async setDirectoryHandle(kind: DirectoryHandleKind, handle: unknown): Promise<void> {
@@ -103,9 +116,11 @@ export class IndexedDbSessionStore implements SessionStore {
   }
 
   async getDraft(datasetId: string, sourceSha256: string): Promise<AnnotationDraft | undefined> {
-    return (await this.#request("drafts", "readonly", (store) =>
-      store.get(draftKey(datasetId, sourceSha256)),
-    )) as AnnotationDraft | undefined;
+    return normalizeOptionalDraft(
+      (await this.#request("drafts", "readonly", (store) =>
+        store.get(draftKey(datasetId, sourceSha256)),
+      )) as StoredAnnotationDraft | undefined,
+    );
   }
 
   async getPreferences(): Promise<SessionPreferences | undefined> {
@@ -114,9 +129,20 @@ export class IndexedDbSessionStore implements SessionStore {
       | undefined;
   }
 
+  async listDrafts(datasetId: string): Promise<readonly AnnotationDraft[]> {
+    const drafts = (await this.#request("drafts", "readonly", (store) =>
+      store.getAll(),
+    )) as StoredAnnotationDraft[];
+    return drafts
+      .filter((draft) => draft.datasetId === datasetId)
+      .sort(compareDrafts)
+      .map(normalizeDraft)
+      .map(clone);
+  }
+
   async putDraft(draft: AnnotationDraft): Promise<void> {
     await this.#request("drafts", "readwrite", (store) =>
-      store.put(draft, draftKey(draft.datasetId, draft.sourceSha256)),
+      store.put(normalizeDraft(draft), draftKey(draft.datasetId, draft.sourceSha256)),
     );
   }
 
@@ -168,6 +194,41 @@ function openDatabase(indexedDb: IDBFactory, name: string): Promise<IDBDatabase>
 
 function draftKey(datasetId: string, sourceSha256: string): string {
   return `${datasetId}:${sourceSha256}`;
+}
+
+export function hasMeaningfulDraft(draft: AnnotationDraft): boolean {
+  if (draft.annotationEditorDirty !== undefined) {
+    return draft.annotationEditorDirty || Boolean(draft.reviewNoteText?.trim());
+  }
+  return (
+    draft.range !== null ||
+    hasRangeEditorText(draft) ||
+    draft.noteRefs.length > 0 ||
+    draft.labels.length > 0 ||
+    (draft.exemplarRoles?.length ?? 0) > 0 ||
+    draft.editorText.trim().length > 0 ||
+    draft.editingAnnotationId !== undefined ||
+    Boolean(draft.reviewNoteText?.trim()) ||
+    draft.undoState.length > 0
+  );
+}
+
+function hasRangeEditorText(draft: AnnotationDraft): boolean {
+  return Boolean(draft.rangeEditor?.start.trim() || draft.rangeEditor?.end.trim());
+}
+
+function compareDrafts(left: StoredAnnotationDraft, right: StoredAnnotationDraft): number {
+  return left.sourceSha256.localeCompare(right.sourceSha256);
+}
+
+function normalizeDraft(draft: StoredAnnotationDraft): AnnotationDraft {
+  return { ...draft, exemplarRoles: draft.exemplarRoles ?? [] };
+}
+
+function normalizeOptionalDraft(
+  draft: StoredAnnotationDraft | undefined,
+): AnnotationDraft | undefined {
+  return draft === undefined ? undefined : normalizeDraft(draft);
 }
 
 function clone<T>(value: T): T {

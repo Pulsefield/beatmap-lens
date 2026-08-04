@@ -17,7 +17,12 @@ import {
   type FoundationRefV1,
   type JudgmentFoundationV1,
 } from "./contracts";
-import type { AnnotationDraft, DraftBaseVersion, SessionStore } from "./session-store";
+import {
+  type AnnotationDraft,
+  type DraftBaseVersion,
+  hasMeaningfulDraft,
+  type SessionStore,
+} from "./session-store";
 import {
   type AnnotationWorkflowValidationContextV1,
   assertAnnotationDocumentV1,
@@ -159,6 +164,7 @@ export interface DatasetDirectory {
 }
 
 export class FileSystemDatasetDirectory implements DatasetDirectory {
+  readonly #foundationReads = new Map<string, Promise<JudgmentFoundationV1>>();
   #manifest: DatasetManifestV1;
   readonly #now: () => string;
   readonly mode = "read-write-v1";
@@ -195,22 +201,8 @@ export class FileSystemDatasetDirectory implements DatasetDirectory {
   }
 
   async readFoundation(reference: FoundationRefV1): Promise<JudgmentFoundationV1> {
-    const directory = await this.root.getDirectoryHandle("foundations");
-    const file = await directory.getFileHandle(foundationFilename(reference.sha256));
-    const bytes = await readBytes(file);
-    const digest = await sha256Hex(bytes);
-    if (digest !== reference.sha256) {
-      throw new TypeError("Foundation snapshot digest does not match its reference.");
-    }
-
-    const source = new TextDecoder().decode(bytes);
-    const value: unknown = JSON.parse(source);
-    assertJudgmentFoundationV1(value);
-    if (
-      value.foundationId !== reference.foundationId ||
-      value.revision !== reference.revision ||
-      serializeFoundationV1(value) !== source
-    ) {
+    const value = await this.#readFoundationSnapshot(reference.sha256);
+    if (value.foundationId !== reference.foundationId || value.revision !== reference.revision) {
       throw new TypeError("Foundation snapshot does not match its pinned identity.");
     }
     return value;
@@ -341,27 +333,77 @@ export class FileSystemDatasetDirectory implements DatasetDirectory {
       }
       const value: unknown = JSON.parse(new TextDecoder().decode(readBack));
       assertJudgmentFoundationV1(value);
+      this.#foundationReads.set(sha256, Promise.resolve(value));
       return reference;
     } catch (error) {
       throw new DatasetWriteError(`Could not save and verify ${filename}.`, { cause: error });
     }
   }
 
+  #readFoundationSnapshot(sha256: string): Promise<JudgmentFoundationV1> {
+    const existing = this.#foundationReads.get(sha256);
+    if (existing) return existing;
+
+    const pending = this.#loadFoundationSnapshot(sha256);
+    this.#foundationReads.set(sha256, pending);
+    void pending.catch(() => {
+      if (this.#foundationReads.get(sha256) === pending) {
+        this.#foundationReads.delete(sha256);
+      }
+    });
+    return pending;
+  }
+
+  async #loadFoundationSnapshot(sha256: string): Promise<JudgmentFoundationV1> {
+    const directory = await this.root.getDirectoryHandle("foundations");
+    const file = await directory.getFileHandle(foundationFilename(sha256));
+    const bytes = await readBytes(file);
+    if ((await sha256Hex(bytes)) !== sha256) {
+      throw new TypeError("Foundation snapshot digest does not match its reference.");
+    }
+
+    const source = new TextDecoder().decode(bytes);
+    const value: unknown = JSON.parse(source);
+    assertJudgmentFoundationV1(value);
+    if (serializeFoundationV1(value) !== source) {
+      throw new TypeError("Foundation snapshot does not match its pinned identity.");
+    }
+    return value;
+  }
+
   async #foundationSnapshots(
     document: AnnotationDocumentV1,
+    validateTargets = false,
   ): Promise<AnnotationWorkflowValidationContextV1["foundations"]> {
     const foundations = new Map<string, JudgmentFoundationV1>();
     for (const annotation of document.annotations) {
       const foundation = await readPinnedFoundation(this, foundations, annotation.foundation);
-      const tags = new Map(foundation.tags.map((tag) => [tag.id, tag.status]));
-      for (const label of annotation.labels) {
-        if (tags.get(label.tagId) !== "active") {
-          throw new TypeError(`Gold label ${label.tagId} is not active in its Foundation.`);
+      if (validateTargets) {
+        const tags = new Map(foundation.tags.map((tag) => [tag.id, tag.status]));
+        for (const label of annotation.labels) {
+          if (tags.get(label.tagId) !== "active") {
+            throw new TypeError(`Gold label ${label.tagId} is not active in its Foundation.`);
+          }
+        }
+        for (const role of annotation.exemplarRoles) {
+          if (tags.get(role.tagId) !== "active") {
+            throw new TypeError(
+              `Gold exemplar role ${role.tagId} is not active in its Foundation.`,
+            );
+          }
         }
       }
     }
     for (const prediction of document.predictions) {
-      await readPinnedFoundation(this, foundations, prediction.foundation);
+      const foundation = await readPinnedFoundation(this, foundations, prediction.foundation);
+      if (validateTargets) {
+        const tags = new Map(foundation.tags.map((tag) => [tag.id, tag.status]));
+        for (const label of prediction.labels) {
+          if (tags.get(label.tagId) !== "active") {
+            throw new TypeError(`Prediction label ${label.tagId} is not active in its Foundation.`);
+          }
+        }
+      }
     }
     for (const note of document.reviewNotes) {
       if (note.resultingFoundation) {
@@ -372,7 +414,7 @@ export class FileSystemDatasetDirectory implements DatasetDirectory {
   }
 
   async #verifyFoundationPins(document: AnnotationDocumentV1): Promise<void> {
-    await this.#foundationSnapshots(document);
+    await this.#foundationSnapshots(document, true);
   }
 
   async #assertFoundationCompatibleWith(
@@ -502,7 +544,7 @@ export async function saveDraftAnnotation(
 
   const result = await directory.saveAnnotation(document, draft.base, {
     ...context,
-    hasUncommittedDraft: context.hasUncommittedDraft === true || hasMeaningfulEditorState(draft),
+    hasUncommittedDraft: context.hasUncommittedDraft === true || hasMeaningfulDraft(draft),
   });
   if (result.status === "saved") {
     await sessions.deleteDraft(directory.manifest.datasetId, document.source.sha256);
@@ -675,20 +717,6 @@ async function readPinnedFoundation(
   const foundation = await directory.readFoundation(reference);
   cache.set(reference.sha256, foundation);
   return foundation;
-}
-
-function hasMeaningfulEditorState(draft: AnnotationDraft): boolean {
-  if (draft.annotationEditorDirty !== undefined) {
-    return draft.annotationEditorDirty || Boolean(draft.reviewNoteText?.trim());
-  }
-  return (
-    draft.range !== null ||
-    draft.noteRefs.length > 0 ||
-    draft.labels.length > 0 ||
-    draft.editorText.trim().length > 0 ||
-    draft.editingAnnotationId !== undefined ||
-    draft.undoState.length > 0
-  );
 }
 
 function sameVersion(left: DraftBaseVersion | null, right: DraftBaseVersion | null): boolean {

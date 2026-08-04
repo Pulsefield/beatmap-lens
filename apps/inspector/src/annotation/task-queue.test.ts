@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { sha256Hex } from "./canonical-json";
 import type { CatalogSource } from "./catalog";
-import { ANNOTATION_CONTRACT } from "./contracts";
+import { ANNOTATION_CONTRACT, FOUNDATION_CONTRACT, type JudgmentFoundationV1 } from "./contracts";
 import { createDatasetDirectory } from "./dataset-directory";
-import { MemorySessionStore } from "./session-store";
+import { FOUNDATION_POLICIES_V1 } from "./foundation";
+import { type AnnotationDraft, MemorySessionStore } from "./session-store";
 import { loadTaskQueue } from "./task-queue";
-import { FakeDirectoryHandle, fixtureFoundation } from "./test-helpers";
+import { FakeDirectoryHandle } from "./test-helpers";
 
 const source = `osu file format v14
 
@@ -31,29 +32,33 @@ describe("catalog task queue", () => {
     const directory = await createDatasetDirectory(datasetRoot, {
       catalogSources: [{ csvSha256: "d".repeat(64), url: "https://example.test/catalog.csv" }],
       datasetId: "00000000-0000-4000-8000-000000000010",
-      foundation: fixtureFoundation(),
+      foundation: queueFoundation(),
       name: "Queue fixture",
       now: () => "2026-08-04T00:00:00.000Z",
     });
     const corpus = new FakeDirectoryHandle("corpus");
     (await corpus.getFileHandle("fixture.osu", { create: true })).setText(source);
     const sourceSha256 = await sha256Hex(source);
-    const sessions = new MemorySessionStore();
-    await sessions.putDraft({
-      base: { revision: 4, sha256: "e".repeat(64) },
-      datasetId: directory.manifest.datasetId,
-      editorText: "local work",
-      labels: [],
-      noteRefs: [],
-      playheadMs: 0,
-      range: null,
-      sourceSha256,
-      undoState: [],
-      visualSpeed: 240,
-    });
+    const sessions = new CountingSessionStore();
+    await sessions.putDraft(
+      legacyDraft({
+        base: { revision: 4, sha256: "e".repeat(64) },
+        datasetId: directory.manifest.datasetId,
+        editorText: "local work",
+        labels: [],
+        noteRefs: [],
+        playheadMs: 0,
+        range: null,
+        sourceSha256,
+        undoState: [],
+        visualSpeed: 240,
+      }),
+    );
 
     const queue = await loadTaskQueue(catalog(), corpus, directory, sessions);
 
+    expect(sessions.listDraftsCalls).toBe(1);
+    expect(sessions.getDraftCalls).toBe(0);
     expect(queue).toMatchObject([
       {
         displayName: "fixture.osu",
@@ -68,7 +73,7 @@ describe("catalog task queue", () => {
     const directory = await createDatasetDirectory(datasetRoot, {
       catalogSources: [{ csvSha256: "d".repeat(64), url: "https://example.test/catalog.csv" }],
       datasetId: "00000000-0000-4000-8000-000000000010",
-      foundation: fixtureFoundation(),
+      foundation: queueFoundation(),
       name: "Queue fixture",
       now: () => "2026-08-04T00:00:00.000Z",
     });
@@ -88,8 +93,22 @@ describe("catalog task queue", () => {
         version: 2,
       }),
     );
+    const sessions = new MemorySessionStore();
+    await sessions.putDraft({
+      base: { revision: 1, sha256: "e".repeat(64) },
+      datasetId: directory.manifest.datasetId,
+      editorText: "old local work",
+      exemplarRoles: [],
+      labels: [],
+      noteRefs: [],
+      playheadMs: 0,
+      range: null,
+      sourceSha256,
+      undoState: [],
+      visualSpeed: 240,
+    });
 
-    const queue = await loadTaskQueue(catalog(), corpus, directory, new MemorySessionStore());
+    const queue = await loadTaskQueue(catalog(), corpus, directory, sessions);
 
     expect(queue).toMatchObject([
       {
@@ -108,4 +127,59 @@ function catalog(): CatalogSource {
     source: "https://example.test/catalog.csv",
     tasks: [{ categories: ["stream"], pathSegments: ["fixture.osu"] }],
   };
+}
+
+function legacyDraft(draft: Omit<AnnotationDraft, "exemplarRoles">): AnnotationDraft {
+  return draft as AnnotationDraft;
+}
+
+function queueFoundation(): JudgmentFoundationV1 {
+  return {
+    contract: FOUNDATION_CONTRACT,
+    createdAt: "2026-08-04T00:00:00.000Z",
+    creatorId: "expert-a",
+    foundationId: "00000000-0000-4000-8000-000000000001",
+    language: "zh-CN",
+    policies: FOUNDATION_POLICIES_V1,
+    revision: 1,
+    tags: [
+      {
+        aliases: [],
+        definition: "A stream section.",
+        displayName: "Stream",
+        id: "stream",
+        inclusionCues: ["Alternating single-note motion."],
+        status: "active",
+      },
+      {
+        aliases: [],
+        definition: "A jack section.",
+        displayName: "Jack",
+        id: "jack",
+        inclusionCues: ["Repeated notes in one column."],
+        status: "active",
+      },
+    ],
+    version: 1,
+  };
+}
+
+class CountingSessionStore extends MemorySessionStore {
+  getDraftCalls = 0;
+  listDraftsCalls = 0;
+
+  override async getDraft(
+    datasetId: string,
+    sourceSha256: string,
+  ): Promise<Awaited<ReturnType<MemorySessionStore["getDraft"]>>> {
+    this.getDraftCalls += 1;
+    return super.getDraft(datasetId, sourceSha256);
+  }
+
+  override async listDrafts(
+    datasetId: string,
+  ): Promise<Awaited<ReturnType<MemorySessionStore["listDrafts"]>>> {
+    this.listDraftsCalls += 1;
+    return super.listDrafts(datasetId);
+  }
 }

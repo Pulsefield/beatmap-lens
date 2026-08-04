@@ -5,15 +5,14 @@ import {
   serializeAnnotationDocumentV1,
   serializeFoundationV1,
 } from "./canonical-json";
-import type {
-  AnnotationDocumentV1,
-  FoundationTagV1,
-  GoldAnnotationV1,
-  JudgmentFoundationV1,
-} from "./contracts";
-import { activateFoundationTagV1, bootstrapFoundationV1, foundationRefV1 } from "./foundation";
+import type { AnnotationDocumentV1, FoundationTagV1, GoldAnnotationV1 } from "./contracts";
+import { bootstrapFoundationV1, createActiveFoundationTagV1, foundationRefV1 } from "./foundation";
 import { assertSourceBytesMatch, inspectOsuSourceV1 } from "./source-identity";
-import { createStableNoteRefV1, resolveStableNoteRefsV1 } from "./stable-note-ref";
+import {
+  createStableNoteRefIndexV1,
+  createStableNoteRefV1,
+  resolveStableNoteRefsV1,
+} from "./stable-note-ref";
 import {
   assertAnnotationDocumentV1,
   validateAnnotationDocumentV1,
@@ -30,10 +29,17 @@ const annotationId = "10000000-0000-4000-8000-000000000003";
 describe("annotation v1 contracts", () => {
   it("round-trips deterministic gold JSON with independent multi-label salience", async () => {
     const fixture = await createFixture();
-    const document = createDocument(fixture, [
-      { tagId: "streams", salience: 2 },
-      { tagId: "jacks", salience: 1 },
-    ]);
+    const document = createDocument(
+      fixture,
+      [
+        { tagId: "streams", salience: 2 },
+        { tagId: "jacks", salience: 1 },
+      ],
+      [
+        { kind: "weak", tagId: "jacks" },
+        { kind: "strong", tagId: "streams" },
+      ],
+    );
     const annotation = document.annotations[0];
     if (!annotation) throw new Error("Expected the fixture gold annotation");
     const reversed: AnnotationDocumentV1 = {
@@ -42,6 +48,10 @@ describe("annotation v1 contracts", () => {
       annotations: [
         {
           ...annotation,
+          exemplarRoles: [
+            { kind: "strong", tagId: "streams" },
+            { kind: "weak", tagId: "jacks" },
+          ],
           labels: [...annotation.labels].reverse(),
         },
       ],
@@ -59,6 +69,10 @@ describe("annotation v1 contracts", () => {
       { salience: 1, tagId: "jacks" },
       { salience: 2, tagId: "streams" },
     ]);
+    expect(parsed.annotations[0]?.exemplarRoles).toEqual([
+      { kind: "weak", tagId: "jacks" },
+      { kind: "strong", tagId: "streams" },
+    ]);
 
     const workflow = await validateAnnotationWorkflowV1(parsed, {
       sourceBytes: fixture.bytes,
@@ -68,12 +82,12 @@ describe("annotation v1 contracts", () => {
     expect(workflow).toEqual({ ok: true, value: parsed });
   });
 
-  it("accepts active gold tags and rejects candidate or retired tags", async () => {
+  it("accepts active gold tags and rejects retired or missing tags", async () => {
     const fixture = await createFixture();
 
     for (const [tagId, accepted] of [
       ["streams", true],
-      ["candidate-pattern", false],
+      ["missing-pattern", false],
       ["retired-pattern", false],
     ] as const) {
       const document = createDocument(fixture, [{ tagId, salience: 2 }]);
@@ -89,18 +103,19 @@ describe("annotation v1 contracts", () => {
     }
   });
 
-  it("pins exact immutable Foundation bytes and validates compatible activation", async () => {
-    const candidate = bootstrapFoundationV1({
+  it("pins exact immutable Foundation bytes and validates compatible active tag creation", async () => {
+    const foundation = bootstrapFoundationV1({
       foundationId,
       creatorId: "expert-a",
       createdAt: now,
       catalogTags: ["Streams"],
     });
-    const parentSha256 = await hashFoundationV1(candidate);
-    const active = await activateFoundationTagV1(
-      candidate,
+    const parentSha256 = await hashFoundationV1(foundation);
+    const active = await createActiveFoundationTagV1(
+      foundation,
       {
         tagId: "streams",
+        displayName: "Streams",
         definition: "连续交替的密集音符序列",
         inclusionCues: ["持续的交替击键"],
       },
@@ -111,9 +126,9 @@ describe("annotation v1 contracts", () => {
     );
 
     expect(active.parentSha256).toBe(parentSha256);
-    expect(active.revision).toBe(candidate.revision + 1);
+    expect(active.revision).toBe(foundation.revision + 1);
     expect(active.tags[0]?.status).toBe("active");
-    expect(validateCompatibleFoundationRevisionV1(candidate, active, parentSha256)).toEqual([]);
+    expect(validateCompatibleFoundationRevisionV1(foundation, active, parentSha256)).toEqual([]);
     expect(await foundationRefV1(active)).toEqual({
       foundationId,
       revision: 2,
@@ -124,41 +139,32 @@ describe("annotation v1 contracts", () => {
     );
   });
 
-  it("preserves curated candidate cues and clarification during activation", async () => {
-    const candidate = bootstrapFoundationV1({
+  it("creates active tags directly with their semantic fields", async () => {
+    const foundation = bootstrapFoundationV1({
       foundationId,
       creatorId: "expert-a",
       createdAt: now,
       catalogTags: ["Streams"],
     });
-    const candidateTag = candidate.tags[0];
-    if (!candidateTag) throw new Error("Expected the candidate tag");
-    const curated: JudgmentFoundationV1 = {
-      ...candidate,
-      tags: [
-        {
-          ...candidateTag,
-          inclusionCues: ["已有线索"],
-          exclusionCues: ["排除线索"],
-          aliases: ["flow"],
-          salienceClarification: "持续出现时为强",
-        },
-      ],
-    };
-    const active = await activateFoundationTagV1(
-      curated,
+    expect(foundation.tags).toEqual([]);
+
+    const active = await createActiveFoundationTagV1(
+      foundation,
       {
         tagId: "streams",
+        displayName: "Streams",
         definition: "连续音流",
-        inclusionCues: ["新增线索"],
-        exclusionCues: ["新增排除"],
+        inclusionCues: ["已有线索", "新增线索", "新增线索"],
+        exclusionCues: ["排除线索"],
+        aliases: ["flow", "flow"],
+        salienceClarification: "持续出现时为强",
       },
       { creatorId: "expert-a", createdAt: now },
     );
 
     expect(active.tags[0]).toMatchObject({
       aliases: ["flow"],
-      exclusionCues: ["排除线索", "新增排除"],
+      exclusionCues: ["排除线索"],
       inclusionCues: ["已有线索", "新增线索"],
       salienceClarification: "持续出现时为强",
       status: "active",
@@ -173,7 +179,7 @@ describe("annotation v1 contracts", () => {
       catalogTags: [],
     });
     const parentSha256 = await hashFoundationV1(foundation);
-    const active = await activateFoundationTagV1(
+    const active = await createActiveFoundationTagV1(
       foundation,
       {
         aliases: ["anchor"],
@@ -361,34 +367,31 @@ describe("annotation v1 contracts", () => {
       })),
     };
 
-    const resolved = await resolveStableNoteRefsV1(
-      fixture.bytes,
-      changedChart,
-      [fixture.noteRef],
-      fixture.source.sha256,
-    );
+    const resolved = resolveStableNoteRefsV1(createStableNoteRefIndexV1(changedChart), [
+      fixture.noteRef,
+    ]);
     expect(resolved[0]?.id).toBe("runtime-reordered-3");
     expect(resolved[0]?.sourceLine).toBe(fixture.noteRef.sourceLine);
   });
 
-  it("hashes exact HitObject line bytes without the newline and rejects a changed object digest", async () => {
+  it("serializes stable note references without line digests and rejects tuple mismatches", async () => {
     const fixture = await createFixture();
     const crLfBytes = encoder.encode(osuSource.replaceAll("\n", "\r\n"));
     const crLf = await inspectOsuSourceV1(crLfBytes);
     const crLfFirstNote = crLf.chart.notes[0];
     if (!crLfFirstNote) throw new Error("Expected the CRLF fixture note");
-    const crLfRef = await createStableNoteRefV1(crLfBytes, crLfFirstNote);
+    const crLfRef = createStableNoteRefV1(crLfFirstNote);
 
-    expect(crLfRef.objectSha256).toBe(fixture.noteRef.objectSha256);
+    expect(crLfRef).toEqual(fixture.noteRef);
     expect(crLf.source.sha256).not.toBe(fixture.source.sha256);
-    await expect(
-      resolveStableNoteRefsV1(
-        fixture.bytes,
-        fixture.chart,
-        [{ ...fixture.noteRef, objectSha256: "f".repeat(64) }],
-        fixture.source.sha256,
-      ),
-    ).rejects.toThrow(/HitObject line .* SHA-256 mismatch/);
+    expect(
+      serializeAnnotationDocumentV1(createDocument(fixture, [{ tagId: "streams", salience: 2 }])),
+    ).not.toContain("objectSha256");
+    expect(() =>
+      resolveStableNoteRefsV1(createStableNoteRefIndexV1(fixture.chart), [
+        { ...fixture.noteRef, startMs: fixture.noteRef.startMs + 1 },
+      ]),
+    ).toThrow(/does not resolve/);
   });
 });
 
@@ -397,7 +400,7 @@ async function createFixture() {
   const inspected = await inspectOsuSourceV1(bytes);
   const firstNote = inspected.chart.notes[0];
   if (!firstNote) throw new Error("Expected the fixture note");
-  const noteRef = await createStableNoteRefV1(bytes, firstNote);
+  const noteRef = createStableNoteRefV1(firstNote);
 
   let foundation = bootstrapFoundationV1({
     foundationId,
@@ -405,29 +408,39 @@ async function createFixture() {
     createdAt: now,
     catalogTags: ["Streams", "Jacks", "Candidate Pattern", "Retired Pattern"],
   });
-  foundation = await activateFoundationTagV1(
+  foundation = await createActiveFoundationTagV1(
     foundation,
-    { tagId: "streams", definition: "连续音流", inclusionCues: ["连续交替"] },
+    {
+      tagId: "streams",
+      displayName: "Streams",
+      definition: "连续音流",
+      inclusionCues: ["连续交替"],
+    },
     { creatorId: "expert-a", createdAt: "2026-08-04T00:01:00.000Z" },
   );
-  foundation = await activateFoundationTagV1(
+  foundation = await createActiveFoundationTagV1(
     foundation,
-    { tagId: "jacks", definition: "同列连续击打", inclusionCues: ["同列重复"] },
+    {
+      tagId: "jacks",
+      displayName: "Jacks",
+      definition: "同列连续击打",
+      inclusionCues: ["同列重复"],
+    },
     { creatorId: "expert-a", createdAt: "2026-08-04T00:02:00.000Z" },
   );
   foundation = {
     ...foundation,
-    tags: foundation.tags.map(
-      (tag): FoundationTagV1 =>
-        tag.id === "retired-pattern"
-          ? {
-              ...tag,
-              status: "retired",
-              definition: "已退役的旧语义",
-              inclusionCues: ["旧线索"],
-            }
-          : tag,
-    ),
+    tags: [
+      ...foundation.tags,
+      {
+        aliases: [],
+        definition: "已退役的旧语义",
+        displayName: "Retired Pattern",
+        id: "retired-pattern",
+        inclusionCues: ["旧线索"],
+        status: "retired",
+      } satisfies FoundationTagV1,
+    ],
   };
 
   return {
@@ -443,6 +456,7 @@ async function createFixture() {
 function createDocument(
   fixture: Awaited<ReturnType<typeof createFixture>>,
   labels: GoldAnnotationV1["labels"],
+  exemplarRoles: GoldAnnotationV1["exemplarRoles"] = [],
 ): AnnotationDocumentV1 {
   return {
     contract: "beatmap-lens-section-annotations",
@@ -463,6 +477,7 @@ function createDocument(
         range: { startMs: 500, endMs: 501 },
         noteRefs: [fixture.noteRef],
         labels,
+        exemplarRoles,
         foundation: fixture.foundationRef,
         annotatorId: "expert-a",
         createdAt: now,

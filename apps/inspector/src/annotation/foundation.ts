@@ -34,9 +34,9 @@ export interface BootstrapFoundationInputV1 {
   readonly catalogTags: readonly (string | FoundationTagSeedV1)[];
 }
 
-export interface ActivateFoundationTagInputV1 {
+export interface CreateActiveFoundationTagInputV1 {
   readonly tagId: string;
-  readonly displayName?: string;
+  readonly displayName: string;
   readonly definition: string;
   readonly inclusionCues: readonly string[];
   readonly exclusionCues?: readonly string[];
@@ -50,25 +50,12 @@ export interface FoundationRevisionMetadataV1 {
 }
 
 export function bootstrapFoundationV1(input: BootstrapFoundationInputV1): JudgmentFoundationV1 {
-  const tags = input.catalogTags.map<FoundationTagV1>((seed) => {
-    const displayName = typeof seed === "string" ? seed : seed.displayName;
-    const id = typeof seed === "string" ? canonicalTagId(seed) : seed.id;
-    assertCanonicalTagId(id);
-    return {
-      id,
-      displayName,
-      status: "candidate",
-      definition: "",
-      inclusionCues: [],
-      aliases: [],
-      exemplars: [],
-    };
-  });
-
-  assertUnique(
-    tags.map((tag) => tag.id),
-    "catalog tag ID",
+  const catalogTagIds = input.catalogTags.map((seed) =>
+    typeof seed === "string" ? canonicalTagId(seed) : seed.id,
   );
+  catalogTagIds.forEach(assertCanonicalTagId);
+  assertUnique(catalogTagIds, "catalog tag ID");
+
   return {
     contract: FOUNDATION_CONTRACT,
     version: 1,
@@ -78,43 +65,42 @@ export function bootstrapFoundationV1(input: BootstrapFoundationInputV1): Judgme
     creatorId: input.creatorId,
     createdAt: input.createdAt,
     policies: FOUNDATION_POLICIES_V1,
-    tags,
+    tags: [],
   };
 }
 
-export async function activateFoundationTagV1(
+export async function createActiveFoundationTagV1(
   foundation: JudgmentFoundationV1,
-  input: ActivateFoundationTagInputV1,
+  input: CreateActiveFoundationTagInputV1,
   revision: FoundationRevisionMetadataV1,
   digest?: Sha256DigestFunction,
 ): Promise<JudgmentFoundationV1> {
   assertCanonicalTagId(input.tagId);
+  const displayName = input.displayName.trim();
   const definition = input.definition.trim();
   const inclusionCues = cleanNonEmpty(input.inclusionCues);
+  if (!displayName) throw new Error("Active tag creation requires a display name");
   if (!definition) throw new Error("Tag activation requires a definition");
   if (inclusionCues.length === 0) throw new Error("Tag activation requires an inclusion cue");
 
   const existing = foundation.tags.find((tag) => tag.id === input.tagId);
-  if (existing?.status === "active") throw new Error(`Tag ${input.tagId} is already active`);
-  if (existing?.status === "retired")
-    throw new Error(`Retired tag ${input.tagId} cannot be activated`);
+  if (existing) {
+    if (existing.status === "retired")
+      throw new Error(`Retired tag ${input.tagId} cannot be reused`);
+    throw new Error(`Tag ${input.tagId} is already active`);
+  }
 
-  const exclusionCues = uniqueNonEmpty([
-    ...(existing?.exclusionCues ?? []),
-    ...(input.exclusionCues ?? []),
-  ]);
-  const salienceClarification =
-    input.salienceClarification?.trim() || existing?.salienceClarification;
+  const exclusionCues = uniqueNonEmpty(input.exclusionCues ?? []);
+  const salienceClarification = input.salienceClarification?.trim();
   const activated: FoundationTagV1 = {
     id: input.tagId,
-    displayName: input.displayName?.trim() || existing?.displayName || input.tagId,
+    displayName,
     status: "active",
     definition,
-    inclusionCues: uniqueNonEmpty([...(existing?.inclusionCues ?? []), ...inclusionCues]),
+    inclusionCues: uniqueNonEmpty(inclusionCues),
     ...(exclusionCues.length > 0 ? { exclusionCues } : {}),
-    aliases: uniqueNonEmpty([...(existing?.aliases ?? []), ...(input.aliases ?? [])]),
+    aliases: uniqueNonEmpty(input.aliases ?? []),
     ...(salienceClarification ? { salienceClarification } : {}),
-    exemplars: existing?.exemplars ?? [],
   };
 
   return {
@@ -123,11 +109,12 @@ export async function activateFoundationTagV1(
     parentSha256: await hashFoundationV1(foundation, digest),
     creatorId: revision.creatorId,
     createdAt: revision.createdAt,
-    tags: existing
-      ? foundation.tags.map((tag) => (tag.id === activated.id ? activated : tag))
-      : [...foundation.tags, activated],
+    tags: [...foundation.tags, activated],
   };
 }
+
+export type ActivateFoundationTagInputV1 = CreateActiveFoundationTagInputV1;
+export const activateFoundationTagV1 = createActiveFoundationTagV1;
 
 export async function foundationRefV1(
   foundation: JudgmentFoundationV1,
@@ -169,7 +156,7 @@ export function isCanonicalTagId(value: string): boolean {
   return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value);
 }
 
-export const activateTagV1 = activateFoundationTagV1;
+export const activateTagV1 = createActiveFoundationTagV1;
 
 function assertCanonicalTagId(value: string): void {
   if (!isCanonicalTagId(value)) {

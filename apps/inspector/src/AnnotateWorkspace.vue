@@ -27,6 +27,7 @@ import {
   judgmentLineRatio,
   maximumVisualSpeed,
   minimumVisualSpeed,
+  viewportYToSourceTime,
   visualSpeedPresets,
 } from "./annotation/buffered-scene";
 import {
@@ -36,11 +37,10 @@ import {
 import type {
   AnnotationDocumentV1,
   AnnotationLabelV1,
-  FoundationExemplarKindV1,
-  FoundationRefV1,
   FoundationTagV1,
   GoldAnnotationV1,
-  JudgmentFoundationV1,
+  GoldExemplarRoleKindV1,
+  GoldExemplarRoleV1,
   TimeRangeV1,
 } from "./annotation/contracts";
 import {
@@ -60,9 +60,9 @@ import {
   supportsFileSystemAccess,
 } from "./annotation/file-system-access";
 import {
-  activateFoundationTagV1,
   bootstrapFoundationV1,
   canonicalTagId,
+  createActiveFoundationTagV1,
 } from "./annotation/foundation";
 import {
   changeNoteSelectionRange,
@@ -77,7 +77,6 @@ import type {
 import {
   addReviewNoteV1,
   completeAnnotationDocumentV1,
-  promoteFoundationExemplarV1,
   resolveReviewNoteV1,
   sameTagOverlapWarningsV1,
 } from "./annotation/quality";
@@ -108,7 +107,6 @@ import {
   type TimelineRangeEdge,
   timelineEdgeHitWidth,
 } from "./annotation/timeline-range";
-import { assertAnnotationWorkflowV1 } from "./annotation/validation";
 import WorkspaceModeSwitch from "./WorkspaceModeSwitch.vue";
 import type { WorkspaceMode } from "./workspace-mode";
 
@@ -122,6 +120,7 @@ interface EditorUndoState {
   readonly selectedNoteIds: readonly string[];
   readonly manualExclusions: readonly string[];
   readonly labels: readonly AnnotationLabelV1[];
+  readonly exemplarRoles: readonly GoldExemplarRoleV1[];
   readonly judgmentNote: string;
   readonly editingAnnotationId?: string;
 }
@@ -132,16 +131,33 @@ interface TimelineDragState {
   readonly anchorMs: number;
   readonly startClientX: number;
   readonly range?: TimeRangeV1;
+  freePlacement: boolean;
+  lastClientX: number;
   moved: boolean;
   undoCaptured: boolean;
 }
 
 interface ViewportDragState {
   readonly pointerId: number;
+  readonly kind: "scrub" | "select";
+  readonly anchorMs: number;
   readonly startClientY: number;
   readonly startTimeMs: number;
+  freePlacement: boolean;
+  lastClientY: number;
   moved: boolean;
+  undoCaptured: boolean;
 }
+
+interface FoundationExemplarView {
+  readonly annotationId: string;
+  readonly kind: GoldExemplarRoleKindV1;
+  readonly range: TimeRangeV1;
+  readonly sourceLabel: string;
+  readonly tagId: string;
+}
+
+const rangeNotePageSize = 200;
 
 const emit = defineEmits<{
   "change-mode": [mode: WorkspaceMode];
@@ -163,6 +179,7 @@ const queue = ref<readonly TaskQueueItem[]>([]);
 const activeTaskId = ref<string>();
 const session = shallowRef<BeatmapSession>();
 const readonlyTask = shallowRef<TaskQueueItem>();
+const readonlyDraftPresent = ref(false);
 const setupError = ref("");
 const setupBusy = ref(false);
 const setupProgress = ref("");
@@ -177,6 +194,7 @@ const rangeError = ref("");
 const selectedNoteIds = ref<ReadonlySet<string>>(new Set());
 const manualExclusions = ref<ReadonlySet<string>>(new Set());
 const draftLabels = ref<readonly AnnotationLabelV1[]>([]);
+const draftExemplarRoles = ref<readonly GoldExemplarRoleV1[]>([]);
 const judgmentNote = ref("");
 const tagQuery = ref("");
 const editingAnnotationId = ref<string>();
@@ -193,11 +211,14 @@ const activationError = ref("");
 const activationBusy = ref(false);
 const qualityBusy = ref(false);
 const qualityMessage = ref("");
+const foundationExemplarViews = ref<readonly FoundationExemplarView[]>([]);
+const foundationDetailsDigest = ref<string>();
+const foundationDetailsBusy = ref(false);
+const foundationDetailsMessage = ref("");
 const reviewNoteText = ref("");
 const reviewNoteIncludeSelection = ref(true);
-const exemplarAnnotationId = ref<string>();
 const exemplarTagId = ref("");
-const exemplarKind = ref<FoundationExemplarKindV1>("strong");
+const exemplarKind = ref<GoldExemplarRoleKindV1>("strong");
 const releaseBusy = ref(false);
 const releasePreview = shallowRef<GoldReleaseArtifact>();
 const releaseMessage = ref("");
@@ -212,6 +233,7 @@ const overviewWidth = ref(720);
 const viewportFrame = shallowRef<BufferedSceneFrame>();
 const viewportInstrumentation = ref<BufferedSceneInstrumentation>();
 const frameP95Ms = ref(0);
+const rangeNotePage = ref(0);
 const playbackState = ref<PlaybackClockState>({
   currentTimeMs: 0,
   playing: false,
@@ -234,9 +256,13 @@ let unsubscribeAudio: (() => void) | undefined;
 let viewportResizeObserver: ResizeObserver | undefined;
 let timelineDrag: TimelineDragState | undefined;
 let viewportDrag: ViewportDragState | undefined;
+let gestureFrame: number | undefined;
 let pendingTextUndo: EditorUndoState | undefined;
 let taskOpenGeneration = 0;
 let preferenceWrite = Promise.resolve();
+let draftWrite = Promise.resolve();
+let previousAnimationFrameTime: number | undefined;
+let lastFrameMetricReport = 0;
 const frameDurations: number[] = [];
 
 const activeTask = computed(() =>
@@ -248,19 +274,28 @@ const candidateNotes = computed(() => {
   if (!session.value || !parsedRange.value) return [];
   return rangeCandidates(session.value.chart, parsedRange.value);
 });
+const rangeNotePageCount = computed(() =>
+  Math.max(1, Math.ceil(candidateNotes.value.length / rangeNotePageSize)),
+);
+const pagedRangeNotes = computed(() => {
+  const start = rangeNotePage.value * rangeNotePageSize;
+  return candidateNotes.value.slice(start, start + rangeNotePageSize);
+});
 const candidateNoteIds = computed(() => new Set(candidateNotes.value.map((note) => note.id)));
 const selectedCount = computed(() => selectedNoteIds.value.size);
 const activeTags = computed(() => filterTags("active"));
-const candidateTags = computed(() => filterTags("candidate"));
 const customTagId = computed(() => canonicalTagId(tagQuery.value.trim()));
 const canCreateCustomTag = computed(() => {
   const id = customTagId.value;
   return Boolean(id && !session.value?.foundation.tags.some((tag) => tag.id === id));
 });
 const suggestedTags = computed(() => {
-  if (!session.value) return [];
-  const suggestions = new Set(session.value.document.seedContext.suggestedTags);
-  return session.value.foundation.tags.filter((tag) => suggestions.has(tag.id));
+  const current = session.value;
+  if (!current) return [];
+  return current.document.seedContext.suggestedTags.map((id) => {
+    const tag = current.foundation.tags.find((entry) => entry.id === id);
+    return { id, ...(tag ? { tag } : {}) };
+  });
 });
 const annotationList = computed(
   () => session.value?.document.annotations ?? [],
@@ -306,6 +341,7 @@ const overlapWarnings = computed(() => {
         annotatorId: annotatorId.value.trim() || "draft",
         judgmentNote: judgmentNote.value,
         labels: draftLabels.value,
+        exemplarRoles: draftExemplarRoles.value,
         noteIds: [...selectedNoteIds.value],
         now: () => existing?.updatedAt ?? current.document.updatedAt,
         range,
@@ -317,14 +353,10 @@ const overlapWarnings = computed(() => {
     return sameTagOverlapWarningsV1(current.document);
   }
 });
-const exemplarAnnotation = computed(() =>
-  annotationList.value.find((annotation) => annotation.id === exemplarAnnotationId.value),
-);
 const exemplarTagOptions = computed(() => {
   const current = session.value;
-  const annotation = exemplarAnnotation.value;
-  if (!current || !annotation) return [];
-  const annotationTags = new Set(annotation.labels.map((label) => label.tagId));
+  if (!current) return [];
+  const annotationTags = new Set(draftLabels.value.map((label) => label.tagId));
   return current.foundation.tags.filter(
     (tag) =>
       tag.status === "active" &&
@@ -408,6 +440,7 @@ const audioStatusText = computed(() => {
 
 onMounted(async () => {
   window.addEventListener("keydown", handleWorkspaceKeydown);
+  document.addEventListener("visibilitychange", handleVisibilityChange);
   viewportResizeObserver = new ResizeObserver(() => refreshInteractiveGeometry());
   if (!fileSystemSupported) return;
   try {
@@ -430,9 +463,10 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
-  if (draftTimer !== undefined) window.clearTimeout(draftTimer);
-  if (hasUncommittedDraft.value) void persistDraftNow(true);
+  void flushDraft().catch(() => {});
   window.removeEventListener("keydown", handleWorkspaceKeydown);
+  document.removeEventListener("visibilitychange", handleVisibilityChange);
+  if (gestureFrame !== undefined) cancelAnimationFrame(gestureFrame);
   disposeInteractiveSession();
   viewportResizeObserver?.disconnect();
 });
@@ -445,6 +479,30 @@ watch(
   },
   { flush: "post" },
 );
+
+watch(rangeNotePageCount, (pageCount) => {
+  rangeNotePage.value = Math.min(rangeNotePage.value, pageCount - 1);
+});
+
+async function changeWorkspaceMode(mode: WorkspaceMode): Promise<void> {
+  if (mode === "annotate") return;
+  pauseForEdit();
+  try {
+    await flushDraft();
+    emit("change-mode", mode);
+  } catch (error) {
+    saveState.value = "error";
+    saveMessage.value = errorMessage(error);
+  }
+}
+
+function handleVisibilityChange(): void {
+  if (document.visibilityState !== "hidden") return;
+  void flushDraft().catch((error) => {
+    saveState.value = "error";
+    saveMessage.value = errorMessage(error);
+  });
+}
 
 async function chooseDataset(): Promise<void> {
   await runSetupAction(async () => {
@@ -566,12 +624,17 @@ async function openTask(task: TaskQueueItem): Promise<void> {
       interactiveSessionGeneration.value++;
       resetTaskQualityState();
       readonlyTask.value = task;
+      readonlyDraftPresent.value = Boolean(
+        task.source &&
+          (await sessions.getDraft(directory.value.manifest.datasetId, task.source.sha256)),
+      );
       activeTaskId.value = task.id;
       saveState.value = "idle";
       saveMessage.value = `Annotation v${task.future?.version ?? "?"} · read-only`;
       return;
     }
     readonlyTask.value = undefined;
+    readonlyDraftPresent.value = false;
     const next = await loadBeatmapSession(
       task.task,
       catalog.value,
@@ -610,6 +673,7 @@ function restoreEditor(next: BeatmapSession): void {
   reviewNoteIncludeSelection.value = draft?.reviewNoteIncludeSelection ?? true;
   reviewNoteText.value = draft?.reviewNoteText ?? "";
   draftLabels.value = draft?.labels ?? [];
+  draftExemplarRoles.value = draft?.exemplarRoles ?? [];
   const selected = new Set(draft ? noteIdsForRefs(next, draft.noteRefs) : []);
   selectedNoteIds.value = selected;
   manualExclusions.value = new Set(
@@ -635,6 +699,7 @@ function restoreEditor(next: BeatmapSession): void {
       : "Unseen chart";
   editorDirty.value = draft?.annotationEditorDirty ?? Boolean(draft);
   editorUndoStack.value = readUndoState(draft?.undoState);
+  syncExemplarTag();
 }
 
 async function initializeInteractiveSession(): Promise<void> {
@@ -661,11 +726,10 @@ async function initializeInteractiveSession(): Promise<void> {
       return;
     }
 
-    const startedAt = performance.now();
+    recordAnimationFrame(performance.now(), state.playing);
     playbackState.value = state;
     playheadMs.value = state.currentTimeMs;
     updateViewportFrame(state.currentTimeMs);
-    recordFrameDuration(performance.now() - startedAt);
   });
   unsubscribeAudio = controller.subscribeAudio((state) => {
     if (playbackClock !== controller) return;
@@ -714,6 +778,8 @@ function disposeInteractiveSession(): void {
   pendingTextUndo = undefined;
   frameDurations.length = 0;
   frameP95Ms.value = 0;
+  previousAnimationFrameTime = undefined;
+  lastFrameMetricReport = 0;
 }
 
 function rebuildViewportController(): void {
@@ -755,10 +821,14 @@ function updateViewportFrame(timeMs: number): void {
   viewportInstrumentation.value = viewportController.instrumentation();
 }
 
-function recordFrameDuration(durationMs: number): void {
-  frameDurations.push(durationMs);
+function recordAnimationFrame(timestamp: number, playing: boolean): void {
+  const previous = previousAnimationFrameTime;
+  previousAnimationFrameTime = timestamp;
+  if (!playing || previous === undefined) return;
+  frameDurations.push(timestamp - previous);
   if (frameDurations.length > 120) frameDurations.shift();
-  if (frameDurations.length % 12 !== 0) return;
+  if (timestamp - lastFrameMetricReport < 250) return;
+  lastFrameMetricReport = timestamp;
   const sorted = [...frameDurations].sort((left, right) => left - right);
   frameP95Ms.value = sorted[Math.ceil(sorted.length * 0.95) - 1] ?? 0;
 }
@@ -848,7 +918,11 @@ function persistSessionPreferences(): Promise<void> {
   return preferenceWrite;
 }
 
-function applyTimelineRange(range: TimeRangeV1, captureUndo = true): void {
+function applyTimelineRange(
+  range: TimeRangeV1,
+  captureUndo = true,
+  updateDraft = true,
+): void {
   const current = session.value;
   if (!current || operationLocked.value) return;
   pauseForEdit();
@@ -866,8 +940,9 @@ function applyTimelineRange(range: TimeRangeV1, captureUndo = true): void {
   draftEnd.value = formatMs(selection.range.endMs);
   selectedNoteIds.value = new Set(selection.selectedNotes.map((note) => note.id));
   manualExclusions.value = selection.manualExclusions;
+  rangeNotePage.value = 0;
   rangeError.value = "";
-  markDraft();
+  if (updateDraft) markDraft();
 }
 
 function beginTimelineDrag(event: PointerEvent, kind: TimelineDragKind): void {
@@ -885,6 +960,8 @@ function beginTimelineDrag(event: PointerEvent, kind: TimelineDragKind): void {
     kind,
     anchorMs: overviewTimeFromPointer(event),
     startClientX: event.clientX,
+    lastClientX: event.clientX,
+    freePlacement: event.altKey,
     ...(range ? { range } : {}),
     moved: false,
     undoCaptured: false,
@@ -893,16 +970,24 @@ function beginTimelineDrag(event: PointerEvent, kind: TimelineDragKind): void {
 
 function moveTimelineDrag(event: PointerEvent): void {
   const drag = timelineDrag;
-  const current = session.value;
-  const index = noteTimeIndex;
-  if (!drag || drag.pointerId !== event.pointerId || !current || !index) return;
+  if (!drag || drag.pointerId !== event.pointerId) return;
+  drag.lastClientX = event.clientX;
+  drag.freePlacement = event.altKey;
   if (Math.abs(event.clientX - drag.startClientX) >= 2) drag.moved = true;
   if (!drag.moved) return;
+  queueGestureFrame();
+}
 
-  const timeMs = overviewTimeFromPointer(event);
+function applyTimelineDragPreview(): void {
+  const drag = timelineDrag;
+  const current = session.value;
+  const index = noteTimeIndex;
+  if (!drag?.moved || !current || !index) return;
+
+  const timeMs = overviewTimeFromClientX(drag.lastClientX);
   const options = {
     chartEndMs: current.chartEndMs,
-    freePlacement: event.altKey,
+    freePlacement: drag.freePlacement,
   };
   const range =
     drag.kind === "create"
@@ -922,57 +1007,147 @@ function moveTimelineDrag(event: PointerEvent): void {
   if (!drag.undoCaptured) {
     recordEditorUndo();
     drag.undoCaptured = true;
+    markDraft(false);
   }
-  applyTimelineRange(range, false);
+  applyTimelineRange(range, false, false);
 }
 
-function endTimelineDrag(event: PointerEvent): void {
+async function endTimelineDrag(event: PointerEvent): Promise<void> {
   const drag = timelineDrag;
   const svg = overviewSvg.value;
   if (!drag || drag.pointerId !== event.pointerId) return;
-  if (!drag.moved) seekPlayhead(overviewTimeFromPointer(event));
+  drag.lastClientX = event.clientX;
+  drag.freePlacement = event.altKey;
+  if (Math.abs(event.clientX - drag.startClientX) >= 2) drag.moved = true;
+  flushGestureFrame();
+  if (!drag.moved && event.type === "pointerup") seekPlayhead(overviewTimeFromPointer(event));
   if (svg?.hasPointerCapture(event.pointerId)) svg.releasePointerCapture(event.pointerId);
   timelineDrag = undefined;
+  if (drag.undoCaptured) await persistDraftNow(true);
 }
 
-function beginViewportScrub(event: PointerEvent): void {
+function beginViewportGesture(event: PointerEvent): void {
   const svg = viewportSvg.value;
   if (!svg || !session.value || operationLocked.value) return;
   event.preventDefault();
   pauseForEdit();
   svg.setPointerCapture(event.pointerId);
+  const startTimeMs = playheadMs.value;
+  const startY = viewportYFromClientY(event.clientY);
   viewportDrag = {
     pointerId: event.pointerId,
+    kind: event.shiftKey ? "scrub" : "select",
+    anchorMs: viewportYToSourceTime({
+      chartEndMs: session.value.chartEndMs,
+      pixelsPerSecond: visualSpeed.value,
+      playheadMs: startTimeMs,
+      viewportHeight: viewportSize.value.height,
+      viewportY: startY,
+    }),
     startClientY: event.clientY,
-    startTimeMs: playheadMs.value,
+    startTimeMs,
+    lastClientY: event.clientY,
+    freePlacement: event.altKey,
     moved: false,
+    undoCaptured: false,
   };
 }
 
-function moveViewportScrub(event: PointerEvent): void {
+function moveViewportGesture(event: PointerEvent): void {
   const drag = viewportDrag;
   if (!drag || drag.pointerId !== event.pointerId) return;
-  const deltaY = drag.startClientY - event.clientY;
-  if (Math.abs(deltaY) >= 2) drag.moved = true;
+  drag.lastClientY = event.clientY;
+  drag.freePlacement = event.altKey;
+  if (Math.abs(drag.startClientY - event.clientY) >= 2) drag.moved = true;
   if (!drag.moved) return;
-  seekPlayhead(drag.startTimeMs + (deltaY / visualSpeed.value) * 1_000);
+  queueGestureFrame();
 }
 
-function endViewportScrub(event: PointerEvent): void {
+function applyViewportGesturePreview(): void {
+  const drag = viewportDrag;
+  const current = session.value;
+  const index = noteTimeIndex;
+  if (!drag?.moved || !current || !index) return;
+
+  if (drag.kind === "scrub") {
+    const deltaY = drag.startClientY - drag.lastClientY;
+    seekPlayhead(drag.startTimeMs + (deltaY / visualSpeed.value) * 1_000);
+    return;
+  }
+
+  const focusMs = viewportYToSourceTime({
+    chartEndMs: current.chartEndMs,
+    pixelsPerSecond: visualSpeed.value,
+    playheadMs: drag.startTimeMs,
+    viewportHeight: viewportSize.value.height,
+    viewportY: viewportYFromClientY(drag.lastClientY),
+  });
+  const range = createTimelineRange(drag.anchorMs, focusMs, index, {
+    chartEndMs: current.chartEndMs,
+    freePlacement: drag.freePlacement,
+  });
+  if (!range) return;
+  if (!drag.undoCaptured) {
+    recordEditorUndo();
+    drag.undoCaptured = true;
+    markDraft(false);
+  }
+  applyTimelineRange(range, false, false);
+}
+
+async function endViewportGesture(event: PointerEvent): Promise<void> {
   const drag = viewportDrag;
   const svg = viewportSvg.value;
   if (!drag || drag.pointerId !== event.pointerId) return;
-  if (!drag.moved) {
-    const rect = svg?.getBoundingClientRect();
-    if (rect) {
-      const y = ((event.clientY - rect.top) / rect.height) * viewportSize.value.height;
-      const judgmentY = viewportSize.value.height * judgmentLineRatio;
-      seekPlayhead(playheadMs.value + ((judgmentY - y) / visualSpeed.value) * 1_000);
-    }
+  drag.lastClientY = event.clientY;
+  drag.freePlacement = event.altKey;
+  if (Math.abs(drag.startClientY - event.clientY) >= 2) drag.moved = true;
+  flushGestureFrame();
+  if (!drag.moved && event.type === "pointerup") {
+    seekPlayhead(
+      viewportYToSourceTime({
+        chartEndMs: session.value?.chartEndMs ?? 0,
+        pixelsPerSecond: visualSpeed.value,
+        playheadMs: drag.startTimeMs,
+        viewportHeight: viewportSize.value.height,
+        viewportY: viewportYFromClientY(event.clientY),
+      }),
+    );
   }
   if (svg?.hasPointerCapture(event.pointerId)) svg.releasePointerCapture(event.pointerId);
   viewportDrag = undefined;
-  if (editorDirty.value) void persistDraftNow(true);
+  if (drag.undoCaptured) await persistDraftNow(true);
+}
+
+function queueGestureFrame(): void {
+  if (gestureFrame !== undefined) return;
+  gestureFrame = requestAnimationFrame(() => {
+    gestureFrame = undefined;
+    applyActiveGesturePreview();
+  });
+}
+
+function flushGestureFrame(): void {
+  if (gestureFrame !== undefined) cancelAnimationFrame(gestureFrame);
+  gestureFrame = undefined;
+  applyActiveGesturePreview();
+}
+
+function applyActiveGesturePreview(): void {
+  if (timelineDrag) applyTimelineDragPreview();
+  else if (viewportDrag) applyViewportGesturePreview();
+}
+
+function finalizeActiveGestures(): void {
+  flushGestureFrame();
+  if (timelineDrag && overviewSvg.value?.hasPointerCapture(timelineDrag.pointerId)) {
+    overviewSvg.value.releasePointerCapture(timelineDrag.pointerId);
+  }
+  if (viewportDrag && viewportSvg.value?.hasPointerCapture(viewportDrag.pointerId)) {
+    viewportSvg.value.releasePointerCapture(viewportDrag.pointerId);
+  }
+  timelineDrag = undefined;
+  viewportDrag = undefined;
 }
 
 async function handleWorkspaceKeydown(event: KeyboardEvent): Promise<void> {
@@ -1072,6 +1247,7 @@ function captureEditorState(): EditorUndoState {
     selectedNoteIds: [...selectedNoteIds.value],
     manualExclusions: [...manualExclusions.value],
     labels: draftLabels.value.map((label) => ({ ...label })),
+    exemplarRoles: draftExemplarRoles.value.map((role) => ({ ...role })),
     judgmentNote: judgmentNote.value,
     ...(editingAnnotationId.value ? { editingAnnotationId: editingAnnotationId.value } : {}),
   };
@@ -1087,6 +1263,7 @@ function undoEditor(): void {
   selectedNoteIds.value = new Set(state.selectedNoteIds);
   manualExclusions.value = new Set(state.manualExclusions);
   draftLabels.value = state.labels;
+  draftExemplarRoles.value = state.exemplarRoles;
   judgmentNote.value = state.judgmentNote;
   editingAnnotationId.value = state.editingAnnotationId;
   rangeError.value = "";
@@ -1125,6 +1302,7 @@ function isEditorUndoState(value: unknown): value is EditorUndoState {
     Array.isArray(state.selectedNoteIds) &&
     Array.isArray(state.manualExclusions) &&
     Array.isArray(state.labels) &&
+    Array.isArray(state.exemplarRoles) &&
     typeof state.judgmentNote === "string"
   );
 }
@@ -1144,10 +1322,20 @@ function isNativeActivationTarget(target: EventTarget | null): boolean {
 }
 
 function overviewTimeFromPointer(event: PointerEvent): number {
+  return overviewTimeFromClientX(event.clientX);
+}
+
+function overviewTimeFromClientX(clientX: number): number {
   const rect = overviewSvg.value?.getBoundingClientRect();
   const endMs = session.value?.chartEndMs ?? 0;
   if (!rect || rect.width === 0) return 0;
-  return Math.min(Math.max(0, ((event.clientX - rect.left) / rect.width) * endMs), endMs);
+  return Math.min(Math.max(0, ((clientX - rect.left) / rect.width) * endMs), endMs);
+}
+
+function viewportYFromClientY(clientY: number): number {
+  const rect = viewportSvg.value?.getBoundingClientRect();
+  if (!rect || rect.height === 0) return viewportSize.value.height * judgmentLineRatio;
+  return ((clientY - rect.top) / rect.height) * viewportSize.value.height;
 }
 
 function applyManualRange(captureUndo = true): void {
@@ -1196,25 +1384,40 @@ function addTag(tag: FoundationTagV1): void {
   pauseForEdit();
   recordEditorUndo();
   draftLabels.value = [...draftLabels.value, { tagId: tag.id, salience: 2 }];
+  draftExemplarRoles.value = draftExemplarRoles.value.filter(
+    (role) => role.tagId !== tag.id || role.kind !== "counterexample",
+  );
   focusedTagId.value = tag.id;
   tagQuery.value = "";
+  syncExemplarTag();
   markDraft();
 }
 
-function beginTagActivation(tag: FoundationTagV1): void {
+function beginSuggestedTagCreation(tagId: string): void {
   if (operationLocked.value) return;
-  if (tag.status !== "candidate") return;
   pauseForEdit();
-  activationTag.value = tag;
+  activationTag.value = {
+    aliases: [],
+    definition: "",
+    displayName: tagId,
+    id: tagId,
+    inclusionCues: [],
+    status: "active",
+  };
   activationIsCustom.value = false;
-  activationTagId.value = tag.id;
-  activationDisplayName.value = tag.displayName;
-  activationDefinition.value = tag.definition;
-  activationInclusionCues.value = tag.inclusionCues.join("\n");
-  activationExclusionCues.value = tag.exclusionCues?.join("\n") ?? "";
-  activationAliases.value = tag.aliases.join("\n");
-  activationSalienceClarification.value = tag.salienceClarification ?? "";
+  activationTagId.value = tagId;
+  activationDisplayName.value = tagId;
+  activationDefinition.value = "";
+  activationInclusionCues.value = "";
+  activationExclusionCues.value = "";
+  activationAliases.value = "";
+  activationSalienceClarification.value = "";
   activationError.value = "";
+}
+
+function useSuggestedTag(suggestion: { id: string; tag?: FoundationTagV1 }): void {
+  if (suggestion.tag?.status === "active") addTag(suggestion.tag);
+  else if (!suggestion.tag) beginSuggestedTagCreation(suggestion.id);
 }
 
 function beginCustomTagActivation(): void {
@@ -1225,10 +1428,9 @@ function beginCustomTagActivation(): void {
     aliases: [],
     definition: "",
     displayName,
-    exemplars: [],
     id: customTagId.value,
     inclusionCues: [],
-    status: "candidate",
+    status: "active",
   };
   activationIsCustom.value = true;
   activationTagId.value = customTagId.value;
@@ -1272,7 +1474,7 @@ async function activateTag(): Promise<void> {
     const tagId = activationIsCustom.value
       ? canonicalTagId(activationTagId.value)
       : activatingTag.id;
-    const nextFoundation = await activateFoundationTagV1(
+    const nextFoundation = await createActiveFoundationTagV1(
       activatingSession.foundation,
       {
         aliases: linesFromText(activationAliases.value),
@@ -1290,6 +1492,7 @@ async function activateTag(): Promise<void> {
     );
     await activatingDirectory.setCurrentFoundation(nextFoundation);
     session.value = { ...activatingSession, foundation: nextFoundation };
+    foundationDetailsDigest.value = undefined;
     const activated = nextFoundation.tags.find(
       (tag) => tag.id === tagId,
     );
@@ -1311,7 +1514,11 @@ function removeTag(tagId: string): void {
   pauseForEdit();
   recordEditorUndo();
   draftLabels.value = draftLabels.value.filter((label) => label.tagId !== tagId);
+  draftExemplarRoles.value = draftExemplarRoles.value.filter(
+    (role) => role.tagId !== tagId || role.kind === "counterexample",
+  );
   if (focusedTagId.value === tagId) focusedTagId.value = draftLabels.value.at(-1)?.tagId;
+  syncExemplarTag();
   markDraft();
 }
 
@@ -1331,6 +1538,7 @@ function setSalience(tagId: string, salience: 1 | 2): void {
 
 async function commitAnnotation(): Promise<void> {
   if (!session.value || !directory.value || operationLocked.value) return;
+  finalizeActiveGestures();
   const range = readDraftRange(true);
   if (!range) return;
   if (selectedNoteIds.value.size === 0) {
@@ -1351,6 +1559,7 @@ async function commitAnnotation(): Promise<void> {
       range,
       noteIds: [...selectedNoteIds.value],
       labels: draftLabels.value,
+      exemplarRoles: draftExemplarRoles.value,
       judgmentNote: judgmentNote.value,
       annotatorId: annotatorId.value.trim(),
     },
@@ -1382,8 +1591,11 @@ async function commitAnnotation(): Promise<void> {
 
 function editAnnotation(annotation: GoldAnnotationV1): void {
   if (!session.value || operationLocked.value) return;
+  if (hasUncommittedDraft.value) {
+    qualityMessage.value = "Commit or discard the current draft before editing another gold section.";
+    return;
+  }
   pauseForEdit();
-  recordEditorUndo();
   editingAnnotationId.value = annotation.id;
   draftStart.value = formatMs(annotation.range.startMs);
   draftEnd.value = formatMs(annotation.range.endMs);
@@ -1400,11 +1612,16 @@ function editAnnotation(annotation: GoldAnnotationV1): void {
     exclusions,
   ).manualExclusions;
   draftLabels.value = annotation.labels;
+  draftExemplarRoles.value = annotation.exemplarRoles;
   judgmentNote.value = annotation.judgmentNote ?? "";
   playheadMs.value = annotation.range.startMs;
   seekPlayhead(annotation.range.startMs);
   rangeError.value = "";
-  markDraft();
+  editorUndoStack.value = [];
+  editorDirty.value = false;
+  syncExemplarTag();
+  saveState.value = session.value.base ? "saved" : "idle";
+  saveMessage.value = `Editing gold · revision ${session.value.base?.revision ?? 0} unchanged`;
 }
 
 function seekAnnotation(annotation: GoldAnnotationV1): void {
@@ -1418,6 +1635,7 @@ async function playAnnotation(annotation: GoldAnnotationV1): Promise<void> {
 
 async function deleteAnnotation(annotation: GoldAnnotationV1): Promise<void> {
   if (!session.value || operationLocked.value) return;
+  finalizeActiveGestures();
   pauseForEdit();
   const preserveDraft =
     (editorDirty.value && editingAnnotationId.value !== annotation.id) ||
@@ -1438,14 +1656,6 @@ async function deleteAnnotation(annotation: GoldAnnotationV1): Promise<void> {
   }
 }
 
-function beginExemplarPromotion(annotation: GoldAnnotationV1): void {
-  if (operationLocked.value) return;
-  exemplarAnnotationId.value = annotation.id;
-  exemplarKind.value = "strong";
-  syncExemplarTag();
-  qualityMessage.value = "";
-}
-
 function syncExemplarTag(): void {
   const options = exemplarTagOptions.value;
   if (!options.some((tag) => tag.id === exemplarTagId.value)) {
@@ -1453,65 +1663,113 @@ function syncExemplarTag(): void {
   }
 }
 
-function cancelExemplarPromotion(): void {
-  exemplarAnnotationId.value = undefined;
+function resetExemplarComposer(): void {
   exemplarTagId.value = "";
   exemplarKind.value = "strong";
+  syncExemplarTag();
+}
+
+function addExemplarRole(): void {
+  if (!exemplarTagId.value || operationLocked.value) return;
+  pauseForEdit();
+  recordEditorUndo();
+  const role = { kind: exemplarKind.value, tagId: exemplarTagId.value };
+  draftExemplarRoles.value = sortExemplarRoles([
+    ...draftExemplarRoles.value.filter((entry) => entry.tagId !== role.tagId),
+    role,
+  ]);
+  markDraft();
+}
+
+function changeExemplarRoleKind(
+  tagId: string,
+  kind: GoldExemplarRoleKindV1,
+): void {
+  if (operationLocked.value) return;
+  const hasLabel = draftLabels.value.some((label) => label.tagId === tagId);
+  if ((kind === "counterexample") === hasLabel) return;
+  pauseForEdit();
+  recordEditorUndo();
+  draftExemplarRoles.value = draftExemplarRoles.value.map((role) =>
+    role.tagId === tagId ? { ...role, kind } : role,
+  );
+  markDraft();
+}
+
+function handleExemplarRoleKindChange(tagId: string, event: Event): void {
+  const kind = (event.target as HTMLSelectElement).value;
+  if (kind === "strong" || kind === "weak" || kind === "counterexample") {
+    changeExemplarRoleKind(tagId, kind);
+  }
+}
+
+function exemplarKindsForTag(tagId: string): readonly GoldExemplarRoleKindV1[] {
+  return draftLabels.value.some((label) => label.tagId === tagId)
+    ? ["strong", "weak"]
+    : ["counterexample"];
+}
+
+function removeExemplarRole(tagId: string): void {
+  if (operationLocked.value) return;
+  pauseForEdit();
+  recordEditorUndo();
+  draftExemplarRoles.value = draftExemplarRoles.value.filter((role) => role.tagId !== tagId);
+  markDraft();
 }
 
 function resetTaskQualityState(): void {
   cancelTagActivation();
-  cancelExemplarPromotion();
+  resetExemplarComposer();
   reviewNoteText.value = "";
   reviewNoteIncludeSelection.value = true;
   qualityMessage.value = "";
 }
 
-async function promoteExemplar(): Promise<void> {
-  const current = session.value;
+async function loadFoundationDetails(event: Event): Promise<void> {
+  const details = event.currentTarget as HTMLDetailsElement;
   const currentDirectory = directory.value;
-  const annotation = exemplarAnnotation.value;
-  if (
-    !current ||
-    !currentDirectory ||
-    !annotation ||
-    !exemplarTagId.value ||
-    operationLocked.value
-  ) {
-    return;
-  }
+  if (!details.open || !currentDirectory || foundationDetailsBusy.value) return;
+  const digest = currentDirectory.manifest.currentFoundation.sha256;
+  if (foundationDetailsDigest.value === digest) return;
 
-  qualityBusy.value = true;
-  qualityMessage.value = "Promoting exemplar into a verified Foundation revision";
+  foundationDetailsBusy.value = true;
+  foundationDetailsMessage.value = "Loading canonical exemplar roles";
   try {
-    const nextFoundation = await promoteFoundationExemplarV1(
-      current.foundation,
-      current.document,
-      {
-        annotationId: annotation.id,
-        kind: exemplarKind.value,
-        tagId: exemplarTagId.value,
-      },
-      {
-        createdAt: new Date().toISOString(),
-        creatorId: annotatorId.value.trim(),
-      },
+    const scans = await currentDirectory.scanAnnotations();
+    const blocked = scans.find((entry) => entry.status !== "ok");
+    if (blocked) throw new Error(`Could not read ${blocked.filename}`);
+    foundationExemplarViews.value = scans.flatMap((entry) =>
+      entry.status === "ok"
+        ? entry.document.annotations.flatMap((annotation) =>
+            annotation.exemplarRoles.map((role) => ({
+              annotationId: annotation.id,
+              kind: role.kind,
+              range: annotation.range,
+              sourceLabel: `${entry.document.source.title} · ${entry.document.source.difficulty}`,
+              tagId: role.tagId,
+            })),
+          )
+        : [],
     );
-    const reference = await currentDirectory.setCurrentFoundation(nextFoundation);
-    session.value = { ...current, foundation: nextFoundation };
-    cancelExemplarPromotion();
-    invalidateReleasePreview();
-    qualityMessage.value = `Foundation r${reference.revision} verified · exemplar promoted`;
+    foundationDetailsDigest.value = digest;
+    foundationDetailsMessage.value = foundationExemplarViews.value.length
+      ? "Canonical exemplar roles"
+      : "No canonical exemplar roles yet";
   } catch (error) {
-    qualityMessage.value = errorMessage(error);
+    foundationDetailsMessage.value = errorMessage(error);
   } finally {
-    qualityBusy.value = false;
+    foundationDetailsBusy.value = false;
   }
+}
+
+function exemplarViewsForTag(tagId: string): readonly FoundationExemplarView[] {
+  return foundationExemplarViews.value.filter((entry) => entry.tagId === tagId);
 }
 
 async function addReviewNote(): Promise<void> {
   const current = session.value;
   if (!current || !directory.value || operationLocked.value) return;
+  finalizeActiveGestures();
   const range = reviewNoteIncludeSelection.value ? readDraftRange(false) : undefined;
   if (reviewNoteIncludeSelection.value && !range) {
     qualityMessage.value = "Fix the selection range before attaching it to a review note.";
@@ -1554,6 +1812,7 @@ async function addReviewNote(): Promise<void> {
 async function resolveReviewNote(noteId: string): Promise<void> {
   const current = session.value;
   if (!current || !directory.value || operationLocked.value) return;
+  finalizeActiveGestures();
 
   qualityBusy.value = true;
   qualityMessage.value = "Resolving review note";
@@ -1579,6 +1838,7 @@ function seekReviewNote(noteId: string): void {
 async function markChartComplete(): Promise<void> {
   const current = session.value;
   if (!current || !directory.value || operationLocked.value) return;
+  finalizeActiveGestures();
   const completion = completeAnnotationDocumentV1(current.document, {
     hasUncommittedDraft: hasUncommittedDraft.value,
   });
@@ -1602,12 +1862,14 @@ async function markChartComplete(): Promise<void> {
 async function previewGoldRelease(): Promise<void> {
   const currentDirectory = directory.value;
   if (!currentDirectory || operationLocked.value) return;
+  finalizeActiveGestures();
   releaseBusy.value = true;
-  releaseMessage.value = "Scanning verified canonical sidecars";
+  releaseMessage.value = "Flushing drafts and scanning verified canonical sidecars";
   try {
-    releasePreview.value = await buildGoldRelease(currentDirectory);
+    await flushDraft();
+    releasePreview.value = await buildGoldRelease(currentDirectory, sessions);
     releaseMessage.value = hasUncommittedDraft.value
-      ? "Preview ready · the current local draft is intentionally excluded"
+      ? "Preview ready · this in-progress chart draft is excluded"
       : "Preview ready · confirm to write this exact artifact";
   } catch (error) {
     releasePreview.value = undefined;
@@ -1620,11 +1882,6 @@ async function previewGoldRelease(): Promise<void> {
 async function confirmGoldRelease(): Promise<void> {
   const currentDirectory = directory.value;
   const artifact = releasePreview.value;
-  if (hasUncommittedDraft.value) {
-    releasePreview.value = undefined;
-    releaseMessage.value = "Release preview cleared · finish or clear the current draft first";
-    return;
-  }
   if (
     !(currentDirectory instanceof FileSystemDatasetDirectory) ||
     !artifact ||
@@ -1633,11 +1890,14 @@ async function confirmGoldRelease(): Promise<void> {
     return;
   }
 
+  finalizeActiveGestures();
   releaseBusy.value = true;
   releaseMessage.value = "Rechecking canonical sidecars before export";
   try {
+    await flushDraft();
     const currentArtifact = await buildGoldRelease(
       currentDirectory,
+      sessions,
       artifact.manifest.exportedAt,
     );
     if (!sameGoldReleaseArtifact(artifact, currentArtifact)) {
@@ -1679,28 +1939,20 @@ async function persistDocument(
   const savingTaskId = activeTaskId.value;
   const savingDatasetId = savingDirectory.manifest.datasetId;
   const savingSourceSha256 = savingSession.source.sha256;
+  finalizeActiveGestures();
   saveState.value = "saving";
   saveMessage.value = "Writing canonical sidecar";
   try {
-    if (draftTimer !== undefined) {
-      window.clearTimeout(draftTimer);
-      draftTimer = undefined;
-    }
-    if (hasUncommittedDraft.value) await persistDraftNow(true);
-    const foundations = await loadReferencedFoundations(document, savingDirectory);
+    await flushDraft();
     const draftContext =
       options.hasUncommittedDraft === undefined
         ? {}
         : { hasUncommittedDraft: options.hasUncommittedDraft };
-    await assertAnnotationWorkflowV1(document, {
-      sourceBytes: savingSession.sourceBytes,
-      chart: savingSession.chart,
-      foundations,
-      ...draftContext,
-    });
     const result = await savingDirectory.saveAnnotation(document, draftBase.value, {
       sourceBytes: savingSession.sourceBytes,
       chart: savingSession.chart,
+      inspected: { chart: savingSession.chart, source: savingSession.source },
+      noteRefIndex: savingSession.noteRefIndex,
       ...draftContext,
     });
     if (result.status === "conflict") {
@@ -1724,6 +1976,7 @@ async function persistDocument(
     };
     saveState.value = "saved";
     saveMessage.value = `Revision ${result.version.revision} verified`;
+    foundationDetailsDigest.value = undefined;
     invalidateReleasePreview();
     queue.value = updateQueueItemStatus(
       queue.value,
@@ -1756,7 +2009,7 @@ async function persistDocument(
   }
 }
 
-function markDraft(): void {
+function markDraft(scheduleAutosave = true): void {
   if (
     !session.value ||
     !directory.value ||
@@ -1769,8 +2022,14 @@ function markDraft(): void {
   editorDirty.value = true;
   invalidateReleasePreview();
   saveMessage.value = "Draft journal pending";
-  queue.value = updateQueueItemStatus(queue.value, activeTaskId.value, "draft");
+  if (activeTask.value?.status !== "draft") {
+    queue.value = updateQueueItemStatus(queue.value, activeTaskId.value, "draft");
+  }
   if (draftTimer !== undefined) window.clearTimeout(draftTimer);
+  if (!scheduleAutosave) {
+    draftTimer = undefined;
+    return;
+  }
   draftTimer = window.setTimeout(() => {
     draftTimer = undefined;
     void persistDraftNow();
@@ -1794,7 +2053,16 @@ function markReviewNoteDraft(): void {
       activeTaskId.value,
       session.value.base ? session.value.document.reviewState : "unseen",
     );
-    void sessions.deleteDraft(directory.value.manifest.datasetId, session.value.source.sha256);
+    const datasetId = directory.value.manifest.datasetId;
+    const sourceSha256 = session.value.source.sha256;
+    const queued = draftWrite
+      .catch(() => {})
+      .then(() => sessions.deleteDraft(datasetId, sourceSha256));
+    draftWrite = queued;
+    void queued.catch((error) => {
+      saveState.value = "error";
+      saveMessage.value = errorMessage(error);
+    });
     return;
   }
   saveState.value = "draft";
@@ -1810,16 +2078,83 @@ function markReviewNoteDraft(): void {
 async function persistDraftNow(force = false): Promise<void> {
   if (!session.value || !directory.value || (!hasUncommittedDraft.value && !force)) return;
   const draft = buildDraft(session.value, directory.value.manifest.datasetId);
-  await sessions.putDraft(draft);
+  const queued = draftWrite.catch(() => {}).then(() => sessions.putDraft(draft));
+  draftWrite = queued;
+  await queued;
   if (saveState.value === "draft") saveMessage.value = "Draft journal saved";
 }
 
 async function flushDraft(): Promise<void> {
+  finalizeActiveGestures();
   if (draftTimer !== undefined) {
     window.clearTimeout(draftTimer);
     draftTimer = undefined;
   }
   if (hasUncommittedDraft.value) await persistDraftNow(true);
+  await draftWrite;
+}
+
+async function discardDraft(): Promise<void> {
+  const current = session.value;
+  const currentDirectory = directory.value;
+  const taskId = activeTaskId.value;
+  if (!current || !currentDirectory || !taskId || !hasUncommittedDraft.value || operationLocked.value) {
+    return;
+  }
+
+  pauseForEdit();
+  finalizeActiveGestures();
+  if (draftTimer !== undefined) {
+    window.clearTimeout(draftTimer);
+    draftTimer = undefined;
+  }
+
+  saveState.value = "saving";
+  saveMessage.value = "Discarding local draft";
+  try {
+    await draftWrite.catch(() => {});
+    await sessions.deleteDraft(currentDirectory.manifest.datasetId, current.source.sha256);
+  } catch (error) {
+    saveState.value = "error";
+    saveMessage.value = `Draft not discarded: ${errorMessage(error)}`;
+    return;
+  }
+
+  draftBase.value = current.base;
+  reviewNoteText.value = "";
+  reviewNoteIncludeSelection.value = true;
+  pendingTextUndo = undefined;
+  resetTaskQualityState();
+  clearEditor(playheadMs.value);
+  queue.value = updateQueueItemStatus(
+    queue.value,
+    taskId,
+    current.base ? current.document.reviewState : "unseen",
+  );
+  saveState.value = current.base ? "saved" : "idle";
+  saveMessage.value = current.base
+    ? `Draft discarded · revision ${current.base.revision} unchanged`
+    : "Draft discarded · chart remains unseen";
+  invalidateReleasePreview();
+}
+
+async function discardReadonlyDraft(): Promise<void> {
+  const task = readonlyTask.value;
+  const currentDirectory = directory.value;
+  if (!task?.source || !currentDirectory || !readonlyDraftPresent.value || taskLoading.value) return;
+
+  taskLoading.value = true;
+  taskError.value = "";
+  try {
+    await draftWrite.catch(() => {});
+    await sessions.deleteDraft(currentDirectory.manifest.datasetId, task.source.sha256);
+    readonlyDraftPresent.value = false;
+    saveMessage.value = `Annotation v${task.future?.version ?? "?"} · read-only · old draft discarded`;
+  } catch (error) {
+    taskError.value = `Draft not discarded: ${errorMessage(error)}`;
+  } finally {
+    taskLoading.value = false;
+  }
 }
 
 function buildDraft(current: BeatmapSession, datasetId: string): AnnotationDraft {
@@ -1832,6 +2167,7 @@ function buildDraft(current: BeatmapSession, datasetId: string): AnnotationDraft
       ? { editingAnnotationId: editingAnnotationId.value }
       : {}),
     labels: draftLabels.value,
+    exemplarRoles: draftExemplarRoles.value,
     noteRefs: [...selectedNoteIds.value].flatMap((id) => {
       const ref = current.noteRefs.get(id);
       return ref ? [ref] : [];
@@ -1854,10 +2190,12 @@ function clearEditor(startMs: number): void {
   draftStart.value = formatMs(range.startMs);
   draftEnd.value = formatMs(range.endMs);
   draftLabels.value = [];
+  draftExemplarRoles.value = [];
   judgmentNote.value = "";
   manualExclusions.value = new Set();
   focusedTagId.value = undefined;
   editorUndoStack.value = [];
+  resetExemplarComposer();
   selectAllCandidates(range);
   rangeError.value = "";
   editorDirty.value = false;
@@ -1896,27 +2234,6 @@ function filterTags(status: FoundationTagV1["status"]): readonly FoundationTagV1
         tag.id.includes(query) ||
         tag.displayName.toLowerCase().includes(query) ||
         tag.aliases.some((alias) => alias.toLowerCase().includes(query))),
-  );
-}
-
-async function loadReferencedFoundations(
-  document: AnnotationDocumentV1,
-  dataset: DatasetDirectory,
-): Promise<readonly { foundation: JudgmentFoundationV1; sha256: string }[]> {
-  const references: FoundationRefV1[] = [
-    dataset.manifest.currentFoundation,
-    ...document.annotations.map((annotation) => annotation.foundation),
-    ...document.predictions.map((prediction) => prediction.foundation),
-    ...document.reviewNotes.flatMap((note) =>
-      note.resultingFoundation ? [note.resultingFoundation] : [],
-    ),
-  ];
-  const unique = [...new Map(references.map((reference) => [reference.sha256, reference])).values()];
-  return Promise.all(
-    unique.map(async (reference) => ({
-      foundation: await dataset.readFoundation(reference),
-      sha256: reference.sha256,
-    })),
   );
 }
 
@@ -2035,6 +2352,12 @@ function linesFromText(value: string): string[] {
   return [...new Set(value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean))];
 }
 
+function sortExemplarRoles(
+  roles: readonly GoldExemplarRoleV1[],
+): readonly GoldExemplarRoleV1[] {
+  return [...roles].sort((left, right) => left.tagId.localeCompare(right.tagId));
+}
+
 function completionBlockerText(
   blocker: "open-review-note" | "pending-prediction" | "uncommitted-draft",
 ): string {
@@ -2074,7 +2397,7 @@ function errorMessage(error: unknown): string {
 
       <WorkspaceModeSwitch
         model-value="annotate"
-        @update:model-value="emit('change-mode', $event)"
+        @update:model-value="changeWorkspaceMode"
       />
 
       <div class="annotation-toolbar-status">
@@ -2326,6 +2649,15 @@ function errorMessage(error: unknown): string {
               <div><dt>Revision</dt><dd>{{ readonlyTask.future?.revision ?? "Unknown" }}</dd></div>
               <div><dt>Source SHA</dt><dd>{{ readonlyTask.source?.sha256.slice(0, 12) }}</dd></div>
             </dl>
+            <button
+              v-if="readonlyDraftPresent"
+              class="button button--quiet"
+              type="button"
+              :disabled="taskLoading"
+              @click="discardReadonlyDraft"
+            >
+              Discard incompatible local draft
+            </button>
           </div>
           <div v-else-if="session" class="interactive-stage-shell">
             <div class="falling-note-shell">
@@ -2335,11 +2667,11 @@ function errorMessage(error: unknown): string {
                 :class="{ 'is-locked': operationLocked }"
                 :viewBox="`0 0 ${viewportSize.width} ${viewportSize.height}`"
                 role="img"
-                :aria-label="`${session.source.keyCount}K falling-note evidence. Drag vertically to scrub.`"
-                @pointerdown="beginViewportScrub"
-                @pointermove="moveViewportScrub"
-                @pointerup="endViewportScrub"
-                @pointercancel="endViewportScrub"
+                :aria-label="`${session.source.keyCount}K falling-note evidence. Drag to select, Shift-drag to scrub, or hold Alt for free placement.`"
+                @pointerdown="beginViewportGesture"
+                @pointermove="moveViewportGesture"
+                @pointerup="endViewportGesture"
+                @pointercancel="endViewportGesture"
               >
                 <title>Interactive falling-note evidence</title>
                 <defs>
@@ -2449,11 +2781,12 @@ function errorMessage(error: unknown): string {
                   BUILD {{ formatMetric(viewportInstrumentation.lastBuildDurationMs) }} /
                   {{ formatMetric(viewportInstrumentation.maximumBuildDurationMs) }} ms
                 </span>
-                <span>P95 {{ formatMetric(frameP95Ms) }} ms</span>
+                <span>RAF P95 {{ formatMetric(frameP95Ms) }} ms</span>
               </div>
               <div class="viewport-legend" aria-hidden="true">
                 <span><i class="legend-mark legend-mark--selected"></i>Selected</span>
                 <span><i class="legend-mark legend-mark--saved"></i>Saved</span>
+                <span>Drag select · Shift scrub · Alt free</span>
               </div>
             </div>
 
@@ -2671,7 +3004,7 @@ function errorMessage(error: unknown): string {
                     v-model="draftStart"
                     inputmode="decimal"
                     @focus="beginTextEdit"
-                    @input="markDraft"
+                    @input="markDraft()"
                     @blur="finishRangeEdit"
                   />
                 </label>
@@ -2681,7 +3014,7 @@ function errorMessage(error: unknown): string {
                     v-model="draftEnd"
                     inputmode="decimal"
                     @focus="beginTextEdit"
-                    @input="markDraft"
+                    @input="markDraft()"
                     @blur="finishRangeEdit"
                   />
                 </label>
@@ -2691,11 +3024,11 @@ function errorMessage(error: unknown): string {
 
             <section class="editor-section" aria-labelledby="notes-heading">
               <div class="editor-section-heading">
-                <h3 id="notes-heading">Note evidence</h3>
-                <span>{{ selectedCount }} selected</span>
+                <h3 id="notes-heading">Range notes</h3>
+                <span>{{ selectedCount }} / {{ candidateNotes.length }} selected</span>
               </div>
               <div class="candidate-note-list">
-                <label v-for="note in candidateNotes" :key="note.id" class="candidate-note-row">
+                <label v-for="note in pagedRangeNotes" :key="note.id" class="candidate-note-row">
                   <input
                     type="checkbox"
                     :checked="selectedNoteIds.has(note.id)"
@@ -2705,6 +3038,19 @@ function errorMessage(error: unknown): string {
                   <strong>{{ formatMs(note.startTime) }}</strong>
                   <small>{{ note.kind === "long" ? `LN to ${formatMs(note.endTime)}` : "rice" }}</small>
                 </label>
+              </div>
+              <div v-if="rangeNotePageCount > 1" class="range-note-pagination">
+                <button
+                  type="button"
+                  :disabled="rangeNotePage === 0"
+                  @click="rangeNotePage--"
+                >Previous</button>
+                <span>Page {{ rangeNotePage + 1 }} / {{ rangeNotePageCount }}</span>
+                <button
+                  type="button"
+                  :disabled="rangeNotePage + 1 >= rangeNotePageCount"
+                  @click="rangeNotePage++"
+                >Next</button>
               </div>
             </section>
 
@@ -2720,7 +3066,7 @@ function errorMessage(error: unknown): string {
                 v-model="tagQuery"
                 class="tag-search"
                 type="search"
-                placeholder="Find an active or candidate tag"
+                placeholder="Find an active tag"
               />
               <button
                 v-if="canCreateCustomTag"
@@ -2738,40 +3084,30 @@ function errorMessage(error: unknown): string {
                 </li>
               </ul>
               <p v-else class="empty-copy">
-                This Foundation has no matching active tags. Candidate activation is required before
-                a tag can become gold.
+                This Foundation has no matching active tags. Create one with a definition and an
+                inclusion cue before adding it to gold.
               </p>
-
-              <ul v-if="candidateTags.length" class="tag-option-list tag-option-list--candidate" aria-label="Candidate Foundation tags">
-                <li v-for="tag in candidateTags" :key="tag.id">
-                  <button class="tag-option" type="button" @click="beginTagActivation(tag)">
-                    <span class="status-dot" aria-hidden="true"></span>
-                    <strong>{{ tag.displayName }}</strong>
-                    <small>Activate</small>
-                  </button>
-                </li>
-              </ul>
 
               <div v-if="suggestedTags.length" class="catalog-suggestion-group">
                 <span>Catalog suggestions</span>
                 <div class="suggestion-list">
                   <button
-                    v-for="tag in suggestedTags"
-                    :key="tag.id"
+                    v-for="suggestion in suggestedTags"
+                    :key="suggestion.id"
                     class="tag-chip tag-chip--button"
                     type="button"
-                    :disabled="tag.status === 'retired'"
-                    :title="tag.status === 'active' ? 'Add active tag' : 'Activate candidate tag'"
-                    @click="tag.status === 'active' ? addTag(tag) : beginTagActivation(tag)"
+                    :disabled="suggestion.tag?.status === 'retired'"
+                    :title="suggestion.tag?.status === 'active' ? 'Add active tag' : suggestion.tag?.status === 'retired' ? 'Retired tags cannot be reused' : 'Create this suggestion as an active tag'"
+                    @click="useSuggestedTag(suggestion)"
                   >
-                    {{ tag.id }} · {{ tag.status }}
+                    {{ suggestion.id }} · {{ suggestion.tag?.status ?? "define" }}
                   </button>
                 </div>
               </div>
 
               <form v-if="activationTag" class="activation-form" @submit.prevent="activateTag">
                 <div class="activation-form-heading">
-                  <span>{{ activationIsCustom ? "Activate custom tag" : "Activate candidate" }}</span>
+                  <span>{{ activationIsCustom ? "Create custom active tag" : "Define catalog suggestion" }}</span>
                   <strong>{{ activationTagId }}</strong>
                 </div>
                 <div class="activation-identity">
@@ -2814,7 +3150,7 @@ function errorMessage(error: unknown): string {
                     Cancel
                   </button>
                   <button class="button button--primary" type="submit" :disabled="activationBusy">
-                    {{ activationBusy ? "Saving Foundation" : "Activate and add" }}
+                    {{ activationBusy ? "Saving Foundation" : "Create active tag and add" }}
                   </button>
                 </div>
               </form>
@@ -2845,6 +3181,57 @@ function errorMessage(error: unknown): string {
                   </button>
                 </div>
               </div>
+              <div class="exemplar-role-editor">
+                <div class="editor-section-heading">
+                  <h3>Exemplar roles</h3>
+                  <span>Gold-owned · optional</span>
+                </div>
+                <p class="salience-rubric">
+                  Strong and weak roles require the matching label. Counterexamples require an
+                  active tag that is absent from this gold.
+                </p>
+                <form class="exemplar-role-composer" @submit.prevent="addExemplarRole">
+                  <label>
+                    <span>Kind</span>
+                    <select v-model="exemplarKind" @change="syncExemplarTag">
+                      <option value="strong">Strong</option>
+                      <option value="weak">Weak</option>
+                      <option value="counterexample">Counterexample</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Active tag</span>
+                    <select v-model="exemplarTagId" :disabled="!exemplarTagOptions.length">
+                      <option v-for="tag in exemplarTagOptions" :key="tag.id" :value="tag.id">
+                        {{ tag.id }}
+                      </option>
+                    </select>
+                  </label>
+                  <button class="button button--quiet" type="submit" :disabled="!exemplarTagId">
+                    Add role
+                  </button>
+                </form>
+                <div v-if="draftExemplarRoles.length" class="exemplar-role-list">
+                  <div v-for="role in draftExemplarRoles" :key="role.tagId" class="exemplar-role-row">
+                    <strong>{{ role.tagId }}</strong>
+                    <select
+                      :value="role.kind"
+                      :aria-label="`${role.tagId} exemplar kind`"
+                      @change="handleExemplarRoleKindChange(role.tagId, $event)"
+                    >
+                      <option v-for="kind in exemplarKindsForTag(role.tagId)" :key="kind" :value="kind">
+                        {{ kind }}
+                      </option>
+                    </select>
+                    <button
+                      class="icon-button"
+                      type="button"
+                      :aria-label="`Remove ${role.tagId} exemplar role`"
+                      @click="removeExemplarRole(role.tagId)"
+                    >×</button>
+                  </div>
+                </div>
+              </div>
               <div v-if="overlapWarnings.length" class="overlap-warning" role="status">
                 <strong>Same-tag overlap</strong>
                 <span v-for="warning in overlapWarnings" :key="`${warning.leftAnnotationId}:${warning.rightAnnotationId}:${warning.tagId}`">
@@ -2859,10 +3246,10 @@ function errorMessage(error: unknown): string {
                 <h3 id="foundation-heading">Judgment Foundation</h3>
                 <span>r{{ session.foundation.revision }} · {{ directory?.manifest.currentFoundation.sha256.slice(0, 10) }}</span>
               </div>
-              <details class="foundation-panel">
+              <details class="foundation-panel" @toggle="loadFoundationDetails">
                 <summary>
                   <strong>{{ session.foundation.tags.filter((tag) => tag.status === "active").length }} active</strong>
-                  <span>{{ session.foundation.tags.filter((tag) => tag.status === "candidate").length }} candidate</span>
+                  <span>{{ session.foundation.tags.filter((tag) => tag.status === "retired").length }} retired</span>
                 </summary>
                 <dl class="foundation-policy-grid">
                   <div><dt>Coordinates</dt><dd>source ms · half-open</dd></div>
@@ -2870,12 +3257,15 @@ function errorMessage(error: unknown): string {
                   <div><dt>Evidence</dt><dd>explicit notes · multi-label</dd></div>
                   <div><dt>Audio</dt><dd>optional context only</dd></div>
                 </dl>
+                <p class="foundation-detail-status" role="status">
+                  {{ foundationDetailsBusy ? "Loading canonical exemplar roles" : foundationDetailsMessage }}
+                </p>
                 <div class="foundation-tag-details">
                   <details
                     v-for="tag in session.foundation.tags.filter((entry) => entry.status === 'active')"
                     :key="tag.id"
                   >
-                    <summary><strong>{{ tag.id }}</strong><span>{{ tag.exemplars.length }} ex.</span></summary>
+                    <summary><strong>{{ tag.id }}</strong><span>{{ exemplarViewsForTag(tag.id).length }} roles</span></summary>
                     <p>{{ tag.definition }}</p>
                     <div class="foundation-cue-list">
                       <span>Include</span>
@@ -2887,6 +3277,13 @@ function errorMessage(error: unknown): string {
                     </div>
                     <small v-if="tag.aliases.length">Aliases · {{ tag.aliases.join(", ") }}</small>
                     <small v-if="tag.salienceClarification">Salience · {{ tag.salienceClarification }}</small>
+                    <ol v-if="exemplarViewsForTag(tag.id).length" class="foundation-exemplar-list">
+                      <li v-for="entry in exemplarViewsForTag(tag.id)" :key="`${entry.annotationId}:${entry.tagId}`">
+                        <strong>{{ entry.kind }}</strong>
+                        <span>{{ entry.sourceLabel }}</span>
+                        <small>{{ formatTime(entry.range.startMs) }}–{{ formatTime(entry.range.endMs) }}</small>
+                      </li>
+                    </ol>
                   </details>
                 </div>
               </details>
@@ -2899,19 +3296,30 @@ function errorMessage(error: unknown): string {
                   v-model="judgmentNote"
                   rows="3"
                   @focus="beginTextEdit"
-                  @input="markDraft"
+                  @input="markDraft()"
                   @blur="finishTextEdit"
                 ></textarea>
               </label>
-              <button
-                class="button button--primary commit-button"
-                type="button"
-                :disabled="saveState === 'saving'"
-                @click="commitAnnotation"
-              >
-                {{ editingAnnotationId ? "Update gold" : "Commit gold" }}
-                <span class="button-shortcut" aria-hidden="true">↵</span>
-              </button>
+              <div class="commit-actions">
+                <button
+                  v-if="hasUncommittedDraft"
+                  class="button button--quiet discard-button"
+                  type="button"
+                  :disabled="operationLocked"
+                  @click="discardDraft"
+                >
+                  Discard draft
+                </button>
+                <button
+                  class="button button--primary commit-button"
+                  type="button"
+                  :disabled="saveState === 'saving'"
+                  @click="commitAnnotation"
+                >
+                  {{ editingAnnotationId ? "Update gold" : "Commit gold" }}
+                  <span class="button-shortcut" aria-hidden="true">↵</span>
+                </button>
+              </div>
             </section>
 
             <section class="editor-section existing-section" aria-labelledby="existing-heading">
@@ -2929,42 +3337,17 @@ function errorMessage(error: unknown): string {
                     <span v-for="label in annotation.labels" :key="label.tagId">
                       {{ label.tagId }} {{ label.salience }}
                     </span>
+                    <span
+                      v-for="role in annotation.exemplarRoles"
+                      :key="`role-${role.tagId}`"
+                      class="annotation-role"
+                    >{{ role.tagId }} · {{ role.kind }}</span>
                   </div>
                   <div class="annotation-row-actions">
                     <button type="button" @click="playAnnotation(annotation)">Play</button>
                     <button type="button" @click="editAnnotation(annotation)">Edit</button>
-                    <button type="button" @click="beginExemplarPromotion(annotation)">Exemplar</button>
                     <button type="button" @click="deleteAnnotation(annotation)">Delete</button>
                   </div>
-                  <form
-                    v-if="exemplarAnnotationId === annotation.id"
-                    class="exemplar-form"
-                    @submit.prevent="promoteExemplar"
-                  >
-                    <label>
-                      <span>Kind</span>
-                      <select v-model="exemplarKind" @change="syncExemplarTag">
-                        <option value="strong">Strong</option>
-                        <option value="weak">Weak</option>
-                        <option value="counterexample">Counterexample</option>
-                      </select>
-                    </label>
-                    <label>
-                      <span>Foundation tag</span>
-                      <select v-model="exemplarTagId" :disabled="!exemplarTagOptions.length">
-                        <option v-for="tag in exemplarTagOptions" :key="tag.id" :value="tag.id">
-                          {{ tag.id }}
-                        </option>
-                      </select>
-                    </label>
-                    <p v-if="!exemplarTagOptions.length" class="empty-copy exemplar-empty">
-                      No compatible active tag is available for this exemplar kind.
-                    </p>
-                    <div class="exemplar-actions">
-                      <button type="button" @click="cancelExemplarPromotion">Cancel</button>
-                      <button type="submit" :disabled="!exemplarTagId">Promote</button>
-                    </div>
-                  </form>
                 </article>
               </div>
               <p v-else class="empty-copy">No gold sections saved for this chart.</p>
@@ -3057,10 +3440,9 @@ function errorMessage(error: unknown): string {
                 <button
                   class="button button--primary"
                   type="button"
-                  :disabled="hasUncommittedDraft"
                   @click="confirmGoldRelease"
                 >
-                  {{ hasUncommittedDraft ? "Finish draft before export" : "Confirm and write export" }}
+                  Confirm and write export
                 </button>
               </div>
             </section>
