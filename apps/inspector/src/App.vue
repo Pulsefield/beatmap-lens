@@ -5,7 +5,7 @@ import {
   renderSvg,
   toManiaChart,
 } from "beatmap-lens";
-import { nextTick, onMounted, ref } from "vue";
+import { computed, nextTick, onMounted, ref } from "vue";
 import { chartRenderRange } from "./chart-range";
 
 type Fact = {
@@ -21,6 +21,18 @@ type StatusItem = {
   tone: "ready" | "warn" | "error" | "muted";
   detail?: string;
 };
+
+type ChartSummary = {
+  title: string;
+  artist: string;
+  version: string;
+  keyCount: number;
+  noteCount: number;
+  longNoteCount: number;
+  diagnosticCount: number;
+};
+
+type MobilePanel = "source" | "preview" | "details";
 
 const sampleMap = `osu file format v14
 
@@ -74,14 +86,31 @@ const healthTone = ref<HealthTone>("idle");
 const facts = ref<Fact[]>([]);
 const statuses = ref<StatusItem[]>([]);
 const renderTime = ref("0.0 ms");
+const detailsVisible = ref(true);
+const activeMobilePanel = ref<MobilePanel>("preview");
+const expandedStatus = ref<number | null>(null);
+const chartSummary = ref<ChartSummary>({
+  title: "Night Switchback",
+  artist: "beatmap-lens",
+  version: "Original 4K smoke",
+  keyCount: 4,
+  noteCount: 20,
+  longNoteCount: 5,
+  diagnosticCount: 0,
+});
+const sourceLineCount = computed(() => source.value.split(/\r\n|\n|\r/).length);
 let runCount = 0;
 
-onMounted(runPipeline);
+onMounted(() => {
+  void runPipeline();
+});
 
-function runPipeline(): void {
+async function runPipeline(): Promise<void> {
   runCount += 1;
   runId.value = `run ${String(runCount).padStart(2, "0")}`;
+  expandedStatus.value = null;
   setHealth("Running", "idle");
+  await nextTick();
 
   try {
     const parseStartedAt = performance.now();
@@ -111,6 +140,7 @@ function runPipeline(): void {
       normalizeDuration,
       renderDuration,
     );
+    chartSummary.value = summarizeChart(chart);
     renderTime.value = `${renderDuration.toFixed(1)} ms`;
     setHealth(
       chart.diagnostics.length > 0 ? "Warnings" : "Ready",
@@ -121,6 +151,15 @@ function runPipeline(): void {
     renderSvgError(message);
     facts.value = [{ label: "Pipeline error", value: message }];
     statuses.value = [{ label: "pipeline", value: message, tone: "error" }];
+    chartSummary.value = {
+      title: "Preview unavailable",
+      artist: "Check the source and run the pipeline again",
+      version: "No chart loaded",
+      keyCount: 0,
+      noteCount: 0,
+      longNoteCount: 0,
+      diagnosticCount: 1,
+    };
     renderTime.value = "0.0 ms";
     setHealth("Error", "error");
   }
@@ -128,7 +167,7 @@ function runPipeline(): void {
 
 async function resetSource(): Promise<void> {
   source.value = sampleMap;
-  runPipeline();
+  await runPipeline();
   await nextTick();
   sourceInput.value?.focus();
 }
@@ -136,13 +175,26 @@ async function resetSource(): Promise<void> {
 function handleSourceKeydown(event: KeyboardEvent): void {
   if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
     event.preventDefault();
-    runPipeline();
+    void runPipeline();
   }
+}
+
+function summarizeChart(chart: ManiaChart): ChartSummary {
+  return {
+    title: chart.metadata.title ?? "Untitled",
+    artist: chart.metadata.artist ?? "Unknown artist",
+    version: chart.metadata.version ?? "Unknown version",
+    keyCount: chart.keyCount,
+    noteCount: chart.notes.length,
+    longNoteCount: chart.notes.filter((note) => note.kind === "long").length,
+    diagnosticCount: chart.diagnostics.length,
+  };
 }
 
 function chartFacts(chart: ManiaChart): Fact[] {
   return [
     { label: "Title", value: chart.metadata.title ?? "Untitled" },
+    { label: "Artist", value: chart.metadata.artist ?? "Unknown" },
     { label: "Version", value: chart.metadata.version ?? "Unknown" },
     { label: "Notes", value: String(chart.notes.length) },
     {
@@ -178,7 +230,8 @@ function statusItems(
   } else {
     items.push({
       label: firstDiagnostic.code,
-      value: chart.diagnostics.length === 1 ? "1 warning" : `${chart.diagnostics.length} warnings`,
+      value:
+        chart.diagnostics.length === 1 ? "1 warning" : `${chart.diagnostics.length} warnings`,
       tone: firstDiagnostic.severity === "error" ? "error" : "warn",
       detail: firstDiagnostic.message,
     });
@@ -218,6 +271,10 @@ function setHealth(text: string, tone: HealthTone): void {
   healthTone.value = tone;
 }
 
+function toggleStatus(index: number): void {
+  expandedStatus.value = expandedStatus.value === index ? null : index;
+}
+
 function formatError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -225,93 +282,246 @@ function formatError(error: unknown): string {
 
 <template>
   <main id="main-content" class="bench" tabindex="-1">
-    <header class="bench-header">
-      <div class="title-block">
-        <p class="eyebrow">beatmap-lens inspector</p>
-        <h1>Mania inspection bench</h1>
+    <header class="app-bar">
+      <div class="brand-lockup">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <div>
+          <p class="brand-name">Beatmap Lens</p>
+          <p class="brand-edition">Inspector</p>
+        </div>
       </div>
-      <div class="run-stack">
-        <span class="health-pill" :class="`health-pill--${healthTone}`">{{ healthText }}</span>
-        <span class="run-id">{{ runId }}</span>
+
+      <div class="chart-context">
+        <span class="chart-context-label">Current chart</span>
+        <strong>{{ chartSummary.title }}</strong>
+        <span aria-hidden="true">·</span>
+        <span>{{ chartSummary.version }}</span>
+      </div>
+
+      <div class="app-actions">
+        <div class="run-state" aria-live="polite">
+          <span class="health-status" :class="`health-status--${healthTone}`">
+            <span class="health-dot" aria-hidden="true"></span>
+            {{ healthText }}
+          </span>
+          <span class="run-id">{{ runId }}</span>
+        </div>
+
+        <button
+          class="button button--quiet details-toggle"
+          :class="{ 'is-active': detailsVisible }"
+          type="button"
+          :aria-expanded="detailsVisible"
+          aria-controls="details-panel"
+          :aria-label="detailsVisible ? 'Hide details' : 'Show details'"
+          @click="detailsVisible = !detailsVisible"
+        >
+          <svg aria-hidden="true" viewBox="0 0 16 16">
+            <path d="M3 3.5h10M3 8h10M3 12.5h10" />
+          </svg>
+          Details
+        </button>
+
+        <button
+          class="button button--primary run-button"
+          type="button"
+          aria-keyshortcuts="Control+Enter Meta+Enter"
+          @click="runPipeline"
+        >
+          <svg class="play-icon" aria-hidden="true" viewBox="0 0 16 16">
+            <path d="m5.25 3.4 7.1 4.1a.58.58 0 0 1 0 1l-7.1 4.1a.58.58 0 0 1-.87-.5V3.9a.58.58 0 0 1 .87-.5Z" />
+          </svg>
+          Run
+          <span class="button-shortcut" aria-hidden="true">⌘↵</span>
+        </button>
       </div>
     </header>
 
-    <div class="workspace">
-      <section class="source-pane" aria-labelledby="source-heading">
-        <div class="pane-head">
-          <div>
-            <h2 id="source-heading">osu! source</h2>
-            <p>Original 4K sample</p>
+    <nav class="mobile-view-switcher" aria-label="Workspace views">
+      <button
+        v-for="panel in (['source', 'preview', 'details'] as const)"
+        :key="panel"
+        class="mobile-view-button"
+        :class="{ 'is-active': activeMobilePanel === panel }"
+        type="button"
+        :aria-pressed="activeMobilePanel === panel"
+        @click="activeMobilePanel = panel"
+      >
+        {{ panel }}
+      </button>
+    </nav>
+
+    <div
+      class="workspace-shell"
+      :class="{ 'workspace-shell--details-hidden': !detailsVisible }"
+    >
+      <section
+        class="workspace-column source-column"
+        :class="{ 'is-mobile-active': activeMobilePanel === 'source' }"
+        aria-labelledby="source-heading"
+      >
+        <header class="column-header source-header">
+          <div class="section-heading">
+            <span class="section-number">01</span>
+            <div>
+              <h2 id="source-heading">Source</h2>
+              <p>osu!mania · source text</p>
+            </div>
           </div>
-          <div class="editor-actions">
-            <button class="button button--quiet" type="button" @click="resetSource">Reset</button>
-            <button
-              class="button button--primary"
-              type="button"
-              aria-keyshortcuts="Control+Enter Meta+Enter"
-              @click="runPipeline"
-            >
-              Run
-            </button>
-          </div>
+          <button class="button button--quiet reset-button" type="button" @click="resetSource">
+            <svg aria-hidden="true" viewBox="0 0 16 16">
+              <path d="M13 4.75V1.9m0 2.85h-2.85M12.55 8A5 5 0 1 1 11.1 4.45" />
+            </svg>
+            Reset
+          </button>
+        </header>
+
+        <div class="editor-shell">
+          <label class="sr-only" for="source-input">osu! beatmap source</label>
+          <textarea
+            id="source-input"
+            ref="sourceInput"
+            v-model="source"
+            spellcheck="false"
+            autocapitalize="off"
+            autocomplete="off"
+            aria-describedby="source-help"
+            @keydown="handleSourceKeydown"
+          ></textarea>
         </div>
-        <label class="sr-only" for="source-input">osu! beatmap source</label>
-        <textarea
-          id="source-input"
-          ref="sourceInput"
-          v-model="source"
-          spellcheck="false"
-          autocapitalize="off"
-          autocomplete="off"
-          @keydown="handleSourceKeydown"
-        ></textarea>
+
+        <footer id="source-help" class="source-footer">
+          <span>{{ sourceLineCount }} lines</span>
+          <span class="keyboard-hint"><kbd>⌘ / Ctrl</kbd><kbd>↵</kbd> to run</span>
+        </footer>
       </section>
 
-      <section class="output-pane" aria-label="Rendered output and facts">
-        <div class="preview-grid">
-          <section class="svg-surface" aria-labelledby="preview-heading">
-            <div class="surface-head">
-              <h2 id="preview-heading">renderSvg output</h2>
-              <span class="metric">{{ renderTime }}</span>
-            </div>
+      <section
+        class="workspace-column preview-column"
+        :class="{ 'is-mobile-active': activeMobilePanel === 'preview' }"
+        aria-labelledby="preview-heading"
+      >
+        <header class="column-header preview-header">
+          <div class="preview-title">
+            <p class="section-kicker"><span class="section-number">02</span> Chart preview</p>
+            <h1 id="preview-heading">{{ chartSummary.title }}</h1>
+            <p class="chart-byline">
+              <strong>{{ chartSummary.artist }}</strong>
+              <span aria-hidden="true">·</span>
+              {{ chartSummary.version }}
+            </p>
+          </div>
+          <div class="render-timing">
+            <span>renderSvg</span>
+            <strong>{{ renderTime }}</strong>
+          </div>
+        </header>
+
+        <div class="metric-rail">
+          <div class="metric-item">
+            <span>Keys</span>
+            <strong>{{ chartSummary.keyCount }}K</strong>
+          </div>
+          <div class="metric-item">
+            <span>Objects</span>
+            <strong>{{ chartSummary.noteCount }}</strong>
+          </div>
+          <div class="metric-item">
+            <span>Holds</span>
+            <strong>{{ chartSummary.longNoteCount }}</strong>
+          </div>
+          <div class="metric-item">
+            <span>Warnings</span>
+            <strong>{{ chartSummary.diagnosticCount }}</strong>
+          </div>
+        </div>
+
+        <div class="preview-body" :aria-busy="healthText === 'Running'">
+          <div class="preview-frame">
             <div
               ref="svgOutput"
               class="svg-output"
-              role="img"
-              aria-label="SVG preview"
+              aria-live="polite"
             ></div>
-          </section>
-
-          <aside class="facts-pane" aria-labelledby="facts-heading">
-            <div class="surface-head">
-              <h2 id="facts-heading">Chart facts</h2>
-            </div>
-            <dl class="facts-list">
-              <div v-for="fact in facts" :key="fact.label" class="fact-item">
-                <dt>{{ fact.label }}</dt>
-                <dd>{{ fact.value }}</dd>
-              </div>
-            </dl>
-          </aside>
+          </div>
         </div>
-
       </section>
-    </div>
 
-    <section class="diagnostic-strip" aria-labelledby="diagnostic-heading">
-      <h2 id="diagnostic-heading" class="sr-only">Diagnostics</h2>
-      <div class="diagnostic-items">
-        <div
-          v-for="(item, index) in statuses"
-          :key="`${item.label}-${index}`"
-          class="diagnostic"
-          :class="`diagnostic--${item.tone}`"
-          :title="item.detail"
-        >
-          <span class="diagnostic-label">{{ item.label }}</span>
-          <span class="diagnostic-value">{{ item.value }}</span>
-        </div>
-      </div>
-    </section>
+      <aside
+        id="details-panel"
+        class="workspace-column details-column"
+        :class="{ 'is-mobile-active': activeMobilePanel === 'details' }"
+        aria-labelledby="details-heading"
+      >
+        <header class="column-header details-header">
+          <div class="section-heading">
+            <span class="section-number">03</span>
+            <div>
+              <h2 id="details-heading">Details</h2>
+              <p>Facts and pipeline</p>
+            </div>
+          </div>
+        </header>
+
+        <section class="details-section" aria-labelledby="facts-heading">
+          <h3 id="facts-heading">Chart facts</h3>
+          <dl class="facts-list">
+            <div v-for="fact in facts" :key="fact.label" class="fact-item">
+              <dt>{{ fact.label }}</dt>
+              <dd>{{ fact.value }}</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section class="details-section pipeline-section" aria-labelledby="diagnostic-heading">
+          <h3 id="diagnostic-heading">Pipeline</h3>
+          <div class="diagnostic-list">
+            <template
+              v-for="(item, index) in statuses"
+              :key="`${item.label}-${index}`"
+            >
+              <button
+                v-if="item.detail"
+                class="diagnostic has-detail"
+                :class="[
+                  `diagnostic--${item.tone}`,
+                  { 'is-expanded': expandedStatus === index },
+                ]"
+                type="button"
+                :aria-expanded="expandedStatus === index"
+                @click="toggleStatus(index)"
+              >
+                <div class="diagnostic-main">
+                  <span class="diagnostic-dot" aria-hidden="true"></span>
+                  <span class="diagnostic-label">{{ item.label }}</span>
+                </div>
+                <span class="diagnostic-result">
+                  <span class="diagnostic-value">{{ item.value }}</span>
+                  <svg
+                    class="diagnostic-chevron"
+                    aria-hidden="true"
+                    viewBox="0 0 12 12"
+                  >
+                    <path d="m3 4.5 3 3 3-3" />
+                  </svg>
+                </span>
+                <p v-if="expandedStatus === index" class="diagnostic-detail">
+                  {{ item.detail }}
+                </p>
+              </button>
+              <div v-else class="diagnostic" :class="`diagnostic--${item.tone}`">
+                <div class="diagnostic-main">
+                  <span class="diagnostic-dot" aria-hidden="true"></span>
+                  <span class="diagnostic-label">{{ item.label }}</span>
+                </div>
+                <span class="diagnostic-result">
+                  <span class="diagnostic-value">{{ item.value }}</span>
+                </span>
+              </div>
+            </template>
+          </div>
+        </section>
+      </aside>
+    </div>
   </main>
 </template>
