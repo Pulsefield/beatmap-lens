@@ -10,6 +10,11 @@ import {
   watch,
 } from "vue";
 import {
+  AudioPlaybackController,
+  type AudioPlaybackStatus,
+  createBeatmapAudioFileContext,
+} from "./annotation/audio-playback";
+import {
   type BeatmapSession,
   createGoldAnnotation,
   loadBeatmapSession,
@@ -64,9 +69,8 @@ import {
 } from "./annotation/note-selection";
 import { ManiaNoteTimeIndex } from "./annotation/note-time-index";
 import { createOverviewDensityPath } from "./annotation/overview-density";
-import {
-  type PlaybackClockState,
-  SyntheticPlaybackClock,
+import type {
+  PlaybackClockState,
 } from "./annotation/playback-clock";
 import { rangeCandidates } from "./annotation/range";
 import {
@@ -182,21 +186,26 @@ const playbackState = ref<PlaybackClockState>({
   playing: false,
   looping: false,
 });
+const musicEnabled = ref(false);
+const audioStatus = ref<AudioPlaybackStatus>({ kind: "idle" });
 const focusedTagId = ref<string>();
 const editorUndoStack = ref<readonly EditorUndoState[]>([]);
 const draftBase = ref<DraftBaseVersion | null>(null);
 const setupRestored = ref(false);
 const editorDirty = ref(false);
+const interactiveSessionGeneration = ref(0);
 let draftTimer: number | undefined;
 let viewportController: BufferedSceneController | undefined;
 let noteTimeIndex: ManiaNoteTimeIndex | undefined;
-let playbackClock: SyntheticPlaybackClock | undefined;
+let playbackClock: AudioPlaybackController | undefined;
 let unsubscribePlayback: (() => void) | undefined;
+let unsubscribeAudio: (() => void) | undefined;
 let viewportResizeObserver: ResizeObserver | undefined;
 let timelineDrag: TimelineDragState | undefined;
 let viewportDrag: ViewportDragState | undefined;
 let pendingTextUndo: EditorUndoState | undefined;
 let taskOpenGeneration = 0;
+let preferenceWrite = Promise.resolve();
 const frameDurations: number[] = [];
 
 const activeTask = computed(() =>
@@ -283,6 +292,15 @@ const saveTone = computed(() => {
   if (saveState.value === "draft") return "warn";
   return "idle";
 });
+const audioStatusText = computed(() => {
+  const status = audioStatus.value;
+  if (status.kind === "ready") {
+    return musicEnabled.value ? "Music on · media clock" : "Audio ready · Music off";
+  }
+  if (status.kind === "loading") return "Resolving chart audio";
+  if (status.kind === "idle") return "Synthetic clock · Music off";
+  return status.message;
+});
 
 onMounted(async () => {
   window.addEventListener("keydown", handleWorkspaceKeydown);
@@ -294,6 +312,7 @@ onMounted(async () => {
       annotatorId.value = preferences.annotatorId;
       visualSpeed.value = preferences.visualSpeed;
       visualSpeedDraft.value = String(preferences.visualSpeed);
+      musicEnabled.value = preferences.musicEnabled;
     }
 
     const storedDataset = await sessions.getDirectoryHandle<BrowserDirectoryHandle>("dataset");
@@ -315,10 +334,10 @@ onBeforeUnmount(() => {
 });
 
 watch(
-  () => session.value?.source.sha256,
+  interactiveSessionGeneration,
   async () => {
     await nextTick();
-    initializeInteractiveSession();
+    await initializeInteractiveSession();
   },
   { flush: "post" },
 );
@@ -367,7 +386,7 @@ async function startWorkspace(): Promise<void> {
 
     await sessions.setPreferences({
       annotatorId: id,
-      musicEnabled: false,
+      musicEnabled: musicEnabled.value,
       visualSpeed: visualSpeed.value,
     });
 
@@ -442,6 +461,7 @@ async function openTask(task: TaskQueueItem): Promise<void> {
     if (generation !== taskOpenGeneration) return;
     if (task.status === "readonly-future") {
       session.value = undefined;
+      interactiveSessionGeneration.value++;
       readonlyTask.value = task;
       activeTaskId.value = task.id;
       saveState.value = "idle";
@@ -460,6 +480,7 @@ async function openTask(task: TaskQueueItem): Promise<void> {
     session.value = next;
     activeTaskId.value = task.id;
     restoreEditor(next);
+    interactiveSessionGeneration.value++;
     await nextTick();
   } catch (error) {
     taskError.value = errorMessage(error);
@@ -510,21 +531,27 @@ function restoreEditor(next: BeatmapSession): void {
   editorUndoStack.value = readUndoState(draft?.undoState);
 }
 
-function initializeInteractiveSession(): void {
+async function initializeInteractiveSession(): Promise<void> {
   disposeInteractiveSession();
   const current = session.value;
   const svg = viewportSvg.value;
   if (!current || !svg) return;
 
   noteTimeIndex = new ManiaNoteTimeIndex(current.chart.notes);
-  playbackClock = new SyntheticPlaybackClock();
+  const controller = new AudioPlaybackController({
+    preferenceStore: {
+      getItem: () => (musicEnabled.value ? "on" : "off"),
+      setItem: () => {},
+    },
+  });
+  playbackClock = controller;
   const initialTime = Math.min(Math.max(0, playheadMs.value), current.chartEndMs);
-  unsubscribePlayback = playbackClock.subscribe((state) => {
+  unsubscribePlayback = controller.subscribe((state) => {
     const active = session.value;
     if (!active || active.source.sha256 !== current.source.sha256) return;
     if (state.currentTimeMs > active.chartEndMs) {
-      playbackClock?.pause();
-      playbackClock?.seek(active.chartEndMs);
+      controller.seek(active.chartEndMs);
+      controller.pause();
       return;
     }
 
@@ -534,16 +561,40 @@ function initializeInteractiveSession(): void {
     updateViewportFrame(state.currentTimeMs);
     recordFrameDuration(performance.now() - startedAt);
   });
-  playbackClock.seek(initialTime);
+  unsubscribeAudio = controller.subscribeAudio((state) => {
+    if (playbackClock !== controller) return;
+    musicEnabled.value = state.musicEnabled;
+    audioStatus.value = state.status;
+  });
+  controller.seek(initialTime);
   viewportResizeObserver?.observe(svg);
   if (overviewSvg.value) viewportResizeObserver?.observe(overviewSvg.value);
   refreshInteractiveGeometry();
+
+  const corpus = corpusHandle.value;
+  if (!corpus) return;
+  try {
+    const context = await createBeatmapAudioFileContext(
+      corpus as unknown as FileSystemDirectoryHandle,
+      current.task,
+      current.parsed,
+    );
+    if (playbackClock === controller && session.value?.source.sha256 === current.source.sha256) {
+      await controller.loadBeatmapAudio(context);
+    }
+  } catch (error) {
+    if (playbackClock === controller) {
+      audioStatus.value = { kind: "missing", message: errorMessage(error) };
+    }
+  }
 }
 
 function disposeInteractiveSession(): void {
   viewportResizeObserver?.disconnect();
   unsubscribePlayback?.();
   unsubscribePlayback = undefined;
+  unsubscribeAudio?.();
+  unsubscribeAudio = undefined;
   playbackClock?.dispose();
   playbackClock = undefined;
   viewportController = undefined;
@@ -551,6 +602,7 @@ function disposeInteractiveSession(): void {
   viewportFrame.value = undefined;
   viewportInstrumentation.value = undefined;
   playbackState.value = { currentTimeMs: playheadMs.value, playing: false, looping: false };
+  audioStatus.value = { kind: "idle" };
   timelineDrag = undefined;
   viewportDrag = undefined;
   pendingTextUndo = undefined;
@@ -615,6 +667,13 @@ async function togglePlayback(): Promise<void> {
   await playbackClock.play();
 }
 
+async function toggleMusic(): Promise<void> {
+  const controller = playbackClock;
+  if (!controller || operationLocked.value) return;
+  await controller.setMusicEnabled(!musicEnabled.value);
+  await persistSessionPreferences();
+}
+
 async function playSelectionOnce(): Promise<void> {
   const range = parsedRange.value;
   if (!playbackClock || !range || operationLocked.value) return;
@@ -667,13 +726,20 @@ async function applyVisualSpeed(): Promise<void> {
     viewportFrame.value = viewportController.setVisualSpeed(speed, playheadMs.value);
     viewportInstrumentation.value = viewportController.instrumentation();
   }
-  const preferences = await sessions.getPreferences();
-  await sessions.setPreferences({
-    annotatorId: annotatorId.value.trim(),
-    musicEnabled: preferences?.musicEnabled ?? false,
-    visualSpeed: speed,
-  });
+  await persistSessionPreferences();
   if (editorDirty.value) await persistDraftNow(true);
+}
+
+function persistSessionPreferences(): Promise<void> {
+  const preferences = {
+    annotatorId: annotatorId.value.trim(),
+    musicEnabled: musicEnabled.value,
+    visualSpeed: visualSpeed.value,
+  };
+  preferenceWrite = preferenceWrite
+    .catch(() => {})
+    .then(() => sessions.setPreferences(preferences));
+  return preferenceWrite;
 }
 
 function applyTimelineRange(range: TimeRangeV1, captureUndo = true): void {
@@ -2074,6 +2140,14 @@ function errorMessage(error: unknown): string {
                   :aria-pressed="playbackState.looping"
                   @click="toggleSelectionLoop"
                 >Loop <kbd>L</kbd></button>
+                <button
+                  class="transport-button"
+                  :class="{ 'is-active': musicEnabled }"
+                  type="button"
+                  :disabled="operationLocked"
+                  :aria-pressed="musicEnabled"
+                  @click="toggleMusic"
+                >Music {{ musicEnabled ? "On" : "Off" }}</button>
               </fieldset>
               <div class="speed-controls">
                 <span>Visual speed</span>
@@ -2106,6 +2180,11 @@ function errorMessage(error: unknown): string {
               <div class="playback-meta">
                 <strong>{{ formatTime(playheadMs) }}</strong>
                 <span>I/O edges · 1/2 salience · [ ] saved · ⌘/Ctrl Z undo</span>
+                <small
+                  class="audio-status"
+                  :class="`audio-status--${audioStatus.kind}`"
+                  role="status"
+                >{{ audioStatusText }}</small>
                 <small v-if="visualSpeedError" role="alert">{{ visualSpeedError }}</small>
               </div>
             </div>

@@ -2374,6 +2374,20 @@ button:disabled {
   color: var(--danger);
 }
 
+.playback-meta .audio-status {
+  color: var(--ink-muted);
+}
+
+.playback-meta .audio-status--ready {
+  color: var(--ready);
+}
+
+.playback-meta .audio-status--missing,
+.playback-meta .audio-status--unsupported,
+.playback-meta .audio-status--rejected {
+  color: var(--warning);
+}
+
 .annotation-details-rail {
   overflow: auto;
   overscroll-behavior: contain;
@@ -2958,7 +2972,7 @@ button:disabled {
 
   .transport-controls {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .transport-button {
