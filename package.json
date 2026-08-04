@@ -11,8 +11,9 @@
   "scripts": {
     "benchmark": "vitest bench --run",
     "build": "pnpm --recursive --if-present build",
+    "catalog:map-local": "node scripts/build-pattern-category-map.mjs",
     "changeset": "changeset",
-    "check": "pnpm check:source && pnpm typecheck && pnpm test && pnpm build && pnpm check:package && pnpm test:corpus-validator",
+    "check": "pnpm check:source && pnpm typecheck && pnpm test && pnpm build && pnpm check:package && pnpm test:corpus-validator && pnpm test:pattern-category-map",
     "check:package": "pnpm --filter beatmap-lens pack --dry-run",
     "check:source": "biome ci .",
     "dev": "pnpm --filter @pulsefield/beatmap-lens-inspector dev",
@@ -20,6 +21,7 @@
     "release": "pnpm build && changeset publish",
     "test": "vitest run",
     "test:corpus-validator": "node scripts/test-corpus-validator.mjs",
+    "test:pattern-category-map": "node scripts/test-pattern-category-map.mjs",
     "test:watch": "vitest",
     "typecheck": "pnpm --recursive --if-present typecheck",
     "prevalidate:corpus": "pnpm --filter beatmap-lens build",

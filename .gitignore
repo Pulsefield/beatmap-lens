@@ -13,4 +13,6 @@ coverage/
 .env.*
 !.env.example
 
+/.local/beatmap-pattern-categories.json
+
 AGENTS.override.md
