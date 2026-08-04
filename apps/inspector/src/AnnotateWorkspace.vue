@@ -66,6 +66,15 @@ import {
   createActiveFoundationTagV1,
 } from "./annotation/foundation";
 import {
+  createGestureTransaction,
+  finalizeGestureTransaction,
+  type GestureFinalization,
+  type GestureTransaction,
+  previewGestureTransaction,
+  rollbackGestureTransaction,
+  updateGestureTransaction,
+} from "./annotation/gesture-transaction";
+import {
   changeNoteSelectionRange,
   createNoteSelection,
   toggleSelectedNote,
@@ -133,15 +142,10 @@ interface EditorUndoState {
 }
 
 interface TimelineDragState {
-  readonly pointerId: number;
-  readonly kind: TimelineDragKind;
-  readonly anchorMs: number;
-  readonly startClientX: number;
+  readonly transaction: GestureTransaction<EditorUndoState, TimelineDragKind>;
   readonly range?: TimeRangeV1;
   freePlacement: boolean;
-  lastClientX: number;
   moved: boolean;
-  undoCaptured: boolean;
 }
 
 interface ViewportDragState {
@@ -150,10 +154,10 @@ interface ViewportDragState {
   readonly anchorMs: number;
   readonly startClientY: number;
   readonly startTimeMs: number;
+  readonly transaction?: GestureTransaction<EditorUndoState, "select">;
   freePlacement: boolean;
   lastClientY: number;
   moved: boolean;
-  undoCaptured: boolean;
 }
 
 interface FoundationExemplarView {
@@ -236,6 +240,7 @@ const overviewWidth = ref(720);
 const viewportFrame = shallowRef<BufferedSceneFrame>();
 const viewportInstrumentation = ref<BufferedSceneInstrumentation>();
 const frameP95Ms = ref(0);
+const gestureActive = ref(false);
 const rangeNotePage = ref(0);
 const playbackState = ref<PlaybackClockState>({
   currentTimeMs: 0,
@@ -325,7 +330,9 @@ const activationBusy = computed(() => operationFlags.value.activationBusy);
 const draftCleanupBlocked = computed(
   () => workspaceLifecycle.draftLifecycle === "cleanup-error",
 );
-const editorLocked = computed(() => operationLocked.value || draftCleanupBlocked.value);
+const editorLocked = computed(
+  () => operationLocked.value || draftCleanupBlocked.value || gestureActive.value,
+);
 const draftRecoveryVisible = computed(
   () =>
     hasUncommittedDraft.value ||
@@ -486,10 +493,10 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  rollbackActiveGesturesForDispose();
   void flushDraft().catch(() => {});
   window.removeEventListener("keydown", handleWorkspaceKeydown);
   document.removeEventListener("visibilitychange", handleVisibilityChange);
-  if (gestureFrame !== undefined) cancelAnimationFrame(gestureFrame);
   disposeInteractiveSession();
   viewportResizeObserver?.disconnect();
 });
@@ -791,6 +798,7 @@ async function initializeInteractiveSession(): Promise<void> {
 }
 
 function disposeInteractiveSession(): void {
+  rollbackActiveGesturesForDispose();
   viewportResizeObserver?.disconnect();
   unsubscribePlayback?.();
   unsubscribePlayback = undefined;
@@ -927,6 +935,7 @@ async function applyVisualSpeed(): Promise<void> {
     return;
   }
 
+  await finalizeActiveGestures();
   visualSpeedError.value = "";
   visualSpeed.value = speed;
   if (viewportController) {
@@ -954,11 +963,16 @@ function applyTimelineRange(
   captureUndo = true,
   updateDraft = true,
 ): void {
-  const current = session.value;
-  if (!current || editorLocked.value) return;
+  if (editorLocked.value) return;
   pauseForEdit();
   if (captureUndo) recordEditorUndo();
+  applyTimelineRangeState(range);
+  if (updateDraft) markDraft();
+}
 
+function applyTimelineRangeState(range: TimeRangeV1): void {
+  const current = session.value;
+  if (!current) return;
   const previous = parsedRange.value;
   const selection = previous
     ? changeNoteSelectionRange(
@@ -973,13 +987,21 @@ function applyTimelineRange(
   manualExclusions.value = selection.manualExclusions;
   rangeNotePage.value = 0;
   rangeError.value = "";
-  if (updateDraft) markDraft();
 }
 
 function beginTimelineDrag(event: PointerEvent, kind: TimelineDragKind): void {
   const svg = overviewSvg.value;
   const current = session.value;
-  if (!svg || !current || !noteTimeIndex || editorLocked.value) return;
+  if (
+    !svg ||
+    !current ||
+    !noteTimeIndex ||
+    editorLocked.value ||
+    timelineDrag ||
+    viewportDrag
+  ) {
+    return;
+  }
   const range = parsedRange.value ?? undefined;
   if (kind !== "create" && !range) return;
 
@@ -987,107 +1009,91 @@ function beginTimelineDrag(event: PointerEvent, kind: TimelineDragKind): void {
   pauseForEdit();
   svg.setPointerCapture(event.pointerId);
   timelineDrag = {
-    pointerId: event.pointerId,
-    kind,
-    anchorMs: overviewTimeFromPointer(event),
-    startClientX: event.clientX,
-    lastClientX: event.clientX,
+    transaction: createGestureTransaction({
+      anchorMs: overviewTimeFromPointer(event),
+      before: captureGestureSnapshot(),
+      kind,
+      pointerId: event.pointerId,
+      startCoordinate: event.clientX,
+    }),
     freePlacement: event.altKey,
     ...(range ? { range } : {}),
     moved: false,
-    undoCaptured: false,
   };
+  gestureActive.value = true;
 }
 
 function moveTimelineDrag(event: PointerEvent): void {
   const drag = timelineDrag;
-  if (!drag || drag.pointerId !== event.pointerId) return;
-  drag.lastClientX = event.clientX;
+  if (!drag || drag.transaction.pointerId !== event.pointerId) return;
+  updateGestureTransaction(drag.transaction, event.clientX);
   drag.freePlacement = event.altKey;
-  if (Math.abs(event.clientX - drag.startClientX) >= 2) drag.moved = true;
+  if (Math.abs(event.clientX - drag.transaction.startCoordinate) >= 2) drag.moved = true;
   if (!drag.moved) return;
   queueGestureFrame();
 }
 
 function applyTimelineDragPreview(): void {
   const drag = timelineDrag;
-  const current = session.value;
-  const index = noteTimeIndex;
-  if (!drag?.moved || !current || !index) return;
-
-  const timeMs = overviewTimeFromClientX(drag.lastClientX);
-  const options = {
-    chartEndMs: current.chartEndMs,
-    freePlacement: drag.freePlacement,
-  };
-  const range =
-    drag.kind === "create"
-      ? createTimelineRange(drag.anchorMs, timeMs, index, options)
-      : drag.kind === "move" && drag.range
-        ? moveTimelineRange(drag.range, timeMs - drag.anchorMs, index, options)
-        : drag.range
-          ? resizeTimelineRange(
-              drag.range,
-              drag.kind === "resize-start" ? "start" : "end",
-              timeMs,
-              index,
-              options,
-            )
-          : undefined;
-  if (!range) return;
-  if (!drag.undoCaptured) {
-    recordEditorUndo();
-    drag.undoCaptured = true;
-    markDraft(false);
-  }
-  applyTimelineRange(range, false, false);
+  if (!drag?.moved) return;
+  applyGesturePreview(drag.transaction, timelineRangeForDrag(drag));
 }
 
 async function endTimelineDrag(event: PointerEvent): Promise<void> {
   const drag = timelineDrag;
-  const svg = overviewSvg.value;
-  if (!drag || drag.pointerId !== event.pointerId) return;
-  drag.lastClientX = event.clientX;
+  if (!drag || drag.transaction.pointerId !== event.pointerId) return;
+  updateGestureTransaction(drag.transaction, event.clientX);
   drag.freePlacement = event.altKey;
-  if (Math.abs(event.clientX - drag.startClientX) >= 2) drag.moved = true;
-  flushGestureFrame();
+  if (Math.abs(event.clientX - drag.transaction.startCoordinate) >= 2) drag.moved = true;
   if (!drag.moved && event.type === "pointerup") seekPlayhead(overviewTimeFromPointer(event));
-  if (svg?.hasPointerCapture(event.pointerId)) svg.releasePointerCapture(event.pointerId);
-  timelineDrag = undefined;
-  if (drag.undoCaptured) await persistDraftNow(true);
+  await finalizeActiveGestures().catch(() => {});
 }
 
 function beginViewportGesture(event: PointerEvent): void {
   const svg = viewportSvg.value;
-  if (!svg || !session.value || editorLocked.value) return;
+  if (!svg || !session.value || editorLocked.value || timelineDrag || viewportDrag) return;
   event.preventDefault();
   pauseForEdit();
   svg.setPointerCapture(event.pointerId);
   const startTimeMs = playheadMs.value;
   const startY = viewportYFromClientY(event.clientY);
+  const anchorMs = viewportYToSourceTime({
+    chartEndMs: session.value.chartEndMs,
+    pixelsPerSecond: visualSpeed.value,
+    playheadMs: startTimeMs,
+    viewportHeight: viewportSize.value.height,
+    viewportY: startY,
+  });
+  const kind = event.shiftKey ? "scrub" : "select";
   viewportDrag = {
     pointerId: event.pointerId,
-    kind: event.shiftKey ? "scrub" : "select",
-    anchorMs: viewportYToSourceTime({
-      chartEndMs: session.value.chartEndMs,
-      pixelsPerSecond: visualSpeed.value,
-      playheadMs: startTimeMs,
-      viewportHeight: viewportSize.value.height,
-      viewportY: startY,
-    }),
+    kind,
+    anchorMs,
     startClientY: event.clientY,
     startTimeMs,
+    ...(kind === "select"
+      ? {
+          transaction: createGestureTransaction({
+            anchorMs,
+            before: captureGestureSnapshot(),
+            kind,
+            pointerId: event.pointerId,
+            startCoordinate: event.clientY,
+          }),
+        }
+      : {}),
     lastClientY: event.clientY,
     freePlacement: event.altKey,
     moved: false,
-    undoCaptured: false,
   };
+  gestureActive.value = true;
 }
 
 function moveViewportGesture(event: PointerEvent): void {
   const drag = viewportDrag;
   if (!drag || drag.pointerId !== event.pointerId) return;
   drag.lastClientY = event.clientY;
+  if (drag.transaction) updateGestureTransaction(drag.transaction, event.clientY);
   drag.freePlacement = event.altKey;
   if (Math.abs(drag.startClientY - event.clientY) >= 2) drag.moved = true;
   if (!drag.moved) return;
@@ -1101,39 +1107,21 @@ function applyViewportGesturePreview(): void {
   if (!drag?.moved || !current || !index) return;
 
   if (drag.kind === "scrub") {
-    const deltaY = drag.startClientY - drag.lastClientY;
-    seekPlayhead(drag.startTimeMs + (deltaY / visualSpeed.value) * 1_000);
+    applyViewportScrub(drag);
     return;
   }
-
-  const focusMs = viewportYToSourceTime({
-    chartEndMs: current.chartEndMs,
-    pixelsPerSecond: visualSpeed.value,
-    playheadMs: drag.startTimeMs,
-    viewportHeight: viewportSize.value.height,
-    viewportY: viewportYFromClientY(drag.lastClientY),
-  });
-  const range = createTimelineRange(drag.anchorMs, focusMs, index, {
-    chartEndMs: current.chartEndMs,
-    freePlacement: drag.freePlacement,
-  });
-  if (!range) return;
-  if (!drag.undoCaptured) {
-    recordEditorUndo();
-    drag.undoCaptured = true;
-    markDraft(false);
-  }
-  applyTimelineRange(range, false, false);
+  const transaction = drag.transaction;
+  if (!transaction) return;
+  applyGesturePreview(transaction, viewportRangeForDrag(drag, current, index));
 }
 
 async function endViewportGesture(event: PointerEvent): Promise<void> {
   const drag = viewportDrag;
-  const svg = viewportSvg.value;
   if (!drag || drag.pointerId !== event.pointerId) return;
   drag.lastClientY = event.clientY;
+  if (drag.transaction) updateGestureTransaction(drag.transaction, event.clientY);
   drag.freePlacement = event.altKey;
   if (Math.abs(drag.startClientY - event.clientY) >= 2) drag.moved = true;
-  flushGestureFrame();
   if (!drag.moved && event.type === "pointerup") {
     seekPlayhead(
       viewportYToSourceTime({
@@ -1145,9 +1133,7 @@ async function endViewportGesture(event: PointerEvent): Promise<void> {
       }),
     );
   }
-  if (svg?.hasPointerCapture(event.pointerId)) svg.releasePointerCapture(event.pointerId);
-  viewportDrag = undefined;
-  if (drag.undoCaptured) await persistDraftNow(true);
+  await finalizeActiveGestures().catch(() => {});
 }
 
 function queueGestureFrame(): void {
@@ -1158,10 +1144,9 @@ function queueGestureFrame(): void {
   });
 }
 
-function flushGestureFrame(): void {
+function cancelGestureFrame(): void {
   if (gestureFrame !== undefined) cancelAnimationFrame(gestureFrame);
   gestureFrame = undefined;
-  applyActiveGesturePreview();
 }
 
 function applyActiveGesturePreview(): void {
@@ -1169,16 +1154,187 @@ function applyActiveGesturePreview(): void {
   else if (viewportDrag) applyViewportGesturePreview();
 }
 
-function finalizeActiveGestures(): void {
-  flushGestureFrame();
-  if (timelineDrag && overviewSvg.value?.hasPointerCapture(timelineDrag.pointerId)) {
-    overviewSvg.value.releasePointerCapture(timelineDrag.pointerId);
-  }
-  if (viewportDrag && viewportSvg.value?.hasPointerCapture(viewportDrag.pointerId)) {
-    viewportSvg.value.releasePointerCapture(viewportDrag.pointerId);
-  }
+async function finalizeActiveGestures(): Promise<void> {
+  cancelGestureFrame();
+  const activeTimelineDrag = timelineDrag;
+  const activeViewportDrag = viewportDrag;
+  releaseActiveGesturePointers();
   timelineDrag = undefined;
   viewportDrag = undefined;
+  gestureActive.value = false;
+  if (activeTimelineDrag) {
+    await applyGestureFinalization(
+      finalizeGestureTransaction(
+        activeTimelineDrag.transaction,
+        activeTimelineDrag.moved ? timelineRangeForDrag(activeTimelineDrag) : undefined,
+      ),
+    );
+  } else if (activeViewportDrag?.kind === "select" && activeViewportDrag.transaction) {
+    await applyGestureFinalization(
+      finalizeGestureTransaction(
+        activeViewportDrag.transaction,
+        activeViewportDrag.moved
+          ? viewportRangeForDrag(activeViewportDrag, session.value, noteTimeIndex)
+          : undefined,
+      ),
+    );
+  } else if (activeViewportDrag?.moved) {
+    applyViewportScrub(activeViewportDrag);
+  }
+}
+
+function timelineRangeForDrag(drag: TimelineDragState): TimeRangeV1 | undefined {
+  const current = session.value;
+  const index = noteTimeIndex;
+  if (!current || !index) return undefined;
+  const transaction = drag.transaction;
+  const timeMs = overviewTimeFromClientX(transaction.lastCoordinate);
+  const options = {
+    chartEndMs: current.chartEndMs,
+    freePlacement: drag.freePlacement,
+  };
+  return transaction.kind === "create"
+    ? createTimelineRange(transaction.anchorMs, timeMs, index, options)
+    : transaction.kind === "move" && drag.range
+      ? moveTimelineRange(
+          drag.range,
+          timeMs - transaction.anchorMs,
+          index,
+          options,
+        )
+      : drag.range
+        ? resizeTimelineRange(
+            drag.range,
+            transaction.kind === "resize-start" ? "start" : "end",
+            timeMs,
+            index,
+            options,
+          )
+        : undefined;
+}
+
+function viewportRangeForDrag(
+  drag: ViewportDragState,
+  current: BeatmapSession | undefined,
+  index: ManiaNoteTimeIndex | undefined,
+): TimeRangeV1 | undefined {
+  if (!current || !index || drag.kind !== "select" || !drag.transaction) return undefined;
+  const focusMs = viewportYToSourceTime({
+    chartEndMs: current.chartEndMs,
+    pixelsPerSecond: visualSpeed.value,
+    playheadMs: drag.startTimeMs,
+    viewportHeight: viewportSize.value.height,
+    viewportY: viewportYFromClientY(drag.transaction.lastCoordinate),
+  });
+  return createTimelineRange(drag.transaction.anchorMs, focusMs, index, {
+    chartEndMs: current.chartEndMs,
+    freePlacement: drag.freePlacement,
+  });
+}
+
+function applyViewportScrub(drag: ViewportDragState): void {
+  const deltaY = drag.startClientY - drag.lastClientY;
+  seekPlayhead(drag.startTimeMs + (deltaY / visualSpeed.value) * 1_000);
+}
+
+function captureGestureSnapshot() {
+  return {
+    editorState: captureEditorState(),
+    undoStackLength: editorUndoStack.value.length,
+    rangeError: rangeError.value,
+    rangeNotePage: rangeNotePage.value,
+    autosavePending: draftTimer !== undefined,
+  };
+}
+
+function applyGesturePreview(
+  transaction: GestureTransaction<EditorUndoState>,
+  range: TimeRangeV1 | undefined,
+): void {
+  const preview = previewGestureTransaction(transaction, range);
+  if (preview.outcome === "noop") return;
+  if (preview.outcome === "restore") {
+    restoreGestureSnapshot(transaction);
+    return;
+  }
+  if (preview.firstValid && transaction.before.autosavePending && draftTimer !== undefined) {
+    window.clearTimeout(draftTimer);
+    draftTimer = undefined;
+  }
+  applyTimelineRangeState(preview.value);
+}
+
+function restoreGestureSnapshot(transaction: GestureTransaction<EditorUndoState>): void {
+  applyEditorState(transaction.before.editorState);
+  editorUndoStack.value = editorUndoStack.value.slice(0, transaction.before.undoStackLength);
+  rangeError.value = transaction.before.rangeError;
+  rangeNotePage.value = transaction.before.rangeNotePage;
+}
+
+async function applyGestureFinalization<TKind extends string>(
+  finalization: GestureFinalization<EditorUndoState, TKind, TimeRangeV1>,
+): Promise<void> {
+  if (finalization.outcome === "rollback") {
+    restoreGestureSnapshot(finalization.transaction);
+    if (
+      finalization.transaction.hasValidPreview &&
+      finalization.transaction.before.autosavePending &&
+      hasUncommittedDraft.value
+    ) {
+      await persistDraftNow(true);
+    }
+    return;
+  }
+
+  restoreGestureSnapshot(finalization.transaction);
+  recordEditorUndo(finalization.transaction.before.editorState);
+  applyTimelineRangeState(finalization.value);
+  transitionDraft(false);
+  await persistDraftNow(true);
+}
+
+function rollbackActiveGesturesForDispose(): void {
+  cancelGestureFrame();
+  const transactions = [
+    timelineDrag?.transaction,
+    viewportDrag?.transaction,
+  ].flatMap((transaction) => (transaction ? [transaction] : []));
+  releaseActiveGesturePointers();
+  timelineDrag = undefined;
+  viewportDrag = undefined;
+  gestureActive.value = false;
+  for (const transaction of transactions) {
+    const rollback = rollbackGestureTransaction(transaction);
+    restoreGestureSnapshot(rollback.transaction);
+    restoreGestureAutosave(rollback.transaction);
+  }
+}
+
+function restoreGestureAutosave(transaction: GestureTransaction<EditorUndoState>): void {
+  if (
+    !transaction.hasValidPreview ||
+    !transaction.before.autosavePending ||
+    !hasUncommittedDraft.value ||
+    draftTimer !== undefined
+  ) {
+    return;
+  }
+  workspaceLifecycle.draftLifecycle = "pending";
+  draftTimer = window.setTimeout(() => {
+    draftTimer = undefined;
+    void persistDraftNow(true).catch(() => {});
+  }, 160);
+}
+
+function releaseActiveGesturePointers(): void {
+  const timelinePointerId = timelineDrag?.transaction.pointerId;
+  if (timelinePointerId !== undefined && overviewSvg.value?.hasPointerCapture(timelinePointerId)) {
+    overviewSvg.value.releasePointerCapture(timelinePointerId);
+  }
+  const viewportPointerId = viewportDrag?.pointerId;
+  if (viewportPointerId !== undefined && viewportSvg.value?.hasPointerCapture(viewportPointerId)) {
+    viewportSvg.value.releasePointerCapture(viewportPointerId);
+  }
 }
 
 async function handleWorkspaceKeydown(event: KeyboardEvent): Promise<void> {
@@ -1190,6 +1346,7 @@ async function handleWorkspaceKeydown(event: KeyboardEvent): Promise<void> {
   ) {
     return;
   }
+  if (timelineDrag || viewportDrag) return;
   if (
     isNativeActivationTarget(event.target) &&
     (event.key === " " || event.key === "Enter")
@@ -1284,11 +1441,7 @@ function captureEditorState(): EditorUndoState {
   };
 }
 
-function undoEditor(): void {
-  const state = editorUndoStack.value.at(-1);
-  if (!state) return;
-  pauseForEdit();
-  editorUndoStack.value = editorUndoStack.value.slice(0, -1);
+function applyEditorState(state: EditorUndoState): void {
   draftStart.value = state.draftStart;
   draftEnd.value = state.draftEnd;
   selectedNoteIds.value = new Set(state.selectedNoteIds);
@@ -1297,6 +1450,15 @@ function undoEditor(): void {
   draftExemplarRoles.value = state.exemplarRoles;
   judgmentNote.value = state.judgmentNote;
   editingAnnotationId.value = state.editingAnnotationId;
+  syncExemplarTag();
+}
+
+function undoEditor(): void {
+  const state = editorUndoStack.value.at(-1);
+  if (!state) return;
+  pauseForEdit();
+  editorUndoStack.value = editorUndoStack.value.slice(0, -1);
+  applyEditorState(state);
   rangeError.value = "";
   markDraft();
 }
@@ -1570,7 +1732,7 @@ function setSalience(tagId: string, salience: 1 | 2): void {
 async function commitAnnotation(): Promise<void> {
   if (!session.value || !directory.value || draftCleanupBlocked.value) return;
   await runWorkspaceOperation(workspaceLifecycle, "canonical-save", async () => {
-    finalizeActiveGestures();
+    await finalizeActiveGestures();
     const current = session.value;
     const currentDirectory = directory.value;
     const range = readDraftRange(true);
@@ -1674,7 +1836,7 @@ async function playAnnotation(annotation: GoldAnnotationV1): Promise<void> {
 async function deleteAnnotation(annotation: GoldAnnotationV1): Promise<void> {
   if (!session.value || draftCleanupBlocked.value) return;
   await runWorkspaceOperation(workspaceLifecycle, "canonical-save", async () => {
-    finalizeActiveGestures();
+    await finalizeActiveGestures();
     const current = session.value;
     if (!current) return;
     pauseForEdit();
@@ -1832,7 +1994,7 @@ async function addReviewNote(): Promise<void> {
   const current = session.value;
   if (!current || !directory.value || draftCleanupBlocked.value) return;
   await runWorkspaceOperation(workspaceLifecycle, "quality-update", async () => {
-    finalizeActiveGestures();
+    await finalizeActiveGestures();
     const active = session.value;
     if (!active) return;
     const range = reviewNoteIncludeSelection.value ? readDraftRange(false) : undefined;
@@ -1876,7 +2038,7 @@ async function resolveReviewNote(noteId: string): Promise<void> {
   const current = session.value;
   if (!current || !directory.value || draftCleanupBlocked.value) return;
   await runWorkspaceOperation(workspaceLifecycle, "quality-update", async () => {
-    finalizeActiveGestures();
+    await finalizeActiveGestures();
     const active = session.value;
     if (!active) return;
     qualityMessage.value = "Resolving review note";
@@ -1904,7 +2066,7 @@ async function markChartComplete(): Promise<void> {
   const current = session.value;
   if (!current || !directory.value || draftCleanupBlocked.value) return;
   await runWorkspaceOperation(workspaceLifecycle, "quality-update", async () => {
-    finalizeActiveGestures();
+    await finalizeActiveGestures();
     const active = session.value;
     if (!active) return;
     const completion = completeAnnotationDocumentV1(active.document, {
@@ -1930,7 +2092,7 @@ async function previewGoldRelease(): Promise<void> {
   const currentDirectory = directory.value;
   if (!currentDirectory) return;
   await runWorkspaceOperation(workspaceLifecycle, "release-preview", async () => {
-    finalizeActiveGestures();
+    await finalizeActiveGestures();
     releaseMessage.value = "Flushing drafts and scanning verified canonical sidecars";
     try {
       await flushDraft();
@@ -1951,7 +2113,7 @@ async function confirmGoldRelease(): Promise<void> {
     return;
   }
   await runWorkspaceOperation(workspaceLifecycle, "release-confirm", async () => {
-    finalizeActiveGestures();
+    await finalizeActiveGestures();
     const artifact = releasePreview.value;
     if (!artifact) return;
     releaseMessage.value = "Rechecking canonical sidecars before export";
@@ -2127,7 +2289,7 @@ async function persistDraftNow(force = false): Promise<void> {
 }
 
 async function flushDraft(): Promise<void> {
-  finalizeActiveGestures();
+  await finalizeActiveGestures();
   const hadTimer = draftTimer !== undefined;
   if (draftTimer !== undefined) {
     window.clearTimeout(draftTimer);
@@ -2156,7 +2318,7 @@ async function discardDraft(): Promise<void> {
   }
   await runWorkspaceOperation(workspaceLifecycle, "discard-draft", async () => {
     pauseForEdit();
-    finalizeActiveGestures();
+    await finalizeActiveGestures();
     if (draftTimer !== undefined) {
       window.clearTimeout(draftTimer);
       draftTimer = undefined;
