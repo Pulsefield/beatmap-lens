@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createGoldAnnotation } from "./beatmap-session";
+import { createAnnotationDocument, createGoldAnnotation } from "./beatmap-session";
 import { hashFoundationV1 } from "./canonical-json";
 import type {
   FoundationRefV1,
@@ -11,6 +11,35 @@ import { fixtureFoundation } from "./test-helpers";
 
 const annotationId = "00000000-0000-4000-8000-000000000003";
 const now = "2026-08-04T00:00:00.000Z";
+
+describe("beatmap session catalog context", () => {
+  it("stores canonical tag IDs derived from raw catalog labels", () => {
+    const document = createAnnotationDocument(
+      source,
+      "a".repeat(64),
+      ["Tech", "Jump Stream", "Jump Stream"],
+      now,
+      annotationId,
+    );
+
+    expect(document.seedContext.suggestedTags).toEqual(["jump-stream", "tech"]);
+  });
+
+  it("rejects catalog labels without a distinct canonical identity", () => {
+    expect(() =>
+      createAnnotationDocument(source, "a".repeat(64), ["---"], now, annotationId),
+    ).toThrow(/has no canonical tag ID/);
+    expect(() =>
+      createAnnotationDocument(
+        source,
+        "a".repeat(64),
+        ["Jump Stream", "jump-stream"],
+        now,
+        annotationId,
+      ),
+    ).toThrow(/share canonical tag ID jump-stream/);
+  });
+});
 
 describe("beatmap session annotation editing", () => {
   it("applies Foundation pin rules and cleans incompatible exemplar roles", async () => {
@@ -146,4 +175,17 @@ const noteRef: StableNoteRefV1 = {
   kind: "normal",
   sourceLine: 42,
   startMs: 1_000,
+};
+
+const source: Parameters<typeof createAnnotationDocument>[0] = {
+  artist: "Artist",
+  byteLength: 1024,
+  creator: "Mapper",
+  difficulty: "Expert",
+  keyCount: 4,
+  normalizerId: "beatmap-lens-mania-v1",
+  noteCount: 1,
+  osuFormatVersion: 14,
+  sha256: "b".repeat(64),
+  title: "Title",
 };

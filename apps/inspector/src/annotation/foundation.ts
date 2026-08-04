@@ -27,6 +27,30 @@ export interface FoundationTagSeedV1 {
   readonly displayName: string;
 }
 
+export function canonicalCatalogTagSeedsV1(
+  labels: readonly string[],
+): readonly FoundationTagSeedV1[] {
+  const displayNames = new Map<string, string>();
+  for (const displayName of new Set(labels)) {
+    const id = canonicalTagId(displayName);
+    if (!id) {
+      throw new Error(`Catalog tag ${JSON.stringify(displayName)} has no canonical tag ID`);
+    }
+
+    const existing = displayNames.get(id);
+    if (existing !== undefined && existing !== displayName) {
+      throw new Error(
+        `Catalog tags ${JSON.stringify(existing)} and ${JSON.stringify(displayName)} share canonical tag ID ${id}`,
+      );
+    }
+    displayNames.set(id, displayName);
+  }
+
+  return [...displayNames]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([id, displayName]) => ({ id, displayName }));
+}
+
 export interface BootstrapFoundationInputV1 {
   readonly foundationId: string;
   readonly creatorId: string;

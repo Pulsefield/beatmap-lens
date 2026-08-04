@@ -504,6 +504,11 @@ function validateSeedContext(value: unknown, path: string, issues: ValidationIss
   sha256(value.catalogSha256, `${path}.catalogSha256`, issues);
   stringArray(value.suggestedTags, `${path}.suggestedTags`, issues);
   if (Array.isArray(value.suggestedTags)) {
+    value.suggestedTags.forEach((tagId, index) => {
+      if (typeof tagId === "string" && !isCanonicalTagId(tagId)) {
+        add(issues, `${path}.suggestedTags[${index}]`, "Expected a lowercase kebab-case tag ID");
+      }
+    });
     unique(value.suggestedTags, `${path}.suggestedTags`, "suggested tag", issues);
   }
 }

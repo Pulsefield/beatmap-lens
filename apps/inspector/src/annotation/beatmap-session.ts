@@ -16,7 +16,7 @@ import {
   type StableNoteRefV1,
 } from "./contracts";
 import type { DatasetDirectory, StoredAnnotation } from "./dataset-directory";
-import { assertActiveFoundationTagV1 } from "./foundation";
+import { assertActiveFoundationTagV1, canonicalCatalogTagSeedsV1 } from "./foundation";
 import { chartEndMs } from "./range";
 import type { AnnotationDraft, DraftBaseVersion, SessionStore } from "./session-store";
 import { inspectOsuSourceV1 } from "./source-identity";
@@ -158,10 +158,11 @@ export function createGoldAnnotation(
 export function createAnnotationDocument(
   source: SourceIdentityV1,
   catalogSha256: string,
-  suggestedTags: readonly string[],
+  catalogTags: readonly string[],
   createdAt: string,
   documentId: string,
 ): AnnotationDocumentV1 {
+  const suggestedTags = canonicalCatalogTagSeedsV1(catalogTags).map((tag) => tag.id);
   return {
     contract: ANNOTATION_CONTRACT,
     version: 1,
@@ -169,7 +170,7 @@ export function createAnnotationDocument(
     source,
     seedContext: {
       catalogSha256,
-      suggestedTags: [...new Set(suggestedTags)].sort(),
+      suggestedTags,
     },
     reviewState: "in-progress",
     revision: 1,

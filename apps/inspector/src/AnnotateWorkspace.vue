@@ -62,6 +62,7 @@ import {
 } from "./annotation/file-system-access";
 import {
   bootstrapFoundationV1,
+  canonicalCatalogTagSeedsV1,
   canonicalTagId,
   createActiveFoundationTagV1,
 } from "./annotation/foundation";
@@ -166,6 +167,13 @@ interface FoundationExemplarView {
   readonly range: TimeRangeV1;
   readonly sourceLabel: string;
   readonly tagId: string;
+}
+
+interface CatalogTagSuggestion {
+  readonly displayName: string;
+  readonly origin: "catalog";
+  readonly tagId: string;
+  readonly tag?: FoundationTagV1;
 }
 
 const rangeNotePageSize = 200;
@@ -300,9 +308,14 @@ const canCreateCustomTag = computed(() => {
 const suggestedTags = computed(() => {
   const current = session.value;
   if (!current) return [];
-  return current.document.seedContext.suggestedTags.map((id) => {
+  return canonicalCatalogTagSeedsV1(current.task.categories).map(({ displayName, id }) => {
     const tag = current.foundation.tags.find((entry) => entry.id === id);
-    return { id, ...(tag ? { tag } : {}) };
+    return {
+      displayName,
+      origin: "catalog" as const,
+      tagId: id,
+      ...(tag ? { tag } : {}),
+    };
   });
 });
 const annotationList = computed(
@@ -1590,20 +1603,20 @@ function applyTagToDraft(tag: FoundationTagV1): void {
   transitionDraft();
 }
 
-function beginSuggestedTagCreation(tagId: string): void {
+function beginSuggestedTagCreation(suggestion: CatalogTagSuggestion): void {
   if (editorLocked.value) return;
   pauseForEdit();
   activationTag.value = {
     aliases: [],
     definition: "",
-    displayName: tagId,
-    id: tagId,
+    displayName: suggestion.displayName,
+    id: suggestion.tagId,
     inclusionCues: [],
     status: "active",
   };
   activationIsCustom.value = false;
-  activationTagId.value = tagId;
-  activationDisplayName.value = tagId;
+  activationTagId.value = suggestion.tagId;
+  activationDisplayName.value = suggestion.displayName;
   activationDefinition.value = "";
   activationInclusionCues.value = "";
   activationExclusionCues.value = "";
@@ -1612,9 +1625,9 @@ function beginSuggestedTagCreation(tagId: string): void {
   activationError.value = "";
 }
 
-function useSuggestedTag(suggestion: { id: string; tag?: FoundationTagV1 }): void {
+function useSuggestedTag(suggestion: CatalogTagSuggestion): void {
   if (suggestion.tag?.status === "active") addTag(suggestion.tag);
-  else if (!suggestion.tag) beginSuggestedTagCreation(suggestion.id);
+  else if (!suggestion.tag) beginSuggestedTagCreation(suggestion);
 }
 
 function beginCustomTagActivation(): void {
@@ -1669,9 +1682,7 @@ async function activateTag(): Promise<void> {
     if (!activatingSession || !activatingTag || !activatingDirectory) return;
 
     try {
-      const tagId = activationIsCustom.value
-        ? canonicalTagId(activationTagId.value)
-        : activatingTag.id;
+      const tagId = canonicalTagId(activationTagId.value);
       const nextFoundation = await createActiveFoundationTagV1(
         activatingSession.foundation,
         {
@@ -3374,14 +3385,14 @@ function errorMessage(error: unknown): string {
                 <div class="suggestion-list">
                   <button
                     v-for="suggestion in suggestedTags"
-                    :key="suggestion.id"
+                    :key="suggestion.tagId"
                     class="tag-chip tag-chip--button"
                     type="button"
                     :disabled="suggestion.tag?.status === 'retired'"
                     :title="suggestion.tag?.status === 'active' ? 'Add active tag' : suggestion.tag?.status === 'retired' ? 'Retired tags cannot be reused' : 'Create this suggestion as an active tag'"
                     @click="useSuggestedTag(suggestion)"
                   >
-                    {{ suggestion.id }} · {{ suggestion.tag?.status ?? "define" }}
+                    {{ suggestion.displayName }} · {{ suggestion.tag?.status ?? "define" }}
                   </button>
                 </div>
               </div>
@@ -3396,7 +3407,6 @@ function errorMessage(error: unknown): string {
                     <span>Canonical ID</span>
                     <input
                       v-model="activationTagId"
-                      :readonly="!activationIsCustom"
                       required
                     />
                   </label>

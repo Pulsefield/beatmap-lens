@@ -103,6 +103,23 @@ describe("annotation v1 contracts", () => {
     }
   });
 
+  it("requires seed context suggestions to use canonical tag IDs", async () => {
+    const fixture = await createFixture();
+    const document = createDocument(fixture, [{ tagId: "streams", salience: 2 }]);
+    const validation = validateAnnotationDocumentV1({
+      ...document,
+      seedContext: { ...document.seedContext, suggestedTags: ["Jump Stream"] },
+    });
+
+    expect(validation.ok).toBe(false);
+    if (!validation.ok) {
+      expect(validation.issues).toContainEqual({
+        path: "$.seedContext.suggestedTags[0]",
+        message: "Expected a lowercase kebab-case tag ID",
+      });
+    }
+  });
+
   it("pins exact immutable Foundation bytes and validates compatible active tag creation", async () => {
     const foundation = bootstrapFoundationV1({
       foundationId,

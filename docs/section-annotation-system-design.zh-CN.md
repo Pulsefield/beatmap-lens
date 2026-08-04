@@ -243,7 +243,7 @@ runtime note ID 仍只用于 UI。加载时先验证精确 source identity，再
 
 删除 `candidate` status 和 `exemplars` 字段。Foundation canonical serialization 不再排序 exemplar reference。
 
-catalog suggestion 不会预先创建 Foundation tag。专家第一次使用一个尚不存在的 suggestion 或 custom tag 时，必须填写 canonical ID、display name、definition 和至少一条 inclusion cue；系统随后直接写入一个包含新 active tag 的 Foundation revision，不经过 candidate 中间态。
+catalog suggestion 不会预先创建 Foundation tag。`CatalogTask.categories` 保留 catalog 的原始 label 作为显示名和 provenance；sidecar 的 `seedContext.suggestedTags` 只保存由该 label 归一化得到的 canonical tag ID。专家第一次使用一个尚不存在的 suggestion 或 custom tag 时，必须填写 canonical ID、display name、definition 和至少一条 inclusion cue；系统随后直接写入一个包含新 active tag 的 Foundation revision，不经过 candidate 中间态。
 
 ### 5.4 Gold annotation
 
