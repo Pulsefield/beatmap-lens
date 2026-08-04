@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { createRenderScene, type ManiaNote } from "beatmap-lens";
+import type { ManiaNote } from "beatmap-lens";
 import {
   computed,
   nextTick,
@@ -7,6 +7,7 @@ import {
   onMounted,
   ref,
   shallowRef,
+  watch,
 } from "vue";
 import {
   type BeatmapSession,
@@ -14,6 +15,15 @@ import {
   loadBeatmapSession,
   noteIdsForRefs,
 } from "./annotation/beatmap-session";
+import {
+  BufferedSceneController,
+  type BufferedSceneFrame,
+  type BufferedSceneInstrumentation,
+  judgmentLineRatio,
+  maximumVisualSpeed,
+  minimumVisualSpeed,
+  visualSpeedPresets,
+} from "./annotation/buffered-scene";
 import {
   type CatalogSource,
   parseCatalogManifest,
@@ -48,9 +58,16 @@ import {
   bootstrapFoundationV1,
 } from "./annotation/foundation";
 import {
+  changeNoteSelectionRange,
   createNoteSelection,
   toggleSelectedNote,
 } from "./annotation/note-selection";
+import { ManiaNoteTimeIndex } from "./annotation/note-time-index";
+import { createOverviewDensityPath } from "./annotation/overview-density";
+import {
+  type PlaybackClockState,
+  SyntheticPlaybackClock,
+} from "./annotation/playback-clock";
 import { rangeCandidates } from "./annotation/range";
 import {
   type AnnotationDraft,
@@ -64,13 +81,48 @@ import {
   type TaskQueueStatus,
   updateQueueItemStatus,
 } from "./annotation/task-queue";
-import { parseTimeInput } from "./annotation/timeline-range";
+import {
+  createTimelineRange,
+  moveTimelineRange,
+  parseTimeInput,
+  resizeTimelineRange,
+  type TimelineRangeEdge,
+  timelineEdgeHitWidth,
+} from "./annotation/timeline-range";
 import { assertAnnotationWorkflowV1 } from "./annotation/validation";
 import WorkspaceModeSwitch from "./WorkspaceModeSwitch.vue";
 import type { WorkspaceMode } from "./workspace-mode";
 
 type MobilePanel = "source" | "preview" | "details";
 type SaveState = "idle" | "draft" | "saving" | "saved" | "conflict" | "error";
+type TimelineDragKind = "create" | "move" | `resize-${TimelineRangeEdge}`;
+
+interface EditorUndoState {
+  readonly draftStart: string;
+  readonly draftEnd: string;
+  readonly selectedNoteIds: readonly string[];
+  readonly manualExclusions: readonly string[];
+  readonly labels: readonly AnnotationLabelV1[];
+  readonly judgmentNote: string;
+  readonly editingAnnotationId?: string;
+}
+
+interface TimelineDragState {
+  readonly pointerId: number;
+  readonly kind: TimelineDragKind;
+  readonly anchorMs: number;
+  readonly startClientX: number;
+  readonly range?: TimeRangeV1;
+  moved: boolean;
+  undoCaptured: boolean;
+}
+
+interface ViewportDragState {
+  readonly pointerId: number;
+  readonly startClientY: number;
+  readonly startTimeMs: number;
+  moved: boolean;
+}
 
 const emit = defineEmits<{
   "change-mode": [mode: WorkspaceMode];
@@ -116,10 +168,36 @@ const activationError = ref("");
 const activationBusy = ref(false);
 const playheadMs = ref(0);
 const visualSpeed = ref(240);
+const visualSpeedDraft = ref("240");
+const visualSpeedError = ref("");
+const viewportSvg = ref<SVGSVGElement>();
+const overviewSvg = ref<SVGSVGElement>();
+const viewportSize = ref({ width: 720, height: 420 });
+const overviewWidth = ref(720);
+const viewportFrame = shallowRef<BufferedSceneFrame>();
+const viewportInstrumentation = ref<BufferedSceneInstrumentation>();
+const frameP95Ms = ref(0);
+const playbackState = ref<PlaybackClockState>({
+  currentTimeMs: 0,
+  playing: false,
+  looping: false,
+});
+const focusedTagId = ref<string>();
+const editorUndoStack = ref<readonly EditorUndoState[]>([]);
 const draftBase = ref<DraftBaseVersion | null>(null);
 const setupRestored = ref(false);
 const editorDirty = ref(false);
 let draftTimer: number | undefined;
+let viewportController: BufferedSceneController | undefined;
+let noteTimeIndex: ManiaNoteTimeIndex | undefined;
+let playbackClock: SyntheticPlaybackClock | undefined;
+let unsubscribePlayback: (() => void) | undefined;
+let viewportResizeObserver: ResizeObserver | undefined;
+let timelineDrag: TimelineDragState | undefined;
+let viewportDrag: ViewportDragState | undefined;
+let pendingTextUndo: EditorUndoState | undefined;
+let taskOpenGeneration = 0;
+const frameDurations: number[] = [];
 
 const activeTask = computed(() =>
   queue.value.find((task) => task.id === activeTaskId.value),
@@ -130,6 +208,7 @@ const candidateNotes = computed(() => {
   if (!session.value || !parsedRange.value) return [];
   return rangeCandidates(session.value.chart, parsedRange.value);
 });
+const candidateNoteIds = computed(() => new Set(candidateNotes.value.map((note) => note.id)));
 const selectedCount = computed(() => selectedNoteIds.value.size);
 const activeTags = computed(() => filterTags("active"));
 const candidateTags = computed(() => filterTags("candidate"));
@@ -141,19 +220,56 @@ const suggestedTags = computed(() => {
 const annotationList = computed(
   () => session.value?.document.annotations ?? [],
 );
-const staticScene = computed(() => {
-  if (!session.value) return undefined;
+const operationLocked = computed(
+  () => saveState.value === "saving" || activationBusy.value || taskLoading.value,
+);
+const overviewDensity = computed(() =>
+  session.value
+    ? createOverviewDensityPath(session.value.chart, {
+        width: 1_000,
+        height: 62,
+      })
+    : undefined,
+);
+const timelineSelection = computed(() => {
   const range = parsedRange.value;
-  const startTime = Math.max(0, (range?.startMs ?? playheadMs.value) - 2_000);
-  const desiredEnd = Math.max(range?.endMs ?? startTime + 8_000, startTime + 8_000);
-  const endTime = Math.min(session.value.chartEndMs, desiredEnd + 2_000);
-  return createRenderScene(session.value.chart, {
-    startTime,
-    endTime: Math.max(startTime + 1, endTime),
-    width: 640,
-    pixelsPerSecond: 54,
-  });
+  if (!range || !session.value) return undefined;
+  return rangeOverviewGeometry(range, session.value.chartEndMs);
 });
+const timelineViewport = computed(() => {
+  if (!viewportFrame.value || !session.value) return undefined;
+  return rangeOverviewGeometry(viewportFrame.value.viewportRange, session.value.chartEndMs, true);
+});
+const selectionBand = computed(() =>
+  parsedRange.value && viewportFrame.value
+    ? rangeSceneGeometry(parsedRange.value, viewportFrame.value)
+    : undefined,
+);
+const annotationBands = computed(() =>
+  viewportFrame.value
+    ? (() => {
+        const frame = viewportFrame.value;
+        return annotationList.value.flatMap((annotation) => {
+          const geometry = rangeSceneGeometry(annotation.range, frame);
+          return geometry ? [{ annotation, ...geometry }] : [];
+        });
+      })()
+    : [],
+);
+const overviewAnnotationBands = computed(() =>
+  session.value
+    ? annotationList.value.map((annotation) => ({
+        annotation,
+        ...rangeOverviewGeometry(annotation.range, session.value?.chartEndMs ?? 1),
+      }))
+    : [],
+);
+const overviewPlayheadX = computed(() =>
+  session.value ? (playheadMs.value / session.value.chartEndMs) * 1_000 : 0,
+);
+const timelineHandleHitWidth = computed(
+  () => timelineEdgeHitWidth(Math.max(1, overviewWidth.value), 1_000),
+);
 const currentChartLabel = computed(() => {
   if (!session.value) {
     const source = activeTask.value?.source;
@@ -169,12 +285,15 @@ const saveTone = computed(() => {
 });
 
 onMounted(async () => {
+  window.addEventListener("keydown", handleWorkspaceKeydown);
+  viewportResizeObserver = new ResizeObserver(() => refreshInteractiveGeometry());
   if (!fileSystemSupported) return;
   try {
     const preferences = await sessions.getPreferences();
     if (preferences) {
       annotatorId.value = preferences.annotatorId;
       visualSpeed.value = preferences.visualSpeed;
+      visualSpeedDraft.value = String(preferences.visualSpeed);
     }
 
     const storedDataset = await sessions.getDirectoryHandle<BrowserDirectoryHandle>("dataset");
@@ -190,7 +309,19 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   if (draftTimer !== undefined) window.clearTimeout(draftTimer);
   if (editorDirty.value) void persistDraftNow();
+  window.removeEventListener("keydown", handleWorkspaceKeydown);
+  disposeInteractiveSession();
+  viewportResizeObserver?.disconnect();
 });
+
+watch(
+  () => session.value?.source.sha256,
+  async () => {
+    await nextTick();
+    initializeInteractiveSession();
+  },
+  { flush: "post" },
+);
 
 async function chooseDataset(): Promise<void> {
   await runSetupAction(async () => {
@@ -297,24 +428,27 @@ async function openTask(task: TaskQueueItem): Promise<void> {
   if (
     task.status === "missing-source" ||
     saveState.value === "saving" ||
-    activationBusy.value
+    activationBusy.value ||
+    taskLoading.value
   ) {
     return;
   }
-  await flushDraft();
-  if (task.status === "readonly-future") {
-    session.value = undefined;
-    readonlyTask.value = task;
-    activeTaskId.value = task.id;
-    taskError.value = "";
-    saveState.value = "idle";
-    saveMessage.value = `Annotation v${task.future?.version ?? "?"} · read-only`;
-    return;
-  }
+  const generation = ++taskOpenGeneration;
   taskLoading.value = true;
   taskError.value = "";
-  readonlyTask.value = undefined;
+  pauseForEdit();
   try {
+    await flushDraft();
+    if (generation !== taskOpenGeneration) return;
+    if (task.status === "readonly-future") {
+      session.value = undefined;
+      readonlyTask.value = task;
+      activeTaskId.value = task.id;
+      saveState.value = "idle";
+      saveMessage.value = `Annotation v${task.future?.version ?? "?"} · read-only`;
+      return;
+    }
+    readonlyTask.value = undefined;
     const next = await loadBeatmapSession(
       task.task,
       catalog.value,
@@ -322,6 +456,7 @@ async function openTask(task: TaskQueueItem): Promise<void> {
       directory.value,
       sessions,
     );
+    if (generation !== taskOpenGeneration) return;
     session.value = next;
     activeTaskId.value = task.id;
     restoreEditor(next);
@@ -335,15 +470,17 @@ async function openTask(task: TaskQueueItem): Promise<void> {
       taskError.value,
     );
   } finally {
-    taskLoading.value = false;
+    if (generation === taskOpenGeneration) taskLoading.value = false;
   }
 }
 
 function restoreEditor(next: BeatmapSession): void {
+  pendingTextUndo = undefined;
   const draft = next.restoredDraft;
   draftBase.value = draft?.base ?? next.base;
   playheadMs.value = draft?.playheadMs ?? 0;
   visualSpeed.value = draft?.visualSpeed ?? visualSpeed.value;
+  visualSpeedDraft.value = String(visualSpeed.value);
   judgmentNote.value = draft?.editorText ?? "";
   draftLabels.value = draft?.labels ?? [];
   const selected = new Set(draft ? noteIdsForRefs(next, draft.noteRefs) : []);
@@ -370,12 +507,483 @@ function restoreEditor(next: BeatmapSession): void {
       ? `Revision ${next.base.revision}`
       : "Unseen chart";
   editorDirty.value = Boolean(draft);
+  editorUndoStack.value = readUndoState(draft?.undoState);
 }
 
-function applyManualRange(): void {
-  if (saveState.value === "saving") return;
+function initializeInteractiveSession(): void {
+  disposeInteractiveSession();
+  const current = session.value;
+  const svg = viewportSvg.value;
+  if (!current || !svg) return;
+
+  noteTimeIndex = new ManiaNoteTimeIndex(current.chart.notes);
+  playbackClock = new SyntheticPlaybackClock();
+  const initialTime = Math.min(Math.max(0, playheadMs.value), current.chartEndMs);
+  unsubscribePlayback = playbackClock.subscribe((state) => {
+    const active = session.value;
+    if (!active || active.source.sha256 !== current.source.sha256) return;
+    if (state.currentTimeMs > active.chartEndMs) {
+      playbackClock?.pause();
+      playbackClock?.seek(active.chartEndMs);
+      return;
+    }
+
+    const startedAt = performance.now();
+    playbackState.value = state;
+    playheadMs.value = state.currentTimeMs;
+    updateViewportFrame(state.currentTimeMs);
+    recordFrameDuration(performance.now() - startedAt);
+  });
+  playbackClock.seek(initialTime);
+  viewportResizeObserver?.observe(svg);
+  if (overviewSvg.value) viewportResizeObserver?.observe(overviewSvg.value);
+  refreshInteractiveGeometry();
+}
+
+function disposeInteractiveSession(): void {
+  viewportResizeObserver?.disconnect();
+  unsubscribePlayback?.();
+  unsubscribePlayback = undefined;
+  playbackClock?.dispose();
+  playbackClock = undefined;
+  viewportController = undefined;
+  noteTimeIndex = undefined;
+  viewportFrame.value = undefined;
+  viewportInstrumentation.value = undefined;
+  playbackState.value = { currentTimeMs: playheadMs.value, playing: false, looping: false };
+  timelineDrag = undefined;
+  viewportDrag = undefined;
+  pendingTextUndo = undefined;
+  frameDurations.length = 0;
+  frameP95Ms.value = 0;
+}
+
+function rebuildViewportController(): void {
+  const current = session.value;
+  const svg = viewportSvg.value;
+  if (!current || !svg) return;
+
+  const rect = svg.getBoundingClientRect();
+  const width = Math.max(320, Math.round(rect.width || viewportSize.value.width));
+  const height = Math.max(1, Math.round(rect.height || viewportSize.value.height));
+  if (
+    viewportController &&
+    viewportSize.value.width === width &&
+    viewportSize.value.height === height
+  ) {
+    return;
+  }
+
+  viewportSize.value = { width, height };
+  viewportController = new BufferedSceneController(current.chart, {
+    width,
+    viewportHeight: height,
+    pixelsPerSecond: visualSpeed.value,
+  });
+  updateViewportFrame(playheadMs.value);
+}
+
+function refreshInteractiveGeometry(): void {
+  const measuredOverviewWidth = overviewSvg.value?.getBoundingClientRect().width;
+  if (measuredOverviewWidth && measuredOverviewWidth > 0) {
+    overviewWidth.value = measuredOverviewWidth;
+  }
+  rebuildViewportController();
+}
+
+function updateViewportFrame(timeMs: number): void {
+  if (!viewportController) return;
+  viewportFrame.value = viewportController.frame(timeMs);
+  viewportInstrumentation.value = viewportController.instrumentation();
+}
+
+function recordFrameDuration(durationMs: number): void {
+  frameDurations.push(durationMs);
+  if (frameDurations.length > 120) frameDurations.shift();
+  if (frameDurations.length % 12 !== 0) return;
+  const sorted = [...frameDurations].sort((left, right) => left - right);
+  frameP95Ms.value = sorted[Math.ceil(sorted.length * 0.95) - 1] ?? 0;
+}
+
+async function togglePlayback(): Promise<void> {
+  if (!playbackClock || !session.value || operationLocked.value) return;
+  if (playbackClock.playing) {
+    playbackClock.pause();
+    return;
+  }
+  if (playbackClock.currentTimeMs >= session.value.chartEndMs) playbackClock.seek(0);
+  await playbackClock.play();
+}
+
+async function playSelectionOnce(): Promise<void> {
+  const range = parsedRange.value;
+  if (!playbackClock || !range || operationLocked.value) return;
+  await playbackClock.playSelection(range);
+}
+
+async function toggleSelectionLoop(): Promise<void> {
+  const range = parsedRange.value;
+  if (!playbackClock || !range || operationLocked.value) return;
+  if (playbackState.value.looping) {
+    playbackClock.pause();
+    return;
+  }
+  await playbackClock.loopSelection(range);
+}
+
+function pauseForEdit(): void {
+  if (playbackClock?.playing) playbackClock.pause();
+}
+
+function seekPlayhead(timeMs: number): void {
+  const endMs = session.value?.chartEndMs ?? 0;
+  const time = Math.min(Math.max(0, timeMs), endMs);
+  if (playbackClock) playbackClock.seek(time);
+  else {
+    playheadMs.value = time;
+    updateViewportFrame(time);
+  }
+}
+
+async function selectVisualSpeed(speed: number): Promise<void> {
+  visualSpeedDraft.value = String(speed);
+  await applyVisualSpeed();
+}
+
+async function applyVisualSpeed(): Promise<void> {
+  const speed = Number(visualSpeedDraft.value);
+  if (
+    !Number.isFinite(speed) ||
+    speed < minimumVisualSpeed ||
+    speed > maximumVisualSpeed
+  ) {
+    visualSpeedError.value = `Use ${minimumVisualSpeed} to ${maximumVisualSpeed} px/s.`;
+    return;
+  }
+
+  visualSpeedError.value = "";
+  visualSpeed.value = speed;
+  if (viewportController) {
+    viewportFrame.value = viewportController.setVisualSpeed(speed, playheadMs.value);
+    viewportInstrumentation.value = viewportController.instrumentation();
+  }
+  const preferences = await sessions.getPreferences();
+  await sessions.setPreferences({
+    annotatorId: annotatorId.value.trim(),
+    musicEnabled: preferences?.musicEnabled ?? false,
+    visualSpeed: speed,
+  });
+  if (editorDirty.value) await persistDraftNow(true);
+}
+
+function applyTimelineRange(range: TimeRangeV1, captureUndo = true): void {
+  const current = session.value;
+  if (!current || operationLocked.value) return;
+  pauseForEdit();
+  if (captureUndo) recordEditorUndo();
+
+  const previous = parsedRange.value;
+  const selection = previous
+    ? changeNoteSelectionRange(
+        current.chart.notes,
+        createNoteSelection(current.chart.notes, previous, manualExclusions.value),
+        range,
+      )
+    : createNoteSelection(current.chart.notes, range, manualExclusions.value);
+  draftStart.value = formatMs(selection.range.startMs);
+  draftEnd.value = formatMs(selection.range.endMs);
+  selectedNoteIds.value = new Set(selection.selectedNotes.map((note) => note.id));
+  manualExclusions.value = selection.manualExclusions;
+  rangeError.value = "";
+  markDraft();
+}
+
+function beginTimelineDrag(event: PointerEvent, kind: TimelineDragKind): void {
+  const svg = overviewSvg.value;
+  const current = session.value;
+  if (!svg || !current || !noteTimeIndex || operationLocked.value) return;
+  const range = parsedRange.value ?? undefined;
+  if (kind !== "create" && !range) return;
+
+  event.preventDefault();
+  pauseForEdit();
+  svg.setPointerCapture(event.pointerId);
+  timelineDrag = {
+    pointerId: event.pointerId,
+    kind,
+    anchorMs: overviewTimeFromPointer(event),
+    startClientX: event.clientX,
+    ...(range ? { range } : {}),
+    moved: false,
+    undoCaptured: false,
+  };
+}
+
+function moveTimelineDrag(event: PointerEvent): void {
+  const drag = timelineDrag;
+  const current = session.value;
+  const index = noteTimeIndex;
+  if (!drag || drag.pointerId !== event.pointerId || !current || !index) return;
+  if (Math.abs(event.clientX - drag.startClientX) >= 2) drag.moved = true;
+  if (!drag.moved) return;
+
+  const timeMs = overviewTimeFromPointer(event);
+  const options = {
+    chartEndMs: current.chartEndMs,
+    freePlacement: event.altKey,
+  };
+  const range =
+    drag.kind === "create"
+      ? createTimelineRange(drag.anchorMs, timeMs, index, options)
+      : drag.kind === "move" && drag.range
+        ? moveTimelineRange(drag.range, timeMs - drag.anchorMs, index, options)
+        : drag.range
+          ? resizeTimelineRange(
+              drag.range,
+              drag.kind === "resize-start" ? "start" : "end",
+              timeMs,
+              index,
+              options,
+            )
+          : undefined;
+  if (!range) return;
+  if (!drag.undoCaptured) {
+    recordEditorUndo();
+    drag.undoCaptured = true;
+  }
+  applyTimelineRange(range, false);
+}
+
+function endTimelineDrag(event: PointerEvent): void {
+  const drag = timelineDrag;
+  const svg = overviewSvg.value;
+  if (!drag || drag.pointerId !== event.pointerId) return;
+  if (!drag.moved) seekPlayhead(overviewTimeFromPointer(event));
+  if (svg?.hasPointerCapture(event.pointerId)) svg.releasePointerCapture(event.pointerId);
+  timelineDrag = undefined;
+}
+
+function beginViewportScrub(event: PointerEvent): void {
+  const svg = viewportSvg.value;
+  if (!svg || !session.value || operationLocked.value) return;
+  event.preventDefault();
+  pauseForEdit();
+  svg.setPointerCapture(event.pointerId);
+  viewportDrag = {
+    pointerId: event.pointerId,
+    startClientY: event.clientY,
+    startTimeMs: playheadMs.value,
+    moved: false,
+  };
+}
+
+function moveViewportScrub(event: PointerEvent): void {
+  const drag = viewportDrag;
+  if (!drag || drag.pointerId !== event.pointerId) return;
+  const deltaY = drag.startClientY - event.clientY;
+  if (Math.abs(deltaY) >= 2) drag.moved = true;
+  if (!drag.moved) return;
+  seekPlayhead(drag.startTimeMs + (deltaY / visualSpeed.value) * 1_000);
+}
+
+function endViewportScrub(event: PointerEvent): void {
+  const drag = viewportDrag;
+  const svg = viewportSvg.value;
+  if (!drag || drag.pointerId !== event.pointerId) return;
+  if (!drag.moved) {
+    const rect = svg?.getBoundingClientRect();
+    if (rect) {
+      const y = ((event.clientY - rect.top) / rect.height) * viewportSize.value.height;
+      const judgmentY = viewportSize.value.height * judgmentLineRatio;
+      seekPlayhead(playheadMs.value + ((judgmentY - y) / visualSpeed.value) * 1_000);
+    }
+  }
+  if (svg?.hasPointerCapture(event.pointerId)) svg.releasePointerCapture(event.pointerId);
+  viewportDrag = undefined;
+  if (editorDirty.value) void persistDraftNow(true);
+}
+
+async function handleWorkspaceKeydown(event: KeyboardEvent): Promise<void> {
+  if (
+    !session.value ||
+    operationLocked.value ||
+    event.defaultPrevented ||
+    isTypingTarget(event.target)
+  ) {
+    return;
+  }
+  if (
+    isNativeActivationTarget(event.target) &&
+    (event.key === " " || event.key === "Enter")
+  ) {
+    return;
+  }
+
+  const key = event.key.toLowerCase();
+  if ((event.metaKey || event.ctrlKey) && key === "z") {
+    event.preventDefault();
+    undoEditor();
+    return;
+  }
+
+  if (event.key === " ") {
+    event.preventDefault();
+    if (event.shiftKey) await playSelectionOnce();
+    else await togglePlayback();
+    return;
+  }
+  if (key === "i" || key === "o") {
+    event.preventDefault();
+    setRangeEdgeAtPlayhead(key === "i" ? "start" : "end");
+    return;
+  }
+  if (key === "l") {
+    event.preventDefault();
+    await toggleSelectionLoop();
+    return;
+  }
+  if (key === "1" || key === "2") {
+    const tagId = focusedTagId.value ?? draftLabels.value.at(-1)?.tagId;
+    if (!tagId) return;
+    event.preventDefault();
+    setSalience(tagId, key === "1" ? 1 : 2);
+    return;
+  }
+  if (event.key === "Enter") {
+    event.preventDefault();
+    await commitAnnotation();
+    return;
+  }
+  if (event.key === "[" || event.key === "]") {
+    event.preventDefault();
+    seekRelativeAnnotation(event.key === "[" ? -1 : 1);
+  }
+}
+
+function setRangeEdgeAtPlayhead(edge: TimelineRangeEdge): void {
+  const range = parsedRange.value;
+  if (!range || !session.value || !noteTimeIndex) return;
+  const resized = resizeTimelineRange(range, edge, playheadMs.value, noteTimeIndex, {
+    chartEndMs: session.value.chartEndMs,
+    freePlacement: true,
+  });
+  if (!resized) {
+    rangeError.value = edge === "start" ? "Start must be before end." : "End must be after start.";
+    return;
+  }
+  applyTimelineRange(resized);
+}
+
+function seekRelativeAnnotation(direction: -1 | 1): void {
+  const sorted = [...annotationList.value].sort(
+    (left, right) => left.range.startMs - right.range.startMs,
+  );
+  if (sorted.length === 0) return;
+  const target =
+    direction === 1
+      ? (sorted.find((annotation) => annotation.range.startMs > playheadMs.value) ?? sorted[0])
+      : ([...sorted].reverse().find((annotation) => annotation.range.startMs < playheadMs.value) ??
+        sorted.at(-1));
+  if (target) seekAnnotation(target);
+}
+
+function recordEditorUndo(state = captureEditorState()): void {
+  const previous = editorUndoStack.value.at(-1);
+  if (previous && JSON.stringify(previous) === JSON.stringify(state)) return;
+  editorUndoStack.value = [...editorUndoStack.value.slice(-29), state];
+}
+
+function captureEditorState(): EditorUndoState {
+  return {
+    draftStart: draftStart.value,
+    draftEnd: draftEnd.value,
+    selectedNoteIds: [...selectedNoteIds.value],
+    manualExclusions: [...manualExclusions.value],
+    labels: draftLabels.value.map((label) => ({ ...label })),
+    judgmentNote: judgmentNote.value,
+    ...(editingAnnotationId.value ? { editingAnnotationId: editingAnnotationId.value } : {}),
+  };
+}
+
+function undoEditor(): void {
+  const state = editorUndoStack.value.at(-1);
+  if (!state) return;
+  pauseForEdit();
+  editorUndoStack.value = editorUndoStack.value.slice(0, -1);
+  draftStart.value = state.draftStart;
+  draftEnd.value = state.draftEnd;
+  selectedNoteIds.value = new Set(state.selectedNoteIds);
+  manualExclusions.value = new Set(state.manualExclusions);
+  draftLabels.value = state.labels;
+  judgmentNote.value = state.judgmentNote;
+  editingAnnotationId.value = state.editingAnnotationId;
+  rangeError.value = "";
+  markDraft();
+}
+
+function beginTextEdit(): void {
+  pauseForEdit();
+  pendingTextUndo ??= captureEditorState();
+}
+
+function finishTextEdit(): void {
+  if (!pendingTextUndo) return;
+  if (JSON.stringify(pendingTextUndo) !== JSON.stringify(captureEditorState())) {
+    recordEditorUndo(pendingTextUndo);
+    markDraft();
+  }
+  pendingTextUndo = undefined;
+}
+
+function finishRangeEdit(): void {
+  finishTextEdit();
+  applyManualRange(false);
+}
+
+function readUndoState(value: readonly unknown[] | undefined): readonly EditorUndoState[] {
+  return (value ?? []).flatMap((entry) => (isEditorUndoState(entry) ? [entry] : []));
+}
+
+function isEditorUndoState(value: unknown): value is EditorUndoState {
+  if (typeof value !== "object" || value === null) return false;
+  const state = value as Partial<EditorUndoState>;
+  return (
+    typeof state.draftStart === "string" &&
+    typeof state.draftEnd === "string" &&
+    Array.isArray(state.selectedNoteIds) &&
+    Array.isArray(state.manualExclusions) &&
+    Array.isArray(state.labels) &&
+    typeof state.judgmentNote === "string"
+  );
+}
+
+function isTypingTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLElement &&
+    Boolean(target.closest("input, textarea, select, [contenteditable='true']"))
+  );
+}
+
+function isNativeActivationTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLElement &&
+    Boolean(target.closest("button, a, summary, [role='button'], [role='link']"))
+  );
+}
+
+function overviewTimeFromPointer(event: PointerEvent): number {
+  const rect = overviewSvg.value?.getBoundingClientRect();
+  const endMs = session.value?.chartEndMs ?? 0;
+  if (!rect || rect.width === 0) return 0;
+  return Math.min(Math.max(0, ((event.clientX - rect.left) / rect.width) * endMs), endMs);
+}
+
+function applyManualRange(captureUndo = true): void {
+  if (operationLocked.value) return;
   const range = readDraftRange(true);
   if (!range) return;
+  pauseForEdit();
+  if (captureUndo) recordEditorUndo();
   const selection = createNoteSelection(
     session.value?.chart.notes ?? [],
     range,
@@ -387,9 +995,11 @@ function applyManualRange(): void {
 }
 
 function toggleNote(note: ManiaNote): void {
-  if (!session.value || saveState.value === "saving" || activationBusy.value) return;
+  if (!session.value || operationLocked.value) return;
   const range = readDraftRange(true);
   if (!range) return;
+  pauseForEdit();
+  recordEditorUndo();
   const selection = toggleSelectedNote(
     session.value.chart.notes,
     createNoteSelection(session.value.chart.notes, range, manualExclusions.value),
@@ -408,17 +1018,21 @@ function toggleSceneNote(noteId: string): void {
 }
 
 function addTag(tag: FoundationTagV1): void {
-  if (saveState.value === "saving") return;
+  if (operationLocked.value) return;
   if (tag.status !== "active") return;
   if (draftLabels.value.some((label) => label.tagId === tag.id)) return;
+  pauseForEdit();
+  recordEditorUndo();
   draftLabels.value = [...draftLabels.value, { tagId: tag.id, salience: 2 }];
+  focusedTagId.value = tag.id;
   tagQuery.value = "";
   markDraft();
 }
 
 function beginTagActivation(tag: FoundationTagV1): void {
-  if (saveState.value === "saving") return;
+  if (operationLocked.value) return;
   if (tag.status !== "candidate") return;
+  pauseForEdit();
   activationTag.value = tag;
   activationDefinition.value = tag.definition;
   activationCue.value = tag.inclusionCues[0] ?? "";
@@ -430,7 +1044,7 @@ async function activateTag(): Promise<void> {
     !session.value ||
     !directory.value ||
     !activationTag.value ||
-    saveState.value === "saving"
+    operationLocked.value
   ) {
     return;
   }
@@ -472,13 +1086,22 @@ async function activateTag(): Promise<void> {
 }
 
 function removeTag(tagId: string): void {
-  if (saveState.value === "saving") return;
+  if (operationLocked.value) return;
+  pauseForEdit();
+  recordEditorUndo();
   draftLabels.value = draftLabels.value.filter((label) => label.tagId !== tagId);
+  if (focusedTagId.value === tagId) focusedTagId.value = draftLabels.value.at(-1)?.tagId;
   markDraft();
 }
 
 function setSalience(tagId: string, salience: 1 | 2): void {
-  if (saveState.value === "saving") return;
+  if (operationLocked.value) return;
+  if (!draftLabels.value.some((label) => label.tagId === tagId && label.salience !== salience)) {
+    return;
+  }
+  pauseForEdit();
+  recordEditorUndo();
+  focusedTagId.value = tagId;
   draftLabels.value = draftLabels.value.map((label) =>
     label.tagId === tagId ? { ...label, salience } : label,
   );
@@ -486,7 +1109,7 @@ function setSalience(tagId: string, salience: 1 | 2): void {
 }
 
 async function commitAnnotation(): Promise<void> {
-  if (!session.value || !directory.value || saveState.value === "saving") return;
+  if (!session.value || !directory.value || operationLocked.value) return;
   const range = readDraftRange(true);
   if (!range) return;
   if (selectedNoteIds.value.size === 0) {
@@ -495,6 +1118,7 @@ async function commitAnnotation(): Promise<void> {
   if (draftLabels.value.length === 0) {
     return setRangeError("Add at least one active tag.");
   }
+  pauseForEdit();
 
   const existing = session.value.document.annotations.find(
     (annotation) => annotation.id === editingAnnotationId.value,
@@ -523,12 +1147,14 @@ async function commitAnnotation(): Promise<void> {
   });
   if (!saved) return;
 
-  playheadMs.value = range.endMs;
+  seekPlayhead(range.endMs);
   clearEditor(range.endMs);
 }
 
 function editAnnotation(annotation: GoldAnnotationV1): void {
-  if (!session.value || saveState.value === "saving") return;
+  if (!session.value || operationLocked.value) return;
+  pauseForEdit();
+  recordEditorUndo();
   editingAnnotationId.value = annotation.id;
   draftStart.value = formatMs(annotation.range.startMs);
   draftEnd.value = formatMs(annotation.range.endMs);
@@ -547,16 +1173,23 @@ function editAnnotation(annotation: GoldAnnotationV1): void {
   draftLabels.value = annotation.labels;
   judgmentNote.value = annotation.judgmentNote ?? "";
   playheadMs.value = annotation.range.startMs;
+  seekPlayhead(annotation.range.startMs);
   rangeError.value = "";
   markDraft();
 }
 
 function seekAnnotation(annotation: GoldAnnotationV1): void {
-  playheadMs.value = annotation.range.startMs;
+  seekPlayhead(annotation.range.startMs);
+}
+
+async function playAnnotation(annotation: GoldAnnotationV1): Promise<void> {
+  if (!playbackClock || operationLocked.value) return;
+  await playbackClock.playSelection(annotation.range);
 }
 
 async function deleteAnnotation(annotation: GoldAnnotationV1): Promise<void> {
-  if (!session.value || saveState.value === "saving") return;
+  if (!session.value || operationLocked.value) return;
+  pauseForEdit();
   const preserveEditor = editorDirty.value && editingAnnotationId.value !== annotation.id;
   const saved = await persistDocument(
     {
@@ -663,7 +1296,7 @@ function markDraft(): void {
     !session.value ||
     !directory.value ||
     !activeTaskId.value ||
-    saveState.value === "saving"
+    operationLocked.value
   ) {
     return;
   }
@@ -686,10 +1319,11 @@ async function persistDraftNow(force = false): Promise<void> {
 }
 
 async function flushDraft(): Promise<void> {
-  if (draftTimer === undefined) return;
-  window.clearTimeout(draftTimer);
-  draftTimer = undefined;
-  await persistDraftNow();
+  if (draftTimer !== undefined) {
+    window.clearTimeout(draftTimer);
+    draftTimer = undefined;
+  }
+  if (editorDirty.value) await persistDraftNow(true);
 }
 
 function buildDraft(current: BeatmapSession, datasetId: string): AnnotationDraft {
@@ -709,7 +1343,7 @@ function buildDraft(current: BeatmapSession, datasetId: string): AnnotationDraft
     range: readDraftRange(false),
     rangeEditor: { start: draftStart.value, end: draftEnd.value },
     sourceSha256: current.source.sha256,
-    undoState: [],
+    undoState: editorUndoStack.value,
     visualSpeed: visualSpeed.value,
   };
 }
@@ -723,6 +1357,8 @@ function clearEditor(startMs: number): void {
   draftLabels.value = [];
   judgmentNote.value = "";
   manualExclusions.value = new Set();
+  focusedTagId.value = undefined;
+  editorUndoStack.value = [];
   selectAllCandidates(range);
   rangeError.value = "";
   editorDirty.value = false;
@@ -854,6 +1490,42 @@ function formatTime(value: number): string {
   const seconds = Math.floor((value % 60_000) / 1_000);
   const milliseconds = Math.floor(value % 1_000);
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}.${String(milliseconds).padStart(3, "0")}`;
+}
+
+function rangeOverviewGeometry(
+  range: TimeRangeV1,
+  chartEndMs: number,
+  clip = false,
+): { x: number; width: number } {
+  const startMs = clip ? Math.min(Math.max(0, range.startMs), chartEndMs) : range.startMs;
+  const endMs = clip ? Math.min(Math.max(0, range.endMs), chartEndMs) : range.endMs;
+  return {
+    x: (startMs / chartEndMs) * 1_000,
+    width: Math.max(1, ((endMs - startMs) / chartEndMs) * 1_000),
+  };
+}
+
+function rangeSceneGeometry(
+  range: TimeRangeV1,
+  frame: BufferedSceneFrame,
+): { x: number; y: number; width: number; height: number } | undefined {
+  const startMs = Math.max(range.startMs, frame.bufferRange.startMs);
+  const endMs = Math.min(range.endMs, frame.bufferRange.endMs);
+  if (startMs >= endMs) return undefined;
+  const pixelsPerMillisecond = frame.scene.timeRange.pixelsPerMillisecond;
+  return {
+    x: frame.scene.padding.left,
+    y:
+      frame.scene.padding.top +
+      (startMs - frame.bufferRange.startMs) * pixelsPerMillisecond,
+    width:
+      frame.scene.width - frame.scene.padding.left - frame.scene.padding.right,
+    height: Math.max(1, (endMs - startMs) * pixelsPerMillisecond),
+  };
+}
+
+function formatMetric(value: number, digits = 1): string {
+  return Number.isFinite(value) ? value.toFixed(digits) : "0.0";
 }
 
 function statusLabel(status: TaskQueueStatus): string {
@@ -1144,48 +1816,298 @@ function errorMessage(error: unknown): string {
               <div><dt>Source SHA</dt><dd>{{ readonlyTask.source?.sha256.slice(0, 12) }}</dd></div>
             </dl>
           </div>
-          <div v-else-if="staticScene && session" class="static-preview-shell">
-            <svg
-              class="annotation-static-svg"
-              :viewBox="staticScene.viewBox.join(' ')"
-              role="img"
-              :aria-label="`${session.source.keyCount}K note evidence around the current selection`"
-            >
-              <title>Note evidence around the current selection</title>
-              <rect width="100%" height="100%" rx="14" fill="#101820" />
-              <g class="static-lanes">
+          <div v-else-if="session" class="interactive-stage-shell">
+            <div class="falling-note-shell">
+              <svg
+                ref="viewportSvg"
+                class="falling-note-viewport"
+                :class="{ 'is-locked': operationLocked }"
+                :viewBox="`0 0 ${viewportSize.width} ${viewportSize.height}`"
+                role="img"
+                :aria-label="`${session.source.keyCount}K falling-note evidence. Drag vertically to scrub.`"
+                @pointerdown="beginViewportScrub"
+                @pointermove="moveViewportScrub"
+                @pointerup="endViewportScrub"
+                @pointercancel="endViewportScrub"
+              >
+                <title>Interactive falling-note evidence</title>
+                <defs>
+                  <pattern
+                    id="annotation-saved-hatch"
+                    width="10"
+                    height="10"
+                    patternUnits="userSpaceOnUse"
+                    patternTransform="rotate(45)"
+                  >
+                    <line x1="0" y1="0" x2="0" y2="10" class="saved-hatch-line" />
+                  </pattern>
+                  <pattern
+                    id="annotation-selection-hatch"
+                    width="12"
+                    height="12"
+                    patternUnits="userSpaceOnUse"
+                    patternTransform="rotate(45)"
+                  >
+                    <line x1="0" y1="0" x2="0" y2="12" class="selection-hatch-line" />
+                  </pattern>
+                </defs>
+                <rect width="100%" height="100%" class="viewport-ground" />
+                <g v-if="viewportFrame" class="viewport-lanes" aria-hidden="true">
+                  <rect
+                    v-for="entry in viewportFrame.keyedLanes"
+                    :key="entry.key"
+                    :x="entry.lane.x"
+                    y="0"
+                    :width="entry.lane.width"
+                    :height="viewportSize.height"
+                    :fill="entry.lane.fill"
+                    :stroke="entry.lane.stroke"
+                  />
+                </g>
+                <g
+                  v-if="viewportFrame"
+                  class="moving-note-group"
+                  :transform="viewportFrame.noteGroupTransform"
+                >
+                  <!-- biome-ignore lint/a11y/noStaticElementInteractions: Saved ranges are also keyboard accessible in the annotation list. -->
+                  <rect
+                    v-for="band in annotationBands"
+                    :key="`saved-${band.annotation.id}`"
+                    class="viewport-range-band viewport-range-band--saved"
+                    :x="band.x"
+                    :y="band.y"
+                    :width="band.width"
+                    :height="band.height"
+                    @pointerdown.stop
+                    @click.stop="seekAnnotation(band.annotation)"
+                  />
+                  <rect
+                    v-if="selectionBand"
+                    class="viewport-range-band viewport-range-band--selection"
+                    :x="selectionBand.x"
+                    :y="selectionBand.y"
+                    :width="selectionBand.width"
+                    :height="selectionBand.height"
+                    aria-hidden="true"
+                  />
+                  <!-- biome-ignore lint/a11y/noStaticElementInteractions: Note selection is duplicated by the keyboard-accessible checkbox list. -->
+                  <rect
+                    v-for="entry in viewportFrame.keyedNotes"
+                    :key="entry.key"
+                    class="falling-note"
+                    :class="{
+                      'is-candidate': candidateNoteIds.has(entry.glyph.id),
+                      'is-selected': selectedNoteIds.has(entry.glyph.id),
+                    }"
+                    :x="entry.glyph.x"
+                    :y="entry.glyph.y"
+                    :width="entry.glyph.width"
+                    :height="entry.glyph.height"
+                    :rx="entry.glyph.radius"
+                    :fill="entry.glyph.fill"
+                    :stroke="entry.glyph.stroke"
+                    @pointerdown.stop
+                    @click.stop="toggleSceneNote(entry.glyph.id)"
+                  />
+                </g>
+                <g class="judgment-guide" aria-hidden="true">
+                  <line
+                    x1="0"
+                    :y1="viewportSize.height * judgmentLineRatio"
+                    :x2="viewportSize.width"
+                    :y2="viewportSize.height * judgmentLineRatio"
+                  />
+                  <text
+                    x="12"
+                    :y="viewportSize.height * judgmentLineRatio - 8"
+                  >JUDGE · 82%</text>
+                </g>
+              </svg>
+              <div v-if="viewportFrame && viewportInstrumentation" class="viewport-instrumentation">
+                <span>BUF R{{ viewportFrame.revision }}</span>
+                <span>{{ viewportFrame.refreshed ? "REFRESH" : "REUSE" }}</span>
+                <span>
+                  BUILD {{ viewportInstrumentation.sceneBuildCount }} · REUSE
+                  {{ viewportInstrumentation.reusedFrameCount }}
+                </span>
+                <span>
+                  N {{ viewportInstrumentation.lastRenderedNoteCount }} / MAX
+                  {{ viewportInstrumentation.maximumRenderedNoteCount }}
+                </span>
+                <span>
+                  BUILD {{ formatMetric(viewportInstrumentation.lastBuildDurationMs) }} /
+                  {{ formatMetric(viewportInstrumentation.maximumBuildDurationMs) }} ms
+                </span>
+                <span>P95 {{ formatMetric(frameP95Ms) }} ms</span>
+              </div>
+              <div class="viewport-legend" aria-hidden="true">
+                <span><i class="legend-mark legend-mark--selected"></i>Selected</span>
+                <span><i class="legend-mark legend-mark--saved"></i>Saved</span>
+              </div>
+            </div>
+
+            <div class="overview-shell">
+              <div class="overview-heading">
+                <span>Whole-chart density</span>
+                <strong>{{ selectedCount }} / {{ candidateNotes.length }} notes selected</strong>
+              </div>
+              <div class="overview-track">
+                <svg
+                  ref="overviewSvg"
+                  class="overview-timeline"
+                  viewBox="0 0 1000 72"
+                  role="img"
+                  aria-label="Chart density overview. Click to seek or drag empty space to create a range."
+                  @pointerdown="beginTimelineDrag($event, 'create')"
+                  @pointermove="moveTimelineDrag"
+                  @pointerup="endTimelineDrag"
+                  @pointercancel="endTimelineDrag"
+                >
+                <title>Whole-chart note density and annotation ranges</title>
+                <rect width="1000" height="72" class="overview-ground" />
+                <path v-if="overviewDensity" :d="overviewDensity.path" class="overview-density" />
                 <rect
-                  v-for="lane in staticScene.lanes"
-                  :key="lane.column"
-                  :x="lane.x"
-                  :y="lane.y"
-                  :width="lane.width"
-                  :height="lane.height"
-                  :fill="lane.fill"
-                  :stroke="lane.stroke"
+                  v-if="timelineViewport"
+                  class="overview-viewport-window"
+                  :x="timelineViewport.x"
+                  y="0"
+                  :width="timelineViewport.width"
+                  height="72"
+                  aria-hidden="true"
                 />
-              </g>
-              <g class="static-notes">
-                <!-- biome-ignore lint/a11y/noStaticElementInteractions: The SVG hit area is duplicated by the keyboard-accessible checkbox list. -->
+                <!-- biome-ignore lint/a11y/noStaticElementInteractions: Saved ranges are duplicated by the keyboard-accessible annotation list. -->
                 <rect
-                  v-for="note in staticScene.notes"
-                  :key="note.id"
-                  class="static-note"
-                  :class="{ 'is-selected': selectedNoteIds.has(note.id) }"
-                  :x="note.x"
-                  :y="note.y"
-                  :width="note.width"
-                  :height="note.height"
-                  :rx="note.radius"
-                  :fill="note.fill"
-                  :stroke="note.stroke"
-                  @click="toggleSceneNote(note.id)"
+                  v-for="band in overviewAnnotationBands"
+                  :key="`overview-${band.annotation.id}`"
+                  class="overview-saved-range"
+                  :x="band.x"
+                  y="8"
+                  :width="band.width"
+                  height="56"
+                  @pointerdown.stop
+                  @click.stop="seekAnnotation(band.annotation)"
                 />
-              </g>
-            </svg>
-            <div class="static-preview-caption">
-              <span>Static evidence window</span>
-              <strong>{{ selectedCount }} / {{ candidateNotes.length }} candidate notes selected</strong>
+                <g v-if="timelineSelection" class="overview-selection-range">
+                  <g>
+                    <rect
+                      class="overview-range-hit"
+                      :x="timelineSelection.x - timelineHandleHitWidth"
+                      y="0"
+                      :width="timelineHandleHitWidth"
+                      height="72"
+                      @pointerdown.stop="beginTimelineDrag($event, 'resize-start')"
+                    />
+                  </g>
+                  <g>
+                    <rect
+                      class="overview-range-hit"
+                      :x="timelineSelection.x + timelineSelection.width"
+                      y="0"
+                      :width="timelineHandleHitWidth"
+                      height="72"
+                      @pointerdown.stop="beginTimelineDrag($event, 'resize-end')"
+                    />
+                  </g>
+                  <rect
+                    class="overview-selection-body"
+                    :x="timelineSelection.x"
+                    y="10"
+                    :width="timelineSelection.width"
+                    height="52"
+                    @pointerdown.stop="beginTimelineDrag($event, 'move')"
+                  />
+                  <g aria-hidden="true">
+                    <rect
+                      class="overview-range-handle"
+                      :x="timelineSelection.x - 7"
+                      y="3"
+                      width="14"
+                      height="66"
+                    />
+                    <rect
+                      class="overview-range-handle"
+                      :x="timelineSelection.x + timelineSelection.width - 7"
+                      y="3"
+                      width="14"
+                      height="66"
+                    />
+                  </g>
+                </g>
+                <line
+                  class="overview-playhead"
+                  :x1="overviewPlayheadX"
+                  y1="0"
+                  :x2="overviewPlayheadX"
+                  y2="72"
+                />
+                </svg>
+              </div>
+              <div class="overview-caption">
+                <span>Click seek · drag empty create · drag band move · handles resize</span>
+                <span>Hold Alt/Option for free placement</span>
+              </div>
+            </div>
+
+            <div class="playback-strip">
+              <fieldset class="transport-controls" aria-label="Playback controls">
+                <button
+                  class="transport-button transport-button--primary"
+                  type="button"
+                  :disabled="operationLocked"
+                  :aria-pressed="playbackState.playing"
+                  @click="togglePlayback"
+                >
+                  {{ playbackState.playing ? "Pause" : "Play" }}
+                  <kbd>Space</kbd>
+                </button>
+                <button
+                  class="transport-button"
+                  type="button"
+                  :disabled="operationLocked || !parsedRange"
+                  @click="playSelectionOnce"
+                >Selection <kbd>⇧Space</kbd></button>
+                <button
+                  class="transport-button"
+                  :class="{ 'is-active': playbackState.looping }"
+                  type="button"
+                  :disabled="operationLocked || !parsedRange"
+                  :aria-pressed="playbackState.looping"
+                  @click="toggleSelectionLoop"
+                >Loop <kbd>L</kbd></button>
+              </fieldset>
+              <div class="speed-controls">
+                <span>Visual speed</span>
+                <div class="speed-presets">
+                  <button
+                    v-for="speed in visualSpeedPresets"
+                    :key="speed"
+                    type="button"
+                    :class="{ 'is-active': visualSpeed === speed }"
+                    :disabled="operationLocked"
+                    @click="selectVisualSpeed(speed)"
+                  >{{ speed }}</button>
+                </div>
+                <label class="speed-custom">
+                  <span>Custom</span>
+                  <input
+                    v-model="visualSpeedDraft"
+                    type="number"
+                    :min="minimumVisualSpeed"
+                    :max="maximumVisualSpeed"
+                    step="1"
+                    :disabled="operationLocked"
+                    aria-label="Custom visual speed in pixels per second"
+                    @change="applyVisualSpeed"
+                    @keydown.enter.prevent="applyVisualSpeed"
+                  />
+                  <small>px/s</small>
+                </label>
+              </div>
+              <div class="playback-meta">
+                <strong>{{ formatTime(playheadMs) }}</strong>
+                <span>I/O edges · 1/2 salience · [ ] saved · ⌘/Ctrl Z undo</span>
+                <small v-if="visualSpeedError" role="alert">{{ visualSpeedError }}</small>
+              </div>
             </div>
           </div>
           <div v-else class="stage-empty">
@@ -1211,7 +2133,7 @@ function errorMessage(error: unknown): string {
           <fieldset
             v-if="session"
             class="annotation-editor"
-            :disabled="saveState === 'saving' || activationBusy"
+            :disabled="operationLocked"
           >
             <section class="editor-section" aria-labelledby="range-heading">
               <div class="editor-section-heading">
@@ -1221,11 +2143,23 @@ function errorMessage(error: unknown): string {
               <div class="range-inputs">
                 <label>
                   <span>Start ms</span>
-                  <input v-model="draftStart" inputmode="decimal" @input="markDraft" @change="applyManualRange" />
+                  <input
+                    v-model="draftStart"
+                    inputmode="decimal"
+                    @focus="beginTextEdit"
+                    @input="markDraft"
+                    @blur="finishRangeEdit"
+                  />
                 </label>
                 <label>
                   <span>End ms</span>
-                  <input v-model="draftEnd" inputmode="decimal" @input="markDraft" @change="applyManualRange" />
+                  <input
+                    v-model="draftEnd"
+                    inputmode="decimal"
+                    @focus="beginTextEdit"
+                    @input="markDraft"
+                    @blur="finishRangeEdit"
+                  />
                 </label>
               </div>
               <p v-if="rangeError" class="field-error" role="alert">{{ rangeError }}</p>
@@ -1330,7 +2264,13 @@ function errorMessage(error: unknown): string {
               </form>
 
               <div class="selected-label-list">
-                <div v-for="label in draftLabels" :key="label.tagId" class="selected-label-row">
+                <div
+                  v-for="label in draftLabels"
+                  :key="label.tagId"
+                  class="selected-label-row"
+                  :class="{ 'is-focused': focusedTagId === label.tagId }"
+                  @focusin="focusedTagId = label.tagId"
+                >
                   <strong>{{ label.tagId }}</strong>
                   <div class="salience-switch" :aria-label="`${label.tagId} salience`">
                     <button
@@ -1354,7 +2294,13 @@ function errorMessage(error: unknown): string {
             <section class="editor-section">
               <label class="field-stack">
                 <span>Judgment note, optional</span>
-                <textarea v-model="judgmentNote" rows="3" @input="markDraft"></textarea>
+                <textarea
+                  v-model="judgmentNote"
+                  rows="3"
+                  @focus="beginTextEdit"
+                  @input="markDraft"
+                  @blur="finishTextEdit"
+                ></textarea>
               </label>
               <button
                 class="button button--primary commit-button"
@@ -1384,6 +2330,7 @@ function errorMessage(error: unknown): string {
                     </span>
                   </div>
                   <div class="annotation-row-actions">
+                    <button type="button" @click="playAnnotation(annotation)">Play</button>
                     <button type="button" @click="editAnnotation(annotation)">Edit</button>
                     <button type="button" @click="deleteAnnotation(annotation)">Delete</button>
                   </div>

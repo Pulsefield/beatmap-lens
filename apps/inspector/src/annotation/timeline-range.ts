@@ -48,6 +48,15 @@ export function snapTimelineTime(
   return clamp(index.nearestSnapPoint(boundedTime) ?? boundedTime, 0, options.chartEndMs);
 }
 
+/** Converts a CSS-pixel edge target into timeline viewBox units. */
+export function timelineEdgeHitWidth(
+  renderedWidth: number,
+  viewBoxWidth: number,
+  exteriorTargetPx = 40,
+): number {
+  return (exteriorTargetPx * viewBoxWidth) / renderedWidth;
+}
+
 export function createTimelineRange(
   anchorMs: number,
   focusMs: number,

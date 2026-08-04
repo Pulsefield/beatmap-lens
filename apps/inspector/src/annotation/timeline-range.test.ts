@@ -7,6 +7,7 @@ import {
   parseManualRangeDraft,
   parseTimeInput,
   resizeTimelineRange,
+  timelineEdgeHitWidth,
 } from "./timeline-range";
 
 describe("timeline range operations", () => {
@@ -42,6 +43,12 @@ describe("timeline range operations", () => {
         freePlacement: true,
       }),
     ).toEqual({ startMs: 110.25, endMs: 790.75 });
+  });
+
+  it("keeps forty CSS pixels of edge target outside a narrow timeline body", () => {
+    const hitWidth = timelineEdgeHitWidth(375, 1_000);
+
+    expect((hitWidth / 1_000) * 375).toBe(40);
   });
 });
 
