@@ -5,6 +5,7 @@ import {
   nextTick,
   onBeforeUnmount,
   onMounted,
+  reactive,
   ref,
   shallowRef,
   watch,
@@ -108,10 +109,16 @@ import {
   timelineEdgeHitWidth,
 } from "./annotation/timeline-range";
 import WorkspaceModeSwitch from "./WorkspaceModeSwitch.vue";
+import {
+  createWorkspaceLifecycleState,
+  DraftJournalQueue,
+  runWorkspaceOperation,
+  workspaceOperationFlags,
+} from "./workspace-lifecycle";
 import type { WorkspaceMode } from "./workspace-mode";
 
 type MobilePanel = "source" | "preview" | "details";
-type SaveState = "idle" | "draft" | "saving" | "saved" | "conflict" | "error";
+type SaveState = "idle" | "saving" | "saved" | "conflict" | "error";
 type TimelineDragKind = "create" | "move" | `resize-${TimelineRangeEdge}`;
 
 interface EditorUndoState {
@@ -184,7 +191,6 @@ const setupError = ref("");
 const setupBusy = ref(false);
 const setupProgress = ref("");
 const taskError = ref("");
-const taskLoading = ref(false);
 const activeMobilePanel = ref<MobilePanel>("preview");
 const saveState = ref<SaveState>("idle");
 const saveMessage = ref("Local draft only");
@@ -208,8 +214,6 @@ const activationExclusionCues = ref("");
 const activationAliases = ref("");
 const activationSalienceClarification = ref("");
 const activationError = ref("");
-const activationBusy = ref(false);
-const qualityBusy = ref(false);
 const qualityMessage = ref("");
 const foundationExemplarViews = ref<readonly FoundationExemplarView[]>([]);
 const foundationDetailsDigest = ref<string>();
@@ -219,7 +223,6 @@ const reviewNoteText = ref("");
 const reviewNoteIncludeSelection = ref(true);
 const exemplarTagId = ref("");
 const exemplarKind = ref<GoldExemplarRoleKindV1>("strong");
-const releaseBusy = ref(false);
 const releasePreview = shallowRef<GoldReleaseArtifact>();
 const releaseMessage = ref("");
 const playheadMs = ref(0);
@@ -247,6 +250,8 @@ const draftBase = ref<DraftBaseVersion | null>(null);
 const setupRestored = ref(false);
 const editorDirty = ref(false);
 const interactiveSessionGeneration = ref(0);
+const workspaceLifecycle = reactive(createWorkspaceLifecycleState());
+const draftJournal = new DraftJournalQueue(workspaceLifecycle);
 let draftTimer: number | undefined;
 let viewportController: BufferedSceneController | undefined;
 let noteTimeIndex: ManiaNoteTimeIndex | undefined;
@@ -258,9 +263,7 @@ let timelineDrag: TimelineDragState | undefined;
 let viewportDrag: ViewportDragState | undefined;
 let gestureFrame: number | undefined;
 let pendingTextUndo: EditorUndoState | undefined;
-let taskOpenGeneration = 0;
 let preferenceWrite = Promise.resolve();
-let draftWrite = Promise.resolve();
 let previousAnimationFrameTime: number | undefined;
 let lastFrameMetricReport = 0;
 const frameDurations: number[] = [];
@@ -313,13 +316,21 @@ const pendingPredictionCount = computed(
 const hasUncommittedDraft = computed(
   () => editorDirty.value || Boolean(reviewNoteText.value.trim()),
 );
-const operationLocked = computed(
+const operationFlags = computed(() =>
+  workspaceOperationFlags(workspaceLifecycle.activeOperation),
+);
+const operationLocked = computed(() => operationFlags.value.operationLocked);
+const taskLoading = computed(() => operationFlags.value.taskLoading);
+const activationBusy = computed(() => operationFlags.value.activationBusy);
+const draftCleanupBlocked = computed(
+  () => workspaceLifecycle.draftLifecycle === "cleanup-error",
+);
+const editorLocked = computed(() => operationLocked.value || draftCleanupBlocked.value);
+const draftRecoveryVisible = computed(
   () =>
-    saveState.value === "saving" ||
-    activationBusy.value ||
-    qualityBusy.value ||
-    releaseBusy.value ||
-    taskLoading.value,
+    hasUncommittedDraft.value ||
+    workspaceLifecycle.draftLifecycle === "write-error" ||
+    draftCleanupBlocked.value,
 );
 const overlapWarnings = computed(() => {
   const current = session.value;
@@ -423,9 +434,21 @@ const currentChartLabel = computed(() => {
   return `${session.value.source.title} · ${session.value.source.difficulty}`;
 });
 const saveTone = computed(() => {
+  if (
+    saveState.value === "error" ||
+    saveState.value === "conflict" ||
+    workspaceLifecycle.draftLifecycle === "write-error" ||
+    workspaceLifecycle.draftLifecycle === "cleanup-error"
+  ) {
+    return "error";
+  }
+  if (
+    workspaceLifecycle.draftLifecycle === "pending" ||
+    workspaceLifecycle.draftLifecycle === "stored"
+  ) {
+    return "warn";
+  }
   if (saveState.value === "saved") return "ready";
-  if (saveState.value === "error" || saveState.value === "conflict") return "error";
-  if (saveState.value === "draft") return "warn";
   return "idle";
 });
 const audioStatusText = computed(() => {
@@ -485,11 +508,17 @@ watch(rangeNotePageCount, (pageCount) => {
 });
 
 async function changeWorkspaceMode(mode: WorkspaceMode): Promise<void> {
-  if (mode === "annotate") return;
-  pauseForEdit();
+  if (mode === "annotate" || draftCleanupBlocked.value) return;
   try {
-    await flushDraft();
-    emit("change-mode", mode);
+    const result = await runWorkspaceOperation(
+      workspaceLifecycle,
+      "change-mode",
+      async () => {
+        pauseForEdit();
+        await flushDraft();
+      },
+    );
+    if (result.started) emit("change-mode", mode);
   } catch (error) {
     saveState.value = "error";
     saveMessage.value = errorMessage(error);
@@ -497,7 +526,7 @@ async function changeWorkspaceMode(mode: WorkspaceMode): Promise<void> {
 }
 
 function handleVisibilityChange(): void {
-  if (document.visibilityState !== "hidden") return;
+  if (document.visibilityState !== "hidden" || draftCleanupBlocked.value) return;
   void flushDraft().catch((error) => {
     saveState.value = "error";
     saveMessage.value = errorMessage(error);
@@ -593,7 +622,7 @@ async function startWorkspace(): Promise<void> {
     directory.value = nextDirectory;
     queue.value = nextQueue;
     const firstTask = nextQueue.find((task) => task.status !== "missing-source");
-    if (firstTask) await openTask(firstTask);
+    if (firstTask) await loadTask(firstTask);
     setupProgress.value = "";
   } catch (error) {
     directory.value = undefined;
@@ -606,19 +635,22 @@ async function startWorkspace(): Promise<void> {
 
 async function openTask(task: TaskQueueItem): Promise<void> {
   if (!catalog.value || !corpusHandle.value || !directory.value) return;
-  if (
-    task.status === "missing-source" ||
-    operationLocked.value
-  ) {
-    return;
-  }
-  const generation = ++taskOpenGeneration;
-  taskLoading.value = true;
+  if (task.status === "missing-source" || draftCleanupBlocked.value) return;
+  await runWorkspaceOperation(workspaceLifecycle, "open-task", () => loadTask(task));
+}
+
+async function loadTask(task: TaskQueueItem): Promise<void> {
+  if (!catalog.value || !corpusHandle.value || !directory.value) return;
   taskError.value = "";
   pauseForEdit();
   try {
     await flushDraft();
-    if (generation !== taskOpenGeneration) return;
+  } catch (error) {
+    taskError.value = `Current draft not ready: ${errorMessage(error)}`;
+    return;
+  }
+
+  try {
     if (task.status === "readonly-future") {
       session.value = undefined;
       interactiveSessionGeneration.value++;
@@ -628,6 +660,7 @@ async function openTask(task: TaskQueueItem): Promise<void> {
         task.source &&
           (await sessions.getDraft(directory.value.manifest.datasetId, task.source.sha256)),
       );
+      workspaceLifecycle.draftLifecycle = readonlyDraftPresent.value ? "stored" : "clean";
       activeTaskId.value = task.id;
       saveState.value = "idle";
       saveMessage.value = `Annotation v${task.future?.version ?? "?"} · read-only`;
@@ -642,7 +675,6 @@ async function openTask(task: TaskQueueItem): Promise<void> {
       directory.value,
       sessions,
     );
-    if (generation !== taskOpenGeneration) return;
     session.value = next;
     activeTaskId.value = task.id;
     resetTaskQualityState();
@@ -657,8 +689,6 @@ async function openTask(task: TaskQueueItem): Promise<void> {
       "save-error",
       taskError.value,
     );
-  } finally {
-    if (generation === taskOpenGeneration) taskLoading.value = false;
   }
 }
 
@@ -691,7 +721,8 @@ function restoreEditor(next: BeatmapSession): void {
   draftEnd.value = draft?.rangeEditor?.end ?? formatMs(range.endMs);
   if (!draft) selectAllCandidates(range);
   else readDraftRange(true);
-  saveState.value = draft ? "draft" : next.base ? "saved" : "idle";
+  workspaceLifecycle.draftLifecycle = draft ? "stored" : "clean";
+  saveState.value = next.base ? "saved" : "idle";
   saveMessage.value = draft
     ? "Draft restored"
     : next.base
@@ -924,7 +955,7 @@ function applyTimelineRange(
   updateDraft = true,
 ): void {
   const current = session.value;
-  if (!current || operationLocked.value) return;
+  if (!current || editorLocked.value) return;
   pauseForEdit();
   if (captureUndo) recordEditorUndo();
 
@@ -948,7 +979,7 @@ function applyTimelineRange(
 function beginTimelineDrag(event: PointerEvent, kind: TimelineDragKind): void {
   const svg = overviewSvg.value;
   const current = session.value;
-  if (!svg || !current || !noteTimeIndex || operationLocked.value) return;
+  if (!svg || !current || !noteTimeIndex || editorLocked.value) return;
   const range = parsedRange.value ?? undefined;
   if (kind !== "create" && !range) return;
 
@@ -1028,7 +1059,7 @@ async function endTimelineDrag(event: PointerEvent): Promise<void> {
 
 function beginViewportGesture(event: PointerEvent): void {
   const svg = viewportSvg.value;
-  if (!svg || !session.value || operationLocked.value) return;
+  if (!svg || !session.value || editorLocked.value) return;
   event.preventDefault();
   pauseForEdit();
   svg.setPointerCapture(event.pointerId);
@@ -1153,7 +1184,7 @@ function finalizeActiveGestures(): void {
 async function handleWorkspaceKeydown(event: KeyboardEvent): Promise<void> {
   if (
     !session.value ||
-    operationLocked.value ||
+    editorLocked.value ||
     event.defaultPrevented ||
     isTypingTarget(event.target)
   ) {
@@ -1339,7 +1370,7 @@ function viewportYFromClientY(clientY: number): number {
 }
 
 function applyManualRange(captureUndo = true): void {
-  if (operationLocked.value) return;
+  if (editorLocked.value) return;
   const range = readDraftRange(true);
   if (!range) return;
   pauseForEdit();
@@ -1355,7 +1386,7 @@ function applyManualRange(captureUndo = true): void {
 }
 
 function toggleNote(note: ManiaNote): void {
-  if (!session.value || operationLocked.value) return;
+  if (!session.value || editorLocked.value) return;
   const range = readDraftRange(true);
   if (!range) return;
   pauseForEdit();
@@ -1378,7 +1409,11 @@ function toggleSceneNote(noteId: string): void {
 }
 
 function addTag(tag: FoundationTagV1): void {
-  if (operationLocked.value) return;
+  if (editorLocked.value) return;
+  applyTagToDraft(tag);
+}
+
+function applyTagToDraft(tag: FoundationTagV1): void {
   if (tag.status !== "active") return;
   if (draftLabels.value.some((label) => label.tagId === tag.id)) return;
   pauseForEdit();
@@ -1390,11 +1425,11 @@ function addTag(tag: FoundationTagV1): void {
   focusedTagId.value = tag.id;
   tagQuery.value = "";
   syncExemplarTag();
-  markDraft();
+  transitionDraft();
 }
 
 function beginSuggestedTagCreation(tagId: string): void {
-  if (operationLocked.value) return;
+  if (editorLocked.value) return;
   pauseForEdit();
   activationTag.value = {
     aliases: [],
@@ -1421,7 +1456,7 @@ function useSuggestedTag(suggestion: { id: string; tag?: FoundationTagV1 }): voi
 }
 
 function beginCustomTagActivation(): void {
-  if (operationLocked.value || !canCreateCustomTag.value) return;
+  if (editorLocked.value || !canCreateCustomTag.value) return;
   pauseForEdit();
   const displayName = tagQuery.value.trim();
   activationTag.value = {
@@ -1460,57 +1495,53 @@ async function activateTag(): Promise<void> {
   if (
     !session.value ||
     !directory.value ||
-    !activationTag.value ||
-    operationLocked.value
+    !activationTag.value
   ) {
     return;
   }
-  activationError.value = "";
-  activationBusy.value = true;
-  const activatingSession = session.value;
-  const activatingTag = activationTag.value;
-  const activatingDirectory = directory.value;
-  try {
-    const tagId = activationIsCustom.value
-      ? canonicalTagId(activationTagId.value)
-      : activatingTag.id;
-    const nextFoundation = await createActiveFoundationTagV1(
-      activatingSession.foundation,
-      {
-        aliases: linesFromText(activationAliases.value),
-        definition: activationDefinition.value,
-        displayName: activationDisplayName.value,
-        exclusionCues: linesFromText(activationExclusionCues.value),
-        inclusionCues: linesFromText(activationInclusionCues.value),
-        salienceClarification: activationSalienceClarification.value,
-        tagId,
-      },
-      {
-        creatorId: annotatorId.value.trim(),
-        createdAt: new Date().toISOString(),
-      },
-    );
-    await activatingDirectory.setCurrentFoundation(nextFoundation);
-    session.value = { ...activatingSession, foundation: nextFoundation };
-    foundationDetailsDigest.value = undefined;
-    const activated = nextFoundation.tags.find(
-      (tag) => tag.id === tagId,
-    );
-    activationBusy.value = false;
-    if (activated) addTag(activated);
-    cancelTagActivation();
-    invalidateReleasePreview();
-    saveState.value = "draft";
-    saveMessage.value = `Foundation r${nextFoundation.revision} verified · annotation draft pending`;
-  } catch (error) {
-    activationError.value = errorMessage(error);
-  } finally {
-    activationBusy.value = false;
-  }
+  await runWorkspaceOperation(workspaceLifecycle, "activate-tag", async () => {
+    activationError.value = "";
+    const activatingSession = session.value;
+    const activatingTag = activationTag.value;
+    const activatingDirectory = directory.value;
+    if (!activatingSession || !activatingTag || !activatingDirectory) return;
+
+    try {
+      const tagId = activationIsCustom.value
+        ? canonicalTagId(activationTagId.value)
+        : activatingTag.id;
+      const nextFoundation = await createActiveFoundationTagV1(
+        activatingSession.foundation,
+        {
+          aliases: linesFromText(activationAliases.value),
+          definition: activationDefinition.value,
+          displayName: activationDisplayName.value,
+          exclusionCues: linesFromText(activationExclusionCues.value),
+          inclusionCues: linesFromText(activationInclusionCues.value),
+          salienceClarification: activationSalienceClarification.value,
+          tagId,
+        },
+        {
+          creatorId: annotatorId.value.trim(),
+          createdAt: new Date().toISOString(),
+        },
+      );
+      await activatingDirectory.setCurrentFoundation(nextFoundation);
+      session.value = { ...activatingSession, foundation: nextFoundation };
+      foundationDetailsDigest.value = undefined;
+      const activated = nextFoundation.tags.find((tag) => tag.id === tagId);
+      if (activated) applyTagToDraft(activated);
+      cancelTagActivation();
+      invalidateReleasePreview();
+      saveMessage.value = `Foundation r${nextFoundation.revision} verified · annotation draft pending`;
+    } catch (error) {
+      activationError.value = errorMessage(error);
+    }
+  });
 }
 
 function removeTag(tagId: string): void {
-  if (operationLocked.value) return;
+  if (editorLocked.value) return;
   pauseForEdit();
   recordEditorUndo();
   draftLabels.value = draftLabels.value.filter((label) => label.tagId !== tagId);
@@ -1523,7 +1554,7 @@ function removeTag(tagId: string): void {
 }
 
 function setSalience(tagId: string, salience: 1 | 2): void {
-  if (operationLocked.value) return;
+  if (editorLocked.value) return;
   if (!draftLabels.value.some((label) => label.tagId === tagId && label.salience !== salience)) {
     return;
   }
@@ -1537,60 +1568,67 @@ function setSalience(tagId: string, salience: 1 | 2): void {
 }
 
 async function commitAnnotation(): Promise<void> {
-  if (!session.value || !directory.value || operationLocked.value) return;
-  finalizeActiveGestures();
-  const range = readDraftRange(true);
-  if (!range) return;
-  if (selectedNoteIds.value.size === 0) {
-    return setRangeError("Select at least one intersecting note.");
-  }
-  if (draftLabels.value.length === 0) {
-    return setRangeError("Add at least one active tag.");
-  }
-  pauseForEdit();
+  if (!session.value || !directory.value || draftCleanupBlocked.value) return;
+  await runWorkspaceOperation(workspaceLifecycle, "canonical-save", async () => {
+    finalizeActiveGestures();
+    const current = session.value;
+    const currentDirectory = directory.value;
+    const range = readDraftRange(true);
+    if (!current || !currentDirectory || !range) return;
+    if (selectedNoteIds.value.size === 0) {
+      return setRangeError("Select at least one intersecting note.");
+    }
+    if (draftLabels.value.length === 0) {
+      return setRangeError("Add at least one active tag.");
+    }
+    pauseForEdit();
 
-  const existing = session.value.document.annotations.find(
-    (annotation) => annotation.id === editingAnnotationId.value,
-  );
-  const gold = createGoldAnnotation(
-    session.value,
-    {
-      ...(existing ? { existing } : {}),
-      range,
-      noteIds: [...selectedNoteIds.value],
-      labels: draftLabels.value,
-      exemplarRoles: draftExemplarRoles.value,
-      judgmentNote: judgmentNote.value,
-      annotatorId: annotatorId.value.trim(),
-    },
-    directory.value.manifest.currentFoundation,
-  );
-  const annotations = existing
-    ? session.value.document.annotations.map((annotation) =>
-        annotation.id === existing.id ? gold : annotation,
-      )
-    : [...session.value.document.annotations, gold];
-  const preserveReviewComposer = Boolean(reviewNoteText.value.trim());
-  const saved = await persistDocument(
-    {
-      ...session.value.document,
+    const existing = current.document.annotations.find(
+      (annotation) => annotation.id === editingAnnotationId.value,
+    );
+    const gold = createGoldAnnotation(
+      current,
+      {
+        ...(existing ? { existing } : {}),
+        range,
+        noteIds: [...selectedNoteIds.value],
+        labels: draftLabels.value,
+        exemplarRoles: draftExemplarRoles.value,
+        judgmentNote: judgmentNote.value,
+        annotatorId: annotatorId.value.trim(),
+      },
+      currentDirectory.manifest.currentFoundation,
+    );
+    const annotations = existing
+      ? current.document.annotations.map((annotation) =>
+          annotation.id === existing.id ? gold : annotation,
+        )
+      : [...current.document.annotations, gold];
+    const preserveReviewComposer = Boolean(reviewNoteText.value.trim());
+    const saved = await persistDocument({
+      ...current.document,
       annotations,
       reviewState: "in-progress",
-    },
-    {
-      hasUncommittedDraft: preserveReviewComposer,
-      preserveDraft: preserveReviewComposer,
-    },
-  );
-  if (!saved) return;
+    });
+    if (!saved) return;
 
-  seekPlayhead(range.endMs);
-  clearEditor(range.endMs);
-  if (preserveReviewComposer) await persistDraftNow(true);
+    if (!preserveReviewComposer) {
+      try {
+        await cleanupCurrentDraftJournal();
+      } catch {
+        return;
+      }
+    }
+    editorDirty.value = false;
+    seekPlayhead(range.endMs);
+    clearEditor(range.endMs);
+    if (preserveReviewComposer && !(await reconcileCanonicalDraft())) return;
+    publishCanonicalState();
+  });
 }
 
 function editAnnotation(annotation: GoldAnnotationV1): void {
-  if (!session.value || operationLocked.value) return;
+  if (!session.value || editorLocked.value) return;
   if (hasUncommittedDraft.value) {
     qualityMessage.value = "Commit or discard the current draft before editing another gold section.";
     return;
@@ -1634,26 +1672,50 @@ async function playAnnotation(annotation: GoldAnnotationV1): Promise<void> {
 }
 
 async function deleteAnnotation(annotation: GoldAnnotationV1): Promise<void> {
-  if (!session.value || operationLocked.value) return;
-  finalizeActiveGestures();
-  pauseForEdit();
-  const preserveDraft =
-    (editorDirty.value && editingAnnotationId.value !== annotation.id) ||
-    Boolean(reviewNoteText.value.trim());
-  const saved = await persistDocument(
-    {
-      ...session.value.document,
-      annotations: session.value.document.annotations.filter(
+  if (!session.value || draftCleanupBlocked.value) return;
+  await runWorkspaceOperation(workspaceLifecycle, "canonical-save", async () => {
+    finalizeActiveGestures();
+    const current = session.value;
+    if (!current) return;
+    pauseForEdit();
+    const deletingEditor = editingAnnotationId.value === annotation.id;
+    const preserveOtherDraft = editorDirty.value && !deletingEditor;
+    const preserveReviewComposer = Boolean(reviewNoteText.value.trim());
+    const saved = await persistDocument({
+      ...current.document,
+      annotations: current.document.annotations.filter(
         (candidate) => candidate.id !== annotation.id,
       ),
       reviewState: "in-progress",
-    },
-    { hasUncommittedDraft: preserveDraft, preserveDraft },
-  );
-  if (saved && editingAnnotationId.value === annotation.id) {
-    clearEditor(playheadMs.value);
-    if (reviewNoteText.value.trim()) await persistDraftNow(true);
-  }
+    });
+    if (!saved) return;
+
+    if (deletingEditor) {
+      if (!preserveReviewComposer) {
+        try {
+          await cleanupCurrentDraftJournal();
+        } catch {
+          return;
+        }
+      }
+      editorDirty.value = false;
+      clearEditor(playheadMs.value);
+    }
+    if (
+      (preserveOtherDraft || preserveReviewComposer) &&
+      !(await reconcileCanonicalDraft())
+    ) {
+      return;
+    }
+    if (!preserveOtherDraft && !preserveReviewComposer && !deletingEditor) {
+      try {
+        await cleanupCurrentDraftJournal();
+      } catch {
+        return;
+      }
+    }
+    publishCanonicalState();
+  });
 }
 
 function syncExemplarTag(): void {
@@ -1670,7 +1732,7 @@ function resetExemplarComposer(): void {
 }
 
 function addExemplarRole(): void {
-  if (!exemplarTagId.value || operationLocked.value) return;
+  if (!exemplarTagId.value || editorLocked.value) return;
   pauseForEdit();
   recordEditorUndo();
   const role = { kind: exemplarKind.value, tagId: exemplarTagId.value };
@@ -1685,7 +1747,7 @@ function changeExemplarRoleKind(
   tagId: string,
   kind: GoldExemplarRoleKindV1,
 ): void {
-  if (operationLocked.value) return;
+  if (editorLocked.value) return;
   const hasLabel = draftLabels.value.some((label) => label.tagId === tagId);
   if ((kind === "counterexample") === hasLabel) return;
   pauseForEdit();
@@ -1710,7 +1772,7 @@ function exemplarKindsForTag(tagId: string): readonly GoldExemplarRoleKindV1[] {
 }
 
 function removeExemplarRole(tagId: string): void {
-  if (operationLocked.value) return;
+  if (editorLocked.value) return;
   pauseForEdit();
   recordEditorUndo();
   draftExemplarRoles.value = draftExemplarRoles.value.filter((role) => role.tagId !== tagId);
@@ -1768,66 +1830,69 @@ function exemplarViewsForTag(tagId: string): readonly FoundationExemplarView[] {
 
 async function addReviewNote(): Promise<void> {
   const current = session.value;
-  if (!current || !directory.value || operationLocked.value) return;
-  finalizeActiveGestures();
-  const range = reviewNoteIncludeSelection.value ? readDraftRange(false) : undefined;
-  if (reviewNoteIncludeSelection.value && !range) {
-    qualityMessage.value = "Fix the selection range before attaching it to a review note.";
-    return;
-  }
-
-  qualityBusy.value = true;
-  qualityMessage.value = "Saving review note";
-  const preserveAnnotationDraft = editorDirty.value;
-  try {
-    const noteRefs = reviewNoteIncludeSelection.value
-      ? [...selectedNoteIds.value].flatMap((id) => {
-          const reference = current.noteRefs.get(id);
-          return reference ? [reference] : [];
-        })
-      : [];
-    const document = addReviewNoteV1(current.document, {
-      ...(range ? { range } : {}),
-      ...(noteRefs.length > 0 ? { noteRefs } : {}),
-      text: reviewNoteText.value,
-    });
-    const saved = await persistDocument(document, {
-      hasUncommittedDraft: preserveAnnotationDraft,
-      preserveDraft: preserveAnnotationDraft,
-    });
-    if (!saved) {
-      qualityMessage.value = saveMessage.value;
+  if (!current || !directory.value || draftCleanupBlocked.value) return;
+  await runWorkspaceOperation(workspaceLifecycle, "quality-update", async () => {
+    finalizeActiveGestures();
+    const active = session.value;
+    if (!active) return;
+    const range = reviewNoteIncludeSelection.value ? readDraftRange(false) : undefined;
+    if (reviewNoteIncludeSelection.value && !range) {
+      qualityMessage.value = "Fix the selection range before attaching it to a review note.";
       return;
     }
-    reviewNoteText.value = "";
-    if (preserveAnnotationDraft) await persistDraftNow(true);
-    qualityMessage.value = "Open review note saved outside training exports";
-  } catch (error) {
-    qualityMessage.value = errorMessage(error);
-  } finally {
-    qualityBusy.value = false;
-  }
+
+    qualityMessage.value = "Saving review note";
+    try {
+      const noteRefs = reviewNoteIncludeSelection.value
+        ? [...selectedNoteIds.value].flatMap((id) => {
+            const reference = active.noteRefs.get(id);
+            return reference ? [reference] : [];
+          })
+        : [];
+      const document = addReviewNoteV1(active.document, {
+        ...(range ? { range } : {}),
+        ...(noteRefs.length > 0 ? { noteRefs } : {}),
+        text: reviewNoteText.value,
+      });
+      const saved = await persistDocument(document);
+      if (!saved) {
+        qualityMessage.value = saveMessage.value;
+        return;
+      }
+      reviewNoteText.value = "";
+      if (!(await reconcileCanonicalDraft())) {
+        qualityMessage.value = saveMessage.value;
+        return;
+      }
+      publishCanonicalState();
+      qualityMessage.value = "Open review note saved outside training exports";
+    } catch (error) {
+      qualityMessage.value = errorMessage(error);
+    }
+  });
 }
 
 async function resolveReviewNote(noteId: string): Promise<void> {
   const current = session.value;
-  if (!current || !directory.value || operationLocked.value) return;
-  finalizeActiveGestures();
-
-  qualityBusy.value = true;
-  qualityMessage.value = "Resolving review note";
-  try {
-    const document = resolveReviewNoteV1(current.document, { id: noteId });
-    const saved = await persistDocument(document, {
-      hasUncommittedDraft: hasUncommittedDraft.value,
-      preserveDraft: hasUncommittedDraft.value,
-    });
-    qualityMessage.value = saved ? "Review note resolved" : saveMessage.value;
-  } catch (error) {
-    qualityMessage.value = errorMessage(error);
-  } finally {
-    qualityBusy.value = false;
-  }
+  if (!current || !directory.value || draftCleanupBlocked.value) return;
+  await runWorkspaceOperation(workspaceLifecycle, "quality-update", async () => {
+    finalizeActiveGestures();
+    const active = session.value;
+    if (!active) return;
+    qualityMessage.value = "Resolving review note";
+    try {
+      const document = resolveReviewNoteV1(active.document, { id: noteId });
+      const saved = await persistDocument(document);
+      if (saved && (await reconcileCanonicalDraft())) {
+        publishCanonicalState();
+        qualityMessage.value = "Review note resolved";
+      } else {
+        qualityMessage.value = saveMessage.value;
+      }
+    } catch (error) {
+      qualityMessage.value = errorMessage(error);
+    }
+  });
 }
 
 function seekReviewNote(noteId: string): void {
@@ -1837,83 +1902,79 @@ function seekReviewNote(noteId: string): void {
 
 async function markChartComplete(): Promise<void> {
   const current = session.value;
-  if (!current || !directory.value || operationLocked.value) return;
-  finalizeActiveGestures();
-  const completion = completeAnnotationDocumentV1(current.document, {
-    hasUncommittedDraft: hasUncommittedDraft.value,
-  });
-  if (!completion.ok) {
-    qualityMessage.value = completion.blockers.map(completionBlockerText).join(" · ");
-    return;
-  }
-
-  qualityBusy.value = true;
-  qualityMessage.value = "Verifying chart completion";
-  try {
-    const saved = await persistDocument(completion.document, {
-      hasUncommittedDraft: false,
+  if (!current || !directory.value || draftCleanupBlocked.value) return;
+  await runWorkspaceOperation(workspaceLifecycle, "quality-update", async () => {
+    finalizeActiveGestures();
+    const active = session.value;
+    if (!active) return;
+    const completion = completeAnnotationDocumentV1(active.document, {
+      hasUncommittedDraft: hasUncommittedDraft.value,
     });
-    qualityMessage.value = saved ? "Chart marked complete" : saveMessage.value;
-  } finally {
-    qualityBusy.value = false;
-  }
+    if (!completion.ok) {
+      qualityMessage.value = completion.blockers.map(completionBlockerText).join(" · ");
+      return;
+    }
+
+    qualityMessage.value = "Verifying chart completion";
+    const saved = await persistDocument(completion.document);
+    if (!saved || !(await reconcileCanonicalDraft())) {
+      qualityMessage.value = saveMessage.value;
+      return;
+    }
+    publishCanonicalState();
+    qualityMessage.value = "Chart marked complete";
+  });
 }
 
 async function previewGoldRelease(): Promise<void> {
   const currentDirectory = directory.value;
-  if (!currentDirectory || operationLocked.value) return;
-  finalizeActiveGestures();
-  releaseBusy.value = true;
-  releaseMessage.value = "Flushing drafts and scanning verified canonical sidecars";
-  try {
-    await flushDraft();
-    releasePreview.value = await buildGoldRelease(currentDirectory, sessions);
-    releaseMessage.value = hasUncommittedDraft.value
-      ? "Preview ready · this in-progress chart draft is excluded"
-      : "Preview ready · confirm to write this exact artifact";
-  } catch (error) {
-    releasePreview.value = undefined;
-    releaseMessage.value = errorMessage(error);
-  } finally {
-    releaseBusy.value = false;
-  }
+  if (!currentDirectory) return;
+  await runWorkspaceOperation(workspaceLifecycle, "release-preview", async () => {
+    finalizeActiveGestures();
+    releaseMessage.value = "Flushing drafts and scanning verified canonical sidecars";
+    try {
+      await flushDraft();
+      releasePreview.value = await buildGoldRelease(currentDirectory, sessions);
+      releaseMessage.value = hasUncommittedDraft.value
+        ? "Preview ready · this in-progress chart draft is excluded"
+        : "Preview ready · confirm to write this exact artifact";
+    } catch (error) {
+      releasePreview.value = undefined;
+      releaseMessage.value = errorMessage(error);
+    }
+  });
 }
 
 async function confirmGoldRelease(): Promise<void> {
   const currentDirectory = directory.value;
-  const artifact = releasePreview.value;
-  if (
-    !(currentDirectory instanceof FileSystemDatasetDirectory) ||
-    !artifact ||
-    operationLocked.value
-  ) {
+  if (!(currentDirectory instanceof FileSystemDatasetDirectory)) {
     return;
   }
-
-  finalizeActiveGestures();
-  releaseBusy.value = true;
-  releaseMessage.value = "Rechecking canonical sidecars before export";
-  try {
-    await flushDraft();
-    const currentArtifact = await buildGoldRelease(
-      currentDirectory,
-      sessions,
-      artifact.manifest.exportedAt,
-    );
-    if (!sameGoldReleaseArtifact(artifact, currentArtifact)) {
-      releasePreview.value = currentArtifact;
-      releaseMessage.value = "Canonical data changed · refreshed preview requires confirmation";
-      return;
+  await runWorkspaceOperation(workspaceLifecycle, "release-confirm", async () => {
+    finalizeActiveGestures();
+    const artifact = releasePreview.value;
+    if (!artifact) return;
+    releaseMessage.value = "Rechecking canonical sidecars before export";
+    try {
+      await flushDraft();
+      const currentArtifact = await buildGoldRelease(
+        currentDirectory,
+        sessions,
+        artifact.manifest.exportedAt,
+      );
+      if (!sameGoldReleaseArtifact(artifact, currentArtifact)) {
+        releasePreview.value = currentArtifact;
+        releaseMessage.value = "Canonical data changed · refreshed preview requires confirmation";
+        return;
+      }
+      releaseMessage.value = "Writing release and verifying read-back";
+      const written = await writeGoldRelease(currentDirectory.root, artifact);
+      releasePreview.value = undefined;
+      releaseMessage.value = `Release ${written.releaseId} verified in exports/`;
+    } catch (error) {
+      releaseMessage.value = errorMessage(error);
     }
-    releaseMessage.value = "Writing release and verifying read-back";
-    const written = await writeGoldRelease(currentDirectory.root, artifact);
-    releasePreview.value = undefined;
-    releaseMessage.value = `Release ${written.releaseId} verified in exports/`;
-  } catch (error) {
-    releaseMessage.value = errorMessage(error);
-  } finally {
-    releaseBusy.value = false;
-  }
+  });
 }
 
 function invalidateReleasePreview(): void {
@@ -1924,36 +1985,27 @@ function invalidateReleasePreview(): void {
 
 async function persistDocument(
   document: AnnotationDocumentV1,
-  options: { hasUncommittedDraft?: boolean; preserveDraft?: boolean } = {},
 ): Promise<boolean> {
   if (
     !session.value ||
     !directory.value ||
-    !activeTaskId.value ||
-    saveState.value === "saving"
+    !activeTaskId.value
   ) {
     return false;
   }
   const savingSession = session.value;
   const savingDirectory = directory.value;
   const savingTaskId = activeTaskId.value;
-  const savingDatasetId = savingDirectory.manifest.datasetId;
-  const savingSourceSha256 = savingSession.source.sha256;
-  finalizeActiveGestures();
   saveState.value = "saving";
   saveMessage.value = "Writing canonical sidecar";
   try {
     await flushDraft();
-    const draftContext =
-      options.hasUncommittedDraft === undefined
-        ? {}
-        : { hasUncommittedDraft: options.hasUncommittedDraft };
     const result = await savingDirectory.saveAnnotation(document, draftBase.value, {
       sourceBytes: savingSession.sourceBytes,
       chart: savingSession.chart,
       inspected: { chart: savingSession.chart, source: savingSession.source },
       noteRefIndex: savingSession.noteRefIndex,
-      ...draftContext,
+      hasUncommittedDraft: hasUncommittedDraft.value,
     });
     if (result.status === "conflict") {
       saveState.value = "conflict";
@@ -1974,8 +2026,7 @@ async function persistDocument(
       document: result.document,
       base: result.version,
     };
-    saveState.value = "saved";
-    saveMessage.value = `Revision ${result.version.revision} verified`;
+    saveMessage.value = `Revision ${result.version.revision} verified · reconciling draft journal`;
     foundationDetailsDigest.value = undefined;
     invalidateReleasePreview();
     queue.value = updateQueueItemStatus(
@@ -1983,18 +2034,6 @@ async function persistDocument(
       savingTaskId,
       result.document.reviewState,
     );
-    if (options.preserveDraft && hasUncommittedDraft.value) {
-      await persistDraftNow(true);
-      queue.value = updateQueueItemStatus(queue.value, savingTaskId, "draft");
-      saveState.value = "draft";
-      saveMessage.value = "Draft journal saved after verified canonical update";
-    } else {
-      editorDirty.value = false;
-      await sessions.deleteDraft(
-        savingDatasetId,
-        savingSourceSha256,
-      );
-    }
     return true;
   } catch (error) {
     saveState.value = "error";
@@ -2014,16 +2053,22 @@ function markDraft(scheduleAutosave = true): void {
     !session.value ||
     !directory.value ||
     !activeTaskId.value ||
-    operationLocked.value
+    editorLocked.value
   ) {
     return;
   }
-  saveState.value = "draft";
+  transitionDraft(scheduleAutosave);
+}
+
+function transitionDraft(scheduleAutosave = true): void {
+  const taskId = activeTaskId.value;
+  if (!taskId) return;
   editorDirty.value = true;
+  workspaceLifecycle.draftLifecycle = "pending";
   invalidateReleasePreview();
   saveMessage.value = "Draft journal pending";
   if (activeTask.value?.status !== "draft") {
-    queue.value = updateQueueItemStatus(queue.value, activeTaskId.value, "draft");
+    queue.value = updateQueueItemStatus(queue.value, taskId, "draft");
   }
   if (draftTimer !== undefined) window.clearTimeout(draftTimer);
   if (!scheduleAutosave) {
@@ -2032,128 +2077,201 @@ function markDraft(scheduleAutosave = true): void {
   }
   draftTimer = window.setTimeout(() => {
     draftTimer = undefined;
-    void persistDraftNow();
+    void persistDraftNow().catch(() => {});
   }, 160);
 }
 
 function markReviewNoteDraft(): void {
-  if (!session.value || !directory.value || !activeTaskId.value || operationLocked.value) return;
+  if (!session.value || !directory.value || !activeTaskId.value || editorLocked.value) return;
   invalidateReleasePreview();
   if (!hasUncommittedDraft.value) {
     if (draftTimer !== undefined) {
       window.clearTimeout(draftTimer);
       draftTimer = undefined;
     }
-    saveState.value = session.value.base ? "saved" : "idle";
-    saveMessage.value = session.value.base
-      ? `Revision ${session.value.base.revision} verified`
-      : "Local draft only";
-    queue.value = updateQueueItemStatus(
-      queue.value,
-      activeTaskId.value,
-      session.value.base ? session.value.document.reviewState : "unseen",
-    );
-    const datasetId = directory.value.manifest.datasetId;
-    const sourceSha256 = session.value.source.sha256;
-    const queued = draftWrite
-      .catch(() => {})
-      .then(() => sessions.deleteDraft(datasetId, sourceSha256));
-    draftWrite = queued;
-    void queued.catch((error) => {
-      saveState.value = "error";
-      saveMessage.value = errorMessage(error);
-    });
+    void cleanupCurrentDraftJournal()
+      .then(() => {
+        if (!hasUncommittedDraft.value) publishCanonicalState();
+      })
+      .catch(() => {});
     return;
   }
-  saveState.value = "draft";
+  workspaceLifecycle.draftLifecycle = "pending";
   saveMessage.value = "Draft journal pending";
   queue.value = updateQueueItemStatus(queue.value, activeTaskId.value, "draft");
   if (draftTimer !== undefined) window.clearTimeout(draftTimer);
   draftTimer = window.setTimeout(() => {
     draftTimer = undefined;
-    void persistDraftNow(true);
+    void persistDraftNow(true).catch(() => {});
   }, 160);
 }
 
 async function persistDraftNow(force = false): Promise<void> {
   if (!session.value || !directory.value || (!hasUncommittedDraft.value && !force)) return;
   const draft = buildDraft(session.value, directory.value.manifest.datasetId);
-  const queued = draftWrite.catch(() => {}).then(() => sessions.putDraft(draft));
-  draftWrite = queued;
-  await queued;
-  if (saveState.value === "draft") saveMessage.value = "Draft journal saved";
+  try {
+    await draftJournal.write(() => sessions.putDraft(draft));
+    if (saveState.value === "error") {
+      saveState.value = session.value.base ? "saved" : "idle";
+    }
+    saveMessage.value = "Draft journal saved";
+    if (activeTaskId.value) {
+      queue.value = updateQueueItemStatus(queue.value, activeTaskId.value, "draft");
+    }
+  } catch (error) {
+    if (workspaceLifecycle.draftLifecycle === "write-error") {
+      reportDraftJournalError("Draft journal write failed", error);
+    }
+    throw error;
+  }
 }
 
 async function flushDraft(): Promise<void> {
   finalizeActiveGestures();
+  const hadTimer = draftTimer !== undefined;
   if (draftTimer !== undefined) {
     window.clearTimeout(draftTimer);
     draftTimer = undefined;
   }
-  if (hasUncommittedDraft.value) await persistDraftNow(true);
-  await draftWrite;
+  if (workspaceLifecycle.draftLifecycle === "cleanup-error") {
+    throw new Error("Discard the local draft to finish journal cleanup before continuing.");
+  }
+  if (
+    hasUncommittedDraft.value &&
+    (hadTimer ||
+      workspaceLifecycle.draftLifecycle === "write-error" ||
+      workspaceLifecycle.draftLifecycle === "clean")
+  ) {
+    await persistDraftNow(true);
+  }
+  await draftJournal.pending;
 }
 
 async function discardDraft(): Promise<void> {
   const current = session.value;
   const currentDirectory = directory.value;
   const taskId = activeTaskId.value;
-  if (!current || !currentDirectory || !taskId || !hasUncommittedDraft.value || operationLocked.value) {
+  if (!current || !currentDirectory || !taskId || !draftRecoveryVisible.value) {
     return;
   }
+  await runWorkspaceOperation(workspaceLifecycle, "discard-draft", async () => {
+    pauseForEdit();
+    finalizeActiveGestures();
+    if (draftTimer !== undefined) {
+      window.clearTimeout(draftTimer);
+      draftTimer = undefined;
+    }
 
-  pauseForEdit();
-  finalizeActiveGestures();
-  if (draftTimer !== undefined) {
-    window.clearTimeout(draftTimer);
-    draftTimer = undefined;
-  }
+    saveState.value = "saving";
+    saveMessage.value = "Discarding local draft";
+    try {
+      await draftJournal.pending.catch(() => {});
+      await cleanupCurrentDraftJournal();
+    } catch (error) {
+      saveMessage.value = `Draft not discarded: ${errorMessage(error)}`;
+      return;
+    }
 
-  saveState.value = "saving";
-  saveMessage.value = "Discarding local draft";
-  try {
-    await draftWrite.catch(() => {});
-    await sessions.deleteDraft(currentDirectory.manifest.datasetId, current.source.sha256);
-  } catch (error) {
-    saveState.value = "error";
-    saveMessage.value = `Draft not discarded: ${errorMessage(error)}`;
-    return;
-  }
-
-  draftBase.value = current.base;
-  reviewNoteText.value = "";
-  reviewNoteIncludeSelection.value = true;
-  pendingTextUndo = undefined;
-  resetTaskQualityState();
-  clearEditor(playheadMs.value);
-  queue.value = updateQueueItemStatus(
-    queue.value,
-    taskId,
-    current.base ? current.document.reviewState : "unseen",
-  );
-  saveState.value = current.base ? "saved" : "idle";
-  saveMessage.value = current.base
-    ? `Draft discarded · revision ${current.base.revision} unchanged`
-    : "Draft discarded · chart remains unseen";
-  invalidateReleasePreview();
+    draftBase.value = current.base;
+    reviewNoteText.value = "";
+    reviewNoteIncludeSelection.value = true;
+    pendingTextUndo = undefined;
+    resetTaskQualityState();
+    editorDirty.value = false;
+    clearEditor(playheadMs.value);
+    queue.value = updateQueueItemStatus(
+      queue.value,
+      taskId,
+      current.base ? current.document.reviewState : "unseen",
+    );
+    saveState.value = current.base ? "saved" : "idle";
+    saveMessage.value = current.base
+      ? `Draft discarded · revision ${current.base.revision} unchanged`
+      : "Draft discarded · chart remains unseen";
+    invalidateReleasePreview();
+  });
 }
 
 async function discardReadonlyDraft(): Promise<void> {
   const task = readonlyTask.value;
   const currentDirectory = directory.value;
-  if (!task?.source || !currentDirectory || !readonlyDraftPresent.value || taskLoading.value) return;
+  if (!task?.source || !currentDirectory || !readonlyDraftPresent.value) return;
+  const sourceSha256 = task.source.sha256;
 
-  taskLoading.value = true;
-  taskError.value = "";
+  await runWorkspaceOperation(workspaceLifecycle, "discard-draft", async () => {
+    taskError.value = "";
+    try {
+      await draftJournal.pending.catch(() => {});
+      await draftJournal.cleanup(() =>
+        sessions.deleteDraft(currentDirectory.manifest.datasetId, sourceSha256),
+      );
+      readonlyDraftPresent.value = false;
+      saveMessage.value = `Annotation v${task.future?.version ?? "?"} · read-only · old draft discarded`;
+    } catch (error) {
+      taskError.value = `Draft not discarded: ${errorMessage(error)}`;
+    }
+  });
+}
+
+async function cleanupCurrentDraftJournal(): Promise<void> {
+  const current = session.value;
+  const currentDirectory = directory.value;
+  if (!current || !currentDirectory) return;
   try {
-    await draftWrite.catch(() => {});
-    await sessions.deleteDraft(currentDirectory.manifest.datasetId, task.source.sha256);
-    readonlyDraftPresent.value = false;
-    saveMessage.value = `Annotation v${task.future?.version ?? "?"} · read-only · old draft discarded`;
+    await draftJournal.cleanup(() =>
+      sessions.deleteDraft(currentDirectory.manifest.datasetId, current.source.sha256),
+    );
   } catch (error) {
-    taskError.value = `Draft not discarded: ${errorMessage(error)}`;
-  } finally {
-    taskLoading.value = false;
+    if (workspaceLifecycle.draftLifecycle === "cleanup-error") {
+      reportDraftJournalError("Draft journal cleanup failed", error);
+    }
+    throw error;
+  }
+}
+
+async function reconcileCanonicalDraft(): Promise<boolean> {
+  try {
+    if (hasUncommittedDraft.value) await persistDraftNow(true);
+    else await cleanupCurrentDraftJournal();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function reportDraftJournalError(prefix: string, error: unknown): void {
+  saveState.value = "error";
+  saveMessage.value = `${prefix}: ${errorMessage(error)}`;
+  if (activeTaskId.value) {
+    queue.value = updateQueueItemStatus(
+      queue.value,
+      activeTaskId.value,
+      "save-error",
+      saveMessage.value,
+    );
+  }
+}
+
+function publishCanonicalState(message?: string): void {
+  const current = session.value;
+  if (!current) return;
+  saveState.value = current.base ? "saved" : "idle";
+  saveMessage.value = current.base
+    ? (message ??
+      (workspaceLifecycle.draftLifecycle === "stored"
+        ? `Revision ${current.base.revision} verified · draft journal saved`
+        : `Revision ${current.base.revision} verified`))
+    : (message ?? "Local draft only");
+  if (
+    activeTaskId.value &&
+    workspaceLifecycle.draftLifecycle === "clean" &&
+    !hasUncommittedDraft.value
+  ) {
+    queue.value = updateQueueItemStatus(
+      queue.value,
+      activeTaskId.value,
+      current.document.reviewState,
+    );
   }
 }
 
@@ -2397,6 +2515,7 @@ function errorMessage(error: unknown): string {
 
       <WorkspaceModeSwitch
         model-value="annotate"
+        :disabled="operationLocked || draftCleanupBlocked"
         @update:model-value="changeWorkspaceMode"
       />
 
@@ -2576,7 +2695,7 @@ function errorMessage(error: unknown): string {
               class="task-row"
               :class="{ 'is-active': task.id === activeTaskId }"
               type="button"
-              :disabled="task.status === 'missing-source' || taskLoading || saveState === 'saving' || activationBusy"
+              :disabled="task.status === 'missing-source' || operationLocked || draftCleanupBlocked"
               @click="openTask(task)"
             >
               <span class="task-status-mark" :class="`task-status-mark--${task.status}`" aria-hidden="true"></span>
@@ -2653,7 +2772,7 @@ function errorMessage(error: unknown): string {
               v-if="readonlyDraftPresent"
               class="button button--quiet"
               type="button"
-              :disabled="taskLoading"
+              :disabled="operationLocked"
               @click="discardReadonlyDraft"
             >
               Discard incompatible local draft
@@ -2990,7 +3109,7 @@ function errorMessage(error: unknown): string {
           <fieldset
             v-if="session"
             class="annotation-editor"
-            :disabled="operationLocked"
+            :disabled="editorLocked"
           >
             <section class="editor-section" aria-labelledby="range-heading">
               <div class="editor-section-heading">
@@ -3302,7 +3421,7 @@ function errorMessage(error: unknown): string {
               </label>
               <div class="commit-actions">
                 <button
-                  v-if="hasUncommittedDraft"
+                  v-if="draftRecoveryVisible"
                   class="button button--quiet discard-button"
                   type="button"
                   :disabled="operationLocked"
@@ -3313,7 +3432,7 @@ function errorMessage(error: unknown): string {
                 <button
                   class="button button--primary commit-button"
                   type="button"
-                  :disabled="saveState === 'saving'"
+                  :disabled="operationLocked || draftCleanupBlocked"
                   @click="commitAnnotation"
                 >
                   {{ editingAnnotationId ? "Update gold" : "Commit gold" }}

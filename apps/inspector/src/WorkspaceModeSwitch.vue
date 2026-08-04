@@ -2,6 +2,7 @@
 import type { WorkspaceMode } from "./workspace-mode";
 
 defineProps<{
+  disabled?: boolean;
   modelValue: WorkspaceMode;
 }>();
 
@@ -18,8 +19,9 @@ const emit = defineEmits<{
       class="workspace-mode-button"
       :class="{ 'is-active': modelValue === mode }"
       type="button"
+      :disabled="disabled"
       :aria-pressed="modelValue === mode"
-      @click="emit('update:modelValue', mode)"
+      @click="!disabled && emit('update:modelValue', mode)"
     >
       {{ mode }}
     </button>
