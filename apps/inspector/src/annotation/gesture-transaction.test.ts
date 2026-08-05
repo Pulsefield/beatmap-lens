@@ -140,17 +140,15 @@ describe("gesture transaction", () => {
     expect(finalization.transaction.before.undoStackLength).toBe(3);
   });
 
-  it("uses the same final outcome for pointerup and pointercancel callers", () => {
+  it("commits pointerup and rolls back pointer cancellation", () => {
     const pointerup = finalizeGestureTransaction(createTransaction(), {
       startMs: 100,
       endMs: 200,
     });
-    const pointercancel = finalizeGestureTransaction(createTransaction(), {
-      startMs: 100,
-      endMs: 200,
-    });
+    const pointercancel = rollbackGestureTransaction(createTransaction());
 
-    expect(pointercancel).toEqual(pointerup);
+    expect(pointerup.outcome).toBe("commit");
+    expect(pointercancel.outcome).toBe("rollback");
   });
 
   it("forces rollback during disposal even after a valid preview", () => {

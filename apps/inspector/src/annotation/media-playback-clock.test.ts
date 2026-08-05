@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MediaPlaybackClock } from "./media-playback-clock";
-import type { PlaybackFrameScheduler } from "./playback-clock";
+import type { PlaybackClockState, PlaybackFrameScheduler } from "./playback-clock";
 
 describe("MediaPlaybackClock", () => {
   it("uses media currentTime as the authoritative clock", async () => {
@@ -163,6 +163,37 @@ describe("MediaPlaybackClock", () => {
     expect(clock.currentTimeMs).toBe(100);
     expect(media.currentTime).toBe(0.2);
     expect(clock.playing).toBe(true);
+  });
+
+  it("rebinds an active loop without exposing a paused state", async () => {
+    const media = new FakeAudio();
+    const scheduler = new TestFrameScheduler();
+    const clock = new MediaPlaybackClock(asMedia(media), scheduler);
+    await clock.loopSelection({ startMs: 100, endMs: 250 });
+    const states: { readonly looping: boolean; readonly playing: boolean }[] = [];
+    const unsubscribe = clock.subscribe((state) => states.push(state));
+    states.length = 0;
+
+    await clock.loopSelection({ startMs: 300, endMs: 450 });
+
+    expect(clock.currentTimeMs).toBe(300);
+    expect(media.currentTime).toBe(0.3);
+    expect(states.length).toBeGreaterThan(0);
+    expect(states.every((state) => state.playing && state.looping)).toBe(true);
+    unsubscribe();
+  });
+
+  it("seeks within an active loop without clearing transport state", async () => {
+    const media = new FakeAudio();
+    const clock = new MediaPlaybackClock(asMedia(media), new TestFrameScheduler());
+    const states: PlaybackClockState[] = [];
+    clock.subscribe((state) => states.push(state));
+    await clock.loopSelection({ startMs: 100, endMs: 250 });
+
+    clock.seek(200);
+
+    expect(media.currentTime).toBe(0.2);
+    expect(states.at(-1)).toMatchObject({ currentTimeMs: 200, looping: true, playing: true });
   });
 
   it("retimes media without moving chart time when the offset changes during playback", async () => {

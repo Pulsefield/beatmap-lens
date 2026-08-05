@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { type PlaybackFrameScheduler, SyntheticPlaybackClock } from "./playback-clock";
+import {
+  type PlaybackClockState,
+  type PlaybackFrameScheduler,
+  SyntheticPlaybackClock,
+} from "./playback-clock";
 
 describe("SyntheticPlaybackClock", () => {
   it("plays, pauses, and seeks on a deterministic frame scheduler", async () => {
@@ -57,6 +61,33 @@ describe("SyntheticPlaybackClock", () => {
 
     expect(clock.currentTimeMs).toBe(140);
     expect(clock.playing).toBe(true);
+  });
+
+  it("rebinds an active loop without exposing a paused state", async () => {
+    const scheduler = new TestFrameScheduler();
+    const clock = new SyntheticPlaybackClock(scheduler);
+    await clock.loopSelection({ startMs: 100, endMs: 250 });
+    const states: { readonly looping: boolean; readonly playing: boolean }[] = [];
+    const unsubscribe = clock.subscribe((state) => states.push(state));
+    states.length = 0;
+
+    await clock.loopSelection({ startMs: 300, endMs: 450 });
+
+    expect(clock.currentTimeMs).toBe(300);
+    expect(states.length).toBeGreaterThan(0);
+    expect(states.every((state) => state.playing && state.looping)).toBe(true);
+    unsubscribe();
+  });
+
+  it("seeks within an active loop without clearing transport state", async () => {
+    const clock = new SyntheticPlaybackClock(new TestFrameScheduler());
+    const states: PlaybackClockState[] = [];
+    clock.subscribe((state) => states.push(state));
+    await clock.loopSelection({ startMs: 100, endMs: 250 });
+
+    clock.seek(200);
+
+    expect(states.at(-1)).toMatchObject({ currentTimeMs: 200, looping: true, playing: true });
   });
 
   it("clears a paused loop so the next loop command starts immediately", async () => {
