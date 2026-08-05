@@ -1722,18 +1722,20 @@ async function activateTag(): Promise<void> {
   if (
     !session.value ||
     !directory.value ||
-    !activationTag.value
+    !activationTag.value ||
+    draftCleanupBlocked.value
   ) {
     return;
   }
   await runWorkspaceOperation(workspaceLifecycle, "activate-tag", async () => {
     activationError.value = "";
-    const activatingSession = session.value;
-    const activatingTag = activationTag.value;
-    const activatingDirectory = directory.value;
-    if (!activatingSession || !activatingTag || !activatingDirectory) return;
-
     try {
+      await finalizeActiveGestures();
+      const activatingSession = session.value;
+      const activatingTag = activationTag.value;
+      const activatingDirectory = directory.value;
+      if (!activatingSession || !activatingTag || !activatingDirectory) return;
+
       const tagId = canonicalTagId(activationTagId.value);
       const nextFoundation = await createActiveFoundationTagV1(
         activatingSession.foundation,
