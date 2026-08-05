@@ -10,10 +10,13 @@ import {
   shallowRef,
   watch,
 } from "vue";
+import AnnotationTimeline from "./AnnotationTimeline.vue";
 import {
+  AUDIO_OFFSET_PREFERENCE_KEY,
   AudioPlaybackController,
   type AudioPlaybackStatus,
   createBeatmapAudioFileContext,
+  MUSIC_PREFERENCE_KEY,
 } from "./annotation/audio-playback";
 import {
   type BeatmapSession,
@@ -28,7 +31,6 @@ import {
   judgmentLineRatio,
   maximumVisualSpeed,
   minimumVisualSpeed,
-  viewportYToSourceTime,
   visualSpeedPresets,
 } from "./annotation/buffered-scene";
 import {
@@ -81,7 +83,6 @@ import {
   toggleSelectedNote,
 } from "./annotation/note-selection";
 import { ManiaNoteTimeIndex } from "./annotation/note-time-index";
-import { createOverviewDensityPath } from "./annotation/overview-density";
 import type {
   PlaybackClockState,
 } from "./annotation/playback-clock";
@@ -116,9 +117,15 @@ import {
   moveTimelineRange,
   parseTimeInput,
   resizeTimelineRange,
+  type TimelineGestureKind,
   type TimelineRangeEdge,
-  timelineEdgeHitWidth,
 } from "./annotation/timeline-range";
+import {
+  fitTimelineViewRange,
+  timelineZoomAnchorMs,
+  zoomTimelineViewRangeAtTime,
+} from "./annotation/timeline-view-range";
+import FallingNoteViewport from "./FallingNoteViewport.vue";
 import WorkspaceModeSwitch from "./WorkspaceModeSwitch.vue";
 import {
   createWorkspaceLifecycleState,
@@ -130,7 +137,7 @@ import type { WorkspaceMode } from "./workspace-mode";
 
 type MobilePanel = "source" | "preview" | "details";
 type SaveState = "idle" | "saving" | "saved" | "conflict" | "error";
-type TimelineDragKind = "create" | "move" | `resize-${TimelineRangeEdge}`;
+type TimelineDragKind = Exclude<TimelineGestureKind, "noop" | "pan-viewport">;
 
 interface EditorUndoState {
   readonly draftStart: string;
@@ -146,20 +153,30 @@ interface EditorUndoState {
 interface TimelineDragState {
   readonly transaction: GestureTransaction<EditorUndoState, TimelineDragKind>;
   readonly range?: TimeRangeV1;
-  freePlacement: boolean;
+  readonly freePlacement: boolean;
   moved: boolean;
 }
 
 interface ViewportDragState {
-  readonly pointerId: number;
-  readonly kind: "scrub" | "select";
-  readonly anchorMs: number;
-  readonly startClientY: number;
-  readonly startTimeMs: number;
-  readonly transaction?: GestureTransaction<EditorUndoState, "select">;
-  freePlacement: boolean;
-  lastClientY: number;
+  readonly transaction: GestureTransaction<EditorUndoState, "select">;
+  readonly freePlacement: boolean;
   moved: boolean;
+}
+
+interface TimelineRangeStartIntent {
+  readonly anchorMs: number;
+  readonly freePlacement: boolean;
+  readonly kind: TimelineDragKind;
+  readonly pointerId: number;
+}
+
+interface ViewportRangeStartIntent {
+  readonly anchorMs: number;
+  readonly freePlacement: boolean;
+}
+
+interface RangeFocusIntent {
+  readonly focusMs: number;
 }
 
 interface FoundationExemplarView {
@@ -242,10 +259,7 @@ const playheadMs = ref(0);
 const visualSpeed = ref(240);
 const visualSpeedDraft = ref("240");
 const visualSpeedError = ref("");
-const viewportSvg = ref<SVGSVGElement>();
-const overviewSvg = ref<SVGSVGElement>();
 const viewportSize = ref({ width: 720, height: 420 });
-const overviewWidth = ref(720);
 const viewportFrame = shallowRef<BufferedSceneFrame>();
 const viewportInstrumentation = ref<BufferedSceneInstrumentation>();
 const frameP95Ms = ref(0);
@@ -258,6 +272,10 @@ const playbackState = ref<PlaybackClockState>({
 });
 const musicEnabled = ref(false);
 const audioStatus = ref<AudioPlaybackStatus>({ kind: "idle" });
+const audioOffsetMs = ref(0);
+const audioOffsetDraft = ref("0");
+const audioOffsetError = ref("");
+const timelineViewRange = ref<TimeRangeV1>({ startMs: 0, endMs: 1 });
 const focusedTagId = ref<string>();
 const editorUndoStack = ref<readonly EditorUndoState[]>([]);
 const draftBase = ref<DraftBaseVersion | null>(null);
@@ -272,10 +290,8 @@ let noteTimeIndex: ManiaNoteTimeIndex | undefined;
 let playbackClock: AudioPlaybackController | undefined;
 let unsubscribePlayback: (() => void) | undefined;
 let unsubscribeAudio: (() => void) | undefined;
-let viewportResizeObserver: ResizeObserver | undefined;
 let timelineDrag: TimelineDragState | undefined;
 let viewportDrag: ViewportDragState | undefined;
-let gestureFrame: number | undefined;
 let playbackAnimationFrame: number | undefined;
 let pendingTextUndo: EditorUndoState | undefined;
 let preferenceWrite = Promise.resolve();
@@ -399,22 +415,8 @@ const exemplarTagOptions = computed(() => {
 const releaseTagCounts = computed(() =>
   Object.entries(releasePreview.value?.manifest.tagCounts ?? {}),
 );
-const overviewDensity = computed(() =>
-  session.value
-    ? createOverviewDensityPath(session.value.chart, {
-        width: 1_000,
-        height: 62,
-      })
-    : undefined,
-);
-const timelineSelection = computed(() => {
-  const range = parsedRange.value;
-  if (!range || !session.value) return undefined;
-  return rangeOverviewGeometry(range, session.value.chartEndMs);
-});
 const timelineViewport = computed(() => {
-  if (!viewportFrame.value || !session.value) return undefined;
-  return rangeOverviewGeometry(viewportFrame.value.viewportRange, session.value.chartEndMs, true);
+  return viewportFrame.value?.viewportRange;
 });
 const selectionBand = computed(() =>
   parsedRange.value && viewportFrame.value
@@ -431,20 +433,6 @@ const annotationBands = computed(() =>
         });
       })()
     : [],
-);
-const overviewAnnotationBands = computed(() =>
-  session.value
-    ? annotationList.value.map((annotation) => ({
-        annotation,
-        ...rangeOverviewGeometry(annotation.range, session.value?.chartEndMs ?? 1),
-      }))
-    : [],
-);
-const overviewPlayheadX = computed(() =>
-  session.value ? (playheadMs.value / session.value.chartEndMs) * 1_000 : 0,
-);
-const timelineHandleHitWidth = computed(
-  () => timelineEdgeHitWidth(Math.max(1, overviewWidth.value), 1_000),
 );
 const currentChartLabel = computed(() => {
   if (!session.value) {
@@ -484,7 +472,6 @@ const audioStatusText = computed(() => {
 onMounted(async () => {
   window.addEventListener("keydown", handleWorkspaceKeydown);
   document.addEventListener("visibilitychange", handleVisibilityChange);
-  viewportResizeObserver = new ResizeObserver(() => refreshInteractiveGeometry());
   if (!fileSystemSupported) return;
   try {
     const preferences = await sessions.getPreferences();
@@ -493,6 +480,8 @@ onMounted(async () => {
       visualSpeed.value = preferences.visualSpeed;
       visualSpeedDraft.value = String(preferences.visualSpeed);
       musicEnabled.value = preferences.musicEnabled;
+      audioOffsetMs.value = preferences.audioOffsetMs ?? 0;
+      audioOffsetDraft.value = String(audioOffsetMs.value);
     }
 
     const storedDataset = await sessions.getDirectoryHandle<BrowserDirectoryHandle>("dataset");
@@ -511,7 +500,6 @@ onBeforeUnmount(() => {
   window.removeEventListener("keydown", handleWorkspaceKeydown);
   document.removeEventListener("visibilitychange", handleVisibilityChange);
   disposeInteractiveSession();
-  viewportResizeObserver?.disconnect();
 });
 
 watch(
@@ -602,6 +590,7 @@ async function startWorkspace(): Promise<void> {
 
     await sessions.setPreferences({
       annotatorId: id,
+      audioOffsetMs: audioOffsetMs.value,
       musicEnabled: musicEnabled.value,
       visualSpeed: visualSpeed.value,
     });
@@ -719,6 +708,7 @@ async function loadTask(task: TaskQueueItem): Promise<void> {
 
 function restoreEditor(next: BeatmapSession): void {
   pendingTextUndo = undefined;
+  timelineViewRange.value = fitTimelineViewRange(next.chartEndMs);
   const draft = next.restoredDraft;
   draftBase.value = draft?.base ?? next.base;
   playheadMs.value = draft?.playheadMs ?? 0;
@@ -761,13 +751,17 @@ function restoreEditor(next: BeatmapSession): void {
 async function initializeInteractiveSession(): Promise<void> {
   disposeInteractiveSession();
   const current = session.value;
-  const svg = viewportSvg.value;
-  if (!current || !svg) return;
+  if (!current) return;
 
   noteTimeIndex = new ManiaNoteTimeIndex(current.chart.notes);
   const controller = new AudioPlaybackController({
     preferenceStore: {
-      getItem: () => (musicEnabled.value ? "on" : "off"),
+      getItem: (key) =>
+        key === MUSIC_PREFERENCE_KEY
+          ? (musicEnabled.value ? "on" : "off")
+          : key === AUDIO_OFFSET_PREFERENCE_KEY
+            ? String(audioOffsetMs.value)
+            : null,
       setItem: () => {},
     },
   });
@@ -791,12 +785,11 @@ async function initializeInteractiveSession(): Promise<void> {
   unsubscribeAudio = controller.subscribeAudio((state) => {
     if (playbackClock !== controller) return;
     musicEnabled.value = state.musicEnabled;
+    audioOffsetMs.value = state.audioOffsetMs;
     audioStatus.value = state.status;
   });
   controller.seek(initialTime);
-  viewportResizeObserver?.observe(svg);
-  if (overviewSvg.value) viewportResizeObserver?.observe(overviewSvg.value);
-  refreshInteractiveGeometry();
+  rebuildViewportController();
 
   const corpus = corpusHandle.value;
   if (!corpus) return;
@@ -824,7 +817,6 @@ async function initializeInteractiveSession(): Promise<void> {
 function disposeInteractiveSession(): void {
   rollbackActiveGesturesForDispose();
   resetPlaybackInstrumentation();
-  viewportResizeObserver?.disconnect();
   unsubscribePlayback?.();
   unsubscribePlayback = undefined;
   unsubscribeAudio?.();
@@ -844,12 +836,10 @@ function disposeInteractiveSession(): void {
 
 function rebuildViewportController(): void {
   const current = session.value;
-  const svg = viewportSvg.value;
-  if (!current || !svg) return;
+  if (!current) return;
 
-  const rect = svg.getBoundingClientRect();
-  const width = Math.max(320, Math.round(rect.width || viewportSize.value.width));
-  const height = Math.max(1, Math.round(rect.height || viewportSize.value.height));
+  const width = Math.max(320, Math.round(viewportSize.value.width));
+  const height = Math.max(1, Math.round(viewportSize.value.height));
   if (
     viewportController &&
     viewportSize.value.width === width &&
@@ -858,7 +848,6 @@ function rebuildViewportController(): void {
     return;
   }
 
-  viewportSize.value = { width, height };
   viewportController = new BufferedSceneController(current.chart, {
     width,
     viewportHeight: height,
@@ -868,11 +857,12 @@ function rebuildViewportController(): void {
   restartPlaybackInstrumentation();
 }
 
-function refreshInteractiveGeometry(): void {
-  const measuredOverviewWidth = overviewSvg.value?.getBoundingClientRect().width;
-  if (measuredOverviewWidth && measuredOverviewWidth > 0) {
-    overviewWidth.value = measuredOverviewWidth;
-  }
+function resizeViewport(size: { readonly width: number; readonly height: number }): void {
+  const width = Math.max(320, Math.round(size.width));
+  const height = Math.max(1, Math.round(size.height));
+  if (viewportSize.value.width === width && viewportSize.value.height === height) return;
+  viewportSize.value = { width, height };
+  viewportController = undefined;
   rebuildViewportController();
 }
 
@@ -1011,9 +1001,31 @@ async function applyVisualSpeed(): Promise<void> {
   if (editorDirty.value) await persistDraftNow(true);
 }
 
+async function applyAudioOffset(): Promise<void> {
+  const offsetMs = Number(audioOffsetDraft.value);
+  if (!Number.isFinite(offsetMs)) {
+    audioOffsetError.value = "Use a finite offset in milliseconds.";
+    return;
+  }
+
+  audioOffsetError.value = "";
+  audioOffsetMs.value = offsetMs;
+  audioOffsetDraft.value = formatMs(offsetMs);
+  resetPlaybackInstrumentation();
+  playbackClock?.setAudioOffsetMs(offsetMs);
+  restartPlaybackInstrumentation();
+  await persistSessionPreferences();
+}
+
+async function adjustAudioOffset(deltaMs: number): Promise<void> {
+  audioOffsetDraft.value = formatMs(audioOffsetMs.value + deltaMs);
+  await applyAudioOffset();
+}
+
 function persistSessionPreferences(): Promise<void> {
   const preferences = {
     annotatorId: annotatorId.value.trim(),
+    audioOffsetMs: audioOffsetMs.value,
     musicEnabled: musicEnabled.value,
     visualSpeed: visualSpeed.value,
   };
@@ -1054,48 +1066,43 @@ function applyTimelineRangeState(range: TimeRangeV1): void {
   rangeError.value = "";
 }
 
-function beginTimelineDrag(event: PointerEvent, kind: TimelineDragKind): void {
-  const svg = overviewSvg.value;
+function beginTimelineRangeGesture(intent: TimelineRangeStartIntent): void {
   const current = session.value;
   if (
-    !svg ||
     !current ||
     !noteTimeIndex ||
-    editorLocked.value ||
+    operationLocked.value ||
+    draftCleanupBlocked.value ||
     timelineDrag ||
     viewportDrag
   ) {
     return;
   }
   const range = parsedRange.value ?? undefined;
-  if (kind !== "create" && !range) return;
+  if (intent.kind !== "create-range" && !range) return;
 
-  event.preventDefault();
   pauseForEdit();
-  svg.setPointerCapture(event.pointerId);
   timelineDrag = {
     transaction: createGestureTransaction({
-      anchorMs: overviewTimeFromPointer(event),
+      anchorMs: intent.anchorMs,
       before: captureGestureSnapshot(),
-      kind,
-      pointerId: event.pointerId,
-      startCoordinate: event.clientX,
+      kind: intent.kind,
+      pointerId: intent.pointerId,
+      startCoordinate: intent.anchorMs,
     }),
-    freePlacement: event.altKey,
+    freePlacement: intent.freePlacement,
     ...(range ? { range } : {}),
     moved: false,
   };
   gestureActive.value = true;
 }
 
-function moveTimelineDrag(event: PointerEvent): void {
+function previewTimelineRangeGesture(intent: RangeFocusIntent): void {
   const drag = timelineDrag;
-  if (!drag || drag.transaction.pointerId !== event.pointerId) return;
-  updateGestureTransaction(drag.transaction, event.clientX);
-  drag.freePlacement = event.altKey;
-  if (Math.abs(event.clientX - drag.transaction.startCoordinate) >= 2) drag.moved = true;
-  if (!drag.moved) return;
-  queueGestureFrame();
+  if (!drag) return;
+  updateGestureTransaction(drag.transaction, intent.focusMs);
+  drag.moved = true;
+  applyTimelineDragPreview();
 }
 
 function applyTimelineDragPreview(): void {
@@ -1104,65 +1111,46 @@ function applyTimelineDragPreview(): void {
   applyGesturePreview(drag.transaction, timelineRangeForDrag(drag));
 }
 
-async function endTimelineDrag(event: PointerEvent): Promise<void> {
+async function commitTimelineRangeGesture(intent: RangeFocusIntent): Promise<void> {
   const drag = timelineDrag;
-  if (!drag || drag.transaction.pointerId !== event.pointerId) return;
-  updateGestureTransaction(drag.transaction, event.clientX);
-  drag.freePlacement = event.altKey;
-  if (Math.abs(event.clientX - drag.transaction.startCoordinate) >= 2) drag.moved = true;
-  if (!drag.moved && event.type === "pointerup") seekPlayhead(overviewTimeFromPointer(event));
+  if (!drag) return;
+  updateGestureTransaction(drag.transaction, intent.focusMs);
+  drag.moved = true;
   await finalizeActiveGestures().catch(() => {});
 }
 
-function beginViewportGesture(event: PointerEvent): void {
-  const svg = viewportSvg.value;
-  if (!svg || !session.value || editorLocked.value || timelineDrag || viewportDrag) return;
-  event.preventDefault();
+function beginViewportRangeGesture(intent: ViewportRangeStartIntent): void {
+  if (
+    !session.value ||
+    !noteTimeIndex ||
+    operationLocked.value ||
+    draftCleanupBlocked.value ||
+    timelineDrag ||
+    viewportDrag
+  ) {
+    return;
+  }
   pauseForEdit();
-  svg.setPointerCapture(event.pointerId);
-  const startTimeMs = playheadMs.value;
-  const startY = viewportYFromClientY(event.clientY);
-  const anchorMs = viewportYToSourceTime({
-    chartEndMs: session.value.chartEndMs,
-    pixelsPerSecond: visualSpeed.value,
-    playheadMs: startTimeMs,
-    viewportHeight: viewportSize.value.height,
-    viewportY: startY,
-  });
-  const kind = event.shiftKey ? "scrub" : "select";
   viewportDrag = {
-    pointerId: event.pointerId,
-    kind,
-    anchorMs,
-    startClientY: event.clientY,
-    startTimeMs,
-    ...(kind === "select"
-      ? {
-          transaction: createGestureTransaction({
-            anchorMs,
-            before: captureGestureSnapshot(),
-            kind,
-            pointerId: event.pointerId,
-            startCoordinate: event.clientY,
-          }),
-        }
-      : {}),
-    lastClientY: event.clientY,
-    freePlacement: event.altKey,
+    transaction: createGestureTransaction({
+      anchorMs: intent.anchorMs,
+      before: captureGestureSnapshot(),
+      kind: "select",
+      pointerId: -1,
+      startCoordinate: intent.anchorMs,
+    }),
+    freePlacement: intent.freePlacement,
     moved: false,
   };
   gestureActive.value = true;
 }
 
-function moveViewportGesture(event: PointerEvent): void {
+function previewViewportRangeGesture(intent: RangeFocusIntent): void {
   const drag = viewportDrag;
-  if (!drag || drag.pointerId !== event.pointerId) return;
-  drag.lastClientY = event.clientY;
-  if (drag.transaction) updateGestureTransaction(drag.transaction, event.clientY);
-  drag.freePlacement = event.altKey;
-  if (Math.abs(drag.startClientY - event.clientY) >= 2) drag.moved = true;
-  if (!drag.moved) return;
-  queueGestureFrame();
+  if (!drag) return;
+  updateGestureTransaction(drag.transaction, intent.focusMs);
+  drag.moved = true;
+  applyViewportGesturePreview();
 }
 
 function applyViewportGesturePreview(): void {
@@ -1170,60 +1158,76 @@ function applyViewportGesturePreview(): void {
   const current = session.value;
   const index = noteTimeIndex;
   if (!drag?.moved || !current || !index) return;
-
-  if (drag.kind === "scrub") {
-    applyViewportScrub(drag);
-    return;
-  }
-  const transaction = drag.transaction;
-  if (!transaction) return;
-  applyGesturePreview(transaction, viewportRangeForDrag(drag, current, index));
+  applyGesturePreview(drag.transaction, viewportRangeForDrag(drag, current, index));
 }
 
-async function endViewportGesture(event: PointerEvent): Promise<void> {
+async function commitViewportRangeGesture(intent: RangeFocusIntent): Promise<void> {
   const drag = viewportDrag;
-  if (!drag || drag.pointerId !== event.pointerId) return;
-  drag.lastClientY = event.clientY;
-  if (drag.transaction) updateGestureTransaction(drag.transaction, event.clientY);
-  drag.freePlacement = event.altKey;
-  if (Math.abs(drag.startClientY - event.clientY) >= 2) drag.moved = true;
-  if (!drag.moved && event.type === "pointerup") {
-    seekPlayhead(
-      viewportYToSourceTime({
-        chartEndMs: session.value?.chartEndMs ?? 0,
-        pixelsPerSecond: visualSpeed.value,
-        playheadMs: drag.startTimeMs,
-        viewportHeight: viewportSize.value.height,
-        viewportY: viewportYFromClientY(event.clientY),
-      }),
-    );
-  }
+  if (!drag) return;
+  updateGestureTransaction(drag.transaction, intent.focusMs);
+  drag.moved = true;
   await finalizeActiveGestures().catch(() => {});
 }
 
-function queueGestureFrame(): void {
-  if (gestureFrame !== undefined) return;
-  gestureFrame = requestAnimationFrame(() => {
-    gestureFrame = undefined;
-    applyActiveGesturePreview();
+function cancelRangeGesture(): void {
+  rollbackActiveGesturesForDispose();
+}
+
+function setChildGestureActive(active: boolean): void {
+  if (active) gestureActive.value = true;
+  else if (!timelineDrag && !viewportDrag) gestureActive.value = false;
+}
+
+function updateTimelineViewRange(range: TimeRangeV1): void {
+  timelineViewRange.value = range;
+}
+
+function panMainViewport(range: TimeRangeV1): void {
+  const current = session.value;
+  if (!current) return;
+  const durationMs = range.endMs - range.startMs;
+  const timeMs =
+    range.startMs <= 0
+      ? 0
+      : range.endMs >= current.chartEndMs
+        ? current.chartEndMs
+        : range.startMs + durationMs * (1 - judgmentLineRatio);
+  seekPlayhead(timeMs);
+}
+
+function zoomTimeline(direction: -1 | 1): void {
+  const current = session.value;
+  if (!current) return;
+  timelineViewRange.value = zoomTimelineViewRangeAtTime({
+    anchorMs: timelineZoomAnchorMs(timelineViewRange.value, playheadMs.value),
+    chartEndMs: current.chartEndMs,
+    viewRange: timelineViewRange.value,
+    zoomDelta: direction * 0.5,
   });
 }
 
-function cancelGestureFrame(): void {
-  if (gestureFrame !== undefined) cancelAnimationFrame(gestureFrame);
-  gestureFrame = undefined;
+function fitTimeline(): void {
+  const chartEndMs = session.value?.chartEndMs;
+  if (chartEndMs === undefined) return;
+  timelineViewRange.value = fitTimelineViewRange(chartEndMs);
 }
 
-function applyActiveGesturePreview(): void {
-  if (timelineDrag) applyTimelineDragPreview();
-  else if (viewportDrag) applyViewportGesturePreview();
+function handleTimelineControlKeydown(event: KeyboardEvent): void {
+  if (event.key === "+" || event.key === "=") {
+    event.preventDefault();
+    zoomTimeline(1);
+  } else if (event.key === "-") {
+    event.preventDefault();
+    zoomTimeline(-1);
+  } else if (event.key === "0") {
+    event.preventDefault();
+    fitTimeline();
+  }
 }
 
 async function finalizeActiveGestures(): Promise<void> {
-  cancelGestureFrame();
   const activeTimelineDrag = timelineDrag;
   const activeViewportDrag = viewportDrag;
-  releaseActiveGesturePointers();
   timelineDrag = undefined;
   viewportDrag = undefined;
   gestureActive.value = false;
@@ -1234,7 +1238,7 @@ async function finalizeActiveGestures(): Promise<void> {
         activeTimelineDrag.moved ? timelineRangeForDrag(activeTimelineDrag) : undefined,
       ),
     );
-  } else if (activeViewportDrag?.kind === "select" && activeViewportDrag.transaction) {
+  } else if (activeViewportDrag) {
     await applyGestureFinalization(
       finalizeGestureTransaction(
         activeViewportDrag.transaction,
@@ -1243,8 +1247,6 @@ async function finalizeActiveGestures(): Promise<void> {
           : undefined,
       ),
     );
-  } else if (activeViewportDrag?.moved) {
-    applyViewportScrub(activeViewportDrag);
   }
 }
 
@@ -1253,14 +1255,14 @@ function timelineRangeForDrag(drag: TimelineDragState): TimeRangeV1 | undefined 
   const index = noteTimeIndex;
   if (!current || !index) return undefined;
   const transaction = drag.transaction;
-  const timeMs = overviewTimeFromClientX(transaction.lastCoordinate);
+  const timeMs = transaction.lastCoordinate;
   const options = {
     chartEndMs: current.chartEndMs,
     freePlacement: drag.freePlacement,
   };
-  return transaction.kind === "create"
+  return transaction.kind === "create-range"
     ? createTimelineRange(transaction.anchorMs, timeMs, index, options)
-    : transaction.kind === "move" && drag.range
+    : transaction.kind === "move-range" && drag.range
       ? moveTimelineRange(
           drag.range,
           timeMs - transaction.anchorMs,
@@ -1283,23 +1285,11 @@ function viewportRangeForDrag(
   current: BeatmapSession | undefined,
   index: ManiaNoteTimeIndex | undefined,
 ): TimeRangeV1 | undefined {
-  if (!current || !index || drag.kind !== "select" || !drag.transaction) return undefined;
-  const focusMs = viewportYToSourceTime({
-    chartEndMs: current.chartEndMs,
-    pixelsPerSecond: visualSpeed.value,
-    playheadMs: drag.startTimeMs,
-    viewportHeight: viewportSize.value.height,
-    viewportY: viewportYFromClientY(drag.transaction.lastCoordinate),
-  });
-  return createTimelineRange(drag.transaction.anchorMs, focusMs, index, {
+  if (!current || !index) return undefined;
+  return createTimelineRange(drag.transaction.anchorMs, drag.transaction.lastCoordinate, index, {
     chartEndMs: current.chartEndMs,
     freePlacement: drag.freePlacement,
   });
-}
-
-function applyViewportScrub(drag: ViewportDragState): void {
-  const deltaY = drag.startClientY - drag.lastClientY;
-  seekPlayhead(drag.startTimeMs + (deltaY / visualSpeed.value) * 1_000);
 }
 
 function captureGestureSnapshot() {
@@ -1359,12 +1349,10 @@ async function applyGestureFinalization<TKind extends string>(
 }
 
 function rollbackActiveGesturesForDispose(): void {
-  cancelGestureFrame();
   const transactions = [
     timelineDrag?.transaction,
     viewportDrag?.transaction,
   ].flatMap((transaction) => (transaction ? [transaction] : []));
-  releaseActiveGesturePointers();
   timelineDrag = undefined;
   viewportDrag = undefined;
   gestureActive.value = false;
@@ -1389,17 +1377,6 @@ function restoreGestureAutosave(transaction: GestureTransaction<EditorUndoState>
     draftTimer = undefined;
     void persistDraftNow(true).catch(() => {});
   }, 160);
-}
-
-function releaseActiveGesturePointers(): void {
-  const timelinePointerId = timelineDrag?.transaction.pointerId;
-  if (timelinePointerId !== undefined && overviewSvg.value?.hasPointerCapture(timelinePointerId)) {
-    overviewSvg.value.releasePointerCapture(timelinePointerId);
-  }
-  const viewportPointerId = viewportDrag?.pointerId;
-  if (viewportPointerId !== undefined && viewportSvg.value?.hasPointerCapture(viewportPointerId)) {
-    viewportSvg.value.releasePointerCapture(viewportPointerId);
-  }
 }
 
 async function handleWorkspaceKeydown(event: KeyboardEvent): Promise<void> {
@@ -1577,23 +1554,6 @@ function isNativeActivationTarget(target: EventTarget | null): boolean {
     target instanceof HTMLElement &&
     Boolean(target.closest("button, a, summary, [role='button'], [role='link']"))
   );
-}
-
-function overviewTimeFromPointer(event: PointerEvent): number {
-  return overviewTimeFromClientX(event.clientX);
-}
-
-function overviewTimeFromClientX(clientX: number): number {
-  const rect = overviewSvg.value?.getBoundingClientRect();
-  const endMs = session.value?.chartEndMs ?? 0;
-  if (!rect || rect.width === 0) return 0;
-  return Math.min(Math.max(0, ((clientX - rect.left) / rect.width) * endMs), endMs);
-}
-
-function viewportYFromClientY(clientY: number): number {
-  const rect = viewportSvg.value?.getBoundingClientRect();
-  if (!rect || rect.height === 0) return viewportSize.value.height * judgmentLineRatio;
-  return ((clientY - rect.top) / rect.height) * viewportSize.value.height;
 }
 
 function applyManualRange(captureUndo = true): void {
@@ -2654,19 +2614,6 @@ function formatTime(value: number): string {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}.${String(milliseconds).padStart(3, "0")}`;
 }
 
-function rangeOverviewGeometry(
-  range: TimeRangeV1,
-  chartEndMs: number,
-  clip = false,
-): { x: number; width: number } {
-  const startMs = clip ? Math.min(Math.max(0, range.startMs), chartEndMs) : range.startMs;
-  const endMs = clip ? Math.min(Math.max(0, range.endMs), chartEndMs) : range.endMs;
-  return {
-    x: (startMs / chartEndMs) * 1_000,
-    width: Math.max(1, ((endMs - startMs) / chartEndMs) * 1_000),
-  };
-}
-
 function rangeSceneGeometry(
   range: TimeRangeV1,
   frame: BufferedSceneFrame,
@@ -2684,10 +2631,6 @@ function rangeSceneGeometry(
       frame.scene.width - frame.scene.padding.left - frame.scene.padding.right,
     height: Math.max(1, (endMs - startMs) * pixelsPerMillisecond),
   };
-}
-
-function formatMetric(value: number, digits = 1): string {
-  return Number.isFinite(value) ? value.toFixed(digits) : "0.0";
 }
 
 function statusLabel(status: TaskQueueStatus): string {
@@ -2726,8 +2669,13 @@ function errorMessage(error: unknown): string {
 </script>
 
 <template>
-  <main id="main-content" class="bench annotation-bench" tabindex="-1">
-    <header class="app-bar annotation-app-bar">
+  <main
+    id="main-content"
+    class="bench annotation-bench"
+    :class="{ 'has-active-workspace': directory }"
+    tabindex="-1"
+  >
+    <header v-if="!directory" class="app-bar annotation-app-bar">
       <div class="brand-lockup">
         <span class="brand-mark" aria-hidden="true"></span>
         <div>
@@ -2737,7 +2685,7 @@ function errorMessage(error: unknown): string {
       </div>
 
       <div class="annotation-chart-context">
-        <span>{{ directory?.manifest.name ?? futureDataset?.manifest.name ?? "Local dataset" }}</span>
+        <span>{{ futureDataset?.manifest.name ?? "Local dataset" }}</span>
         <strong>{{ currentChartLabel }}</strong>
       </div>
 
@@ -2902,12 +2850,37 @@ function errorMessage(error: unknown): string {
         </button>
       </nav>
 
-      <div class="annotation-workspace">
+      <div
+        class="annotation-workspace"
+        :class="{
+          'has-session': session,
+          'is-preview-active': activeMobilePanel === 'preview',
+        }"
+      >
         <aside
           class="annotation-rail annotation-source-rail"
           :class="{ 'is-mobile-active': activeMobilePanel === 'source' }"
           aria-labelledby="queue-heading"
         >
+          <div class="active-workspace-identity">
+            <div class="brand-lockup">
+              <span class="brand-mark" aria-hidden="true"></span>
+              <div>
+                <p class="brand-name">Beatmap Lens</p>
+                <p class="brand-edition">Section annotation</p>
+              </div>
+            </div>
+            <WorkspaceModeSwitch
+              model-value="annotate"
+              :disabled="operationLocked || draftCleanupBlocked"
+              @update:model-value="changeWorkspaceMode"
+            />
+            <div class="active-dataset-identity">
+              <span>{{ directory?.manifest.name ?? "Local dataset" }}</span>
+              <strong>{{ currentChartLabel }}</strong>
+            </div>
+          </div>
+
           <header class="annotation-rail-header">
             <div>
               <p class="section-kicker"><span class="section-number">01</span> Task queue</p>
@@ -2965,19 +2938,15 @@ function errorMessage(error: unknown): string {
           :class="{ 'is-mobile-active': activeMobilePanel === 'preview' }"
           aria-labelledby="stage-heading"
         >
-          <header class="annotation-stage-header">
+          <header v-if="!session" class="annotation-stage-header">
             <div>
               <p class="section-kicker"><span class="section-number">02</span> Section evidence</p>
-              <h1 id="stage-heading">{{ session?.source.title ?? readonlyTask?.source?.title ?? "Select a chart" }}</h1>
-              <p v-if="session || readonlyTask?.source" class="chart-byline">
-                <strong>{{ session?.source.artist ?? readonlyTask?.source?.artist }}</strong>
+              <h1 id="stage-heading">{{ readonlyTask?.source?.title ?? "Select a chart" }}</h1>
+              <p v-if="readonlyTask?.source" class="chart-byline">
+                <strong>{{ readonlyTask.source.artist }}</strong>
                 <span aria-hidden="true">·</span>
-                {{ session?.source.difficulty ?? readonlyTask?.source?.difficulty }}
+                {{ readonlyTask.source.difficulty }}
               </p>
-            </div>
-            <div v-if="session" class="playhead-readout">
-              <span>Playhead</span>
-              <strong>{{ formatTime(playheadMs) }}</strong>
             </div>
           </header>
 
@@ -3007,273 +2976,118 @@ function errorMessage(error: unknown): string {
             </button>
           </div>
           <div v-else-if="session" class="interactive-stage-shell">
-            <div class="falling-note-shell">
-              <svg
-                ref="viewportSvg"
-                class="falling-note-viewport"
-                :class="{ 'is-locked': operationLocked }"
-                :viewBox="`0 0 ${viewportSize.width} ${viewportSize.height}`"
-                role="img"
-                :aria-label="`${session.source.keyCount}K falling-note evidence. Drag to select, Shift-drag to scrub, or hold Alt for free placement.`"
-                @pointerdown="beginViewportGesture"
-                @pointermove="moveViewportGesture"
-                @pointerup="endViewportGesture"
-                @pointercancel="endViewportGesture"
+            <FallingNoteViewport
+              :annotation-bands="annotationBands"
+              :candidate-note-ids="candidateNoteIds"
+              :chart-artist="session.source.artist"
+              :chart-difficulty="session.source.difficulty"
+              :chart-end-ms="session.chartEndMs"
+              :chart-title="session.source.title"
+              :frame-p95-ms="frameP95Ms"
+              :key-count="session.source.keyCount"
+              :locked="operationLocked || draftCleanupBlocked"
+              :playhead-ms="playheadMs"
+              :selected-note-ids="selectedNoteIds"
+              :size="viewportSize"
+              :visual-speed="visualSpeed"
+              v-bind="{
+                ...(viewportFrame ? { frame: viewportFrame } : {}),
+                ...(viewportInstrumentation ? { instrumentation: viewportInstrumentation } : {}),
+                ...(selectionBand ? { selectionBand } : {}),
+              }"
+              @annotation-seek="seekAnnotation"
+              @gesture-active="setChildGestureActive"
+              @note-toggle="toggleSceneNote"
+              @range-cancel="cancelRangeGesture"
+              @range-commit="commitViewportRangeGesture"
+              @range-preview="previewViewportRangeGesture"
+              @range-start="beginViewportRangeGesture"
+              @resize="resizeViewport"
+              @seek="seekPlayhead"
+            />
+          </div>
+          <div v-else class="stage-empty">
+            Choose a resolvable chart from the task queue.
+          </div>
+        </section>
+
+        <AnnotationTimeline
+          v-if="session"
+          :chart="session.chart"
+          :chart-end-ms="session.chartEndMs"
+          :disabled="operationLocked || draftCleanupBlocked"
+          :main-viewport-range="timelineViewport ?? timelineViewRange"
+          :playhead-ms="playheadMs"
+          :saved-annotations="annotationList"
+          :view-range="timelineViewRange"
+          v-bind="parsedRange ? { selection: parsedRange } : {}"
+          @annotation-seek="seekAnnotation"
+          @gesture-active="setChildGestureActive"
+          @range-cancel="cancelRangeGesture"
+          @range-commit="commitTimelineRangeGesture"
+          @range-preview="previewTimelineRangeGesture"
+          @range-start="beginTimelineRangeGesture"
+          @seek="seekPlayhead"
+          @view-range-change="updateTimelineViewRange"
+          @viewport-pan="panMainViewport"
+        />
+
+        <aside
+          class="annotation-rail annotation-details-rail"
+          :class="{ 'is-mobile-active': activeMobilePanel === 'details' }"
+          aria-labelledby="selection-heading"
+        >
+          <section v-if="session" class="details-transport" aria-label="Playback and timeline controls">
+            <div class="details-transport-status">
+              <div>
+                <span>Playhead</span>
+                <strong>{{ formatTime(playheadMs) }}</strong>
+              </div>
+              <div class="details-transport-state">
+                <span>{{ progress.complete }} / {{ progress.total }} complete</span>
+                <span class="health-status" :class="`health-status--${saveTone}`" aria-live="polite">
+                  <span class="health-dot" aria-hidden="true"></span>
+                  {{ saveMessage }}
+                </span>
+              </div>
+            </div>
+
+            <fieldset class="transport-controls" aria-label="Playback controls">
+              <button
+                class="transport-button transport-button--primary"
+                type="button"
+                :disabled="editorLocked"
+                :aria-pressed="playbackState.playing"
+                @click="togglePlayback"
               >
-                <title>Interactive falling-note evidence</title>
-                <defs>
-                  <pattern
-                    id="annotation-saved-hatch"
-                    width="10"
-                    height="10"
-                    patternUnits="userSpaceOnUse"
-                    patternTransform="rotate(45)"
-                  >
-                    <line x1="0" y1="0" x2="0" y2="10" class="saved-hatch-line" />
-                  </pattern>
-                  <pattern
-                    id="annotation-selection-hatch"
-                    width="12"
-                    height="12"
-                    patternUnits="userSpaceOnUse"
-                    patternTransform="rotate(45)"
-                  >
-                    <line x1="0" y1="0" x2="0" y2="12" class="selection-hatch-line" />
-                  </pattern>
-                </defs>
-                <rect width="100%" height="100%" class="viewport-ground" />
-                <g v-if="viewportFrame" class="viewport-lanes" aria-hidden="true">
-                  <rect
-                    v-for="entry in viewportFrame.keyedLanes"
-                    :key="entry.key"
-                    :x="entry.lane.x"
-                    y="0"
-                    :width="entry.lane.width"
-                    :height="viewportSize.height"
-                    :fill="entry.lane.fill"
-                    :stroke="entry.lane.stroke"
-                  />
-                </g>
-                <g
-                  v-if="viewportFrame"
-                  class="moving-note-group"
-                  :transform="viewportFrame.noteGroupTransform"
-                >
-                  <!-- biome-ignore lint/a11y/noStaticElementInteractions: Saved ranges are also keyboard accessible in the annotation list. -->
-                  <rect
-                    v-for="band in annotationBands"
-                    :key="`saved-${band.annotation.id}`"
-                    class="viewport-range-band viewport-range-band--saved"
-                    :x="band.x"
-                    :y="band.y"
-                    :width="band.width"
-                    :height="band.height"
-                    @pointerdown.stop
-                    @click.stop="seekAnnotation(band.annotation)"
-                  />
-                  <rect
-                    v-if="selectionBand"
-                    class="viewport-range-band viewport-range-band--selection"
-                    :x="selectionBand.x"
-                    :y="selectionBand.y"
-                    :width="selectionBand.width"
-                    :height="selectionBand.height"
-                    aria-hidden="true"
-                  />
-                  <!-- biome-ignore lint/a11y/noStaticElementInteractions: Note selection is duplicated by the keyboard-accessible checkbox list. -->
-                  <rect
-                    v-for="entry in viewportFrame.keyedNotes"
-                    :key="entry.key"
-                    class="falling-note"
-                    :class="{
-                      'is-candidate': candidateNoteIds.has(entry.glyph.id),
-                      'is-selected': selectedNoteIds.has(entry.glyph.id),
-                    }"
-                    :x="entry.glyph.x"
-                    :y="entry.glyph.y"
-                    :width="entry.glyph.width"
-                    :height="entry.glyph.height"
-                    :rx="entry.glyph.radius"
-                    :fill="entry.glyph.fill"
-                    :stroke="entry.glyph.stroke"
-                    @pointerdown.stop
-                    @click.stop="toggleSceneNote(entry.glyph.id)"
-                  />
-                </g>
-                <g class="judgment-guide" aria-hidden="true">
-                  <line
-                    x1="0"
-                    :y1="viewportSize.height * judgmentLineRatio"
-                    :x2="viewportSize.width"
-                    :y2="viewportSize.height * judgmentLineRatio"
-                  />
-                  <text
-                    x="12"
-                    :y="viewportSize.height * judgmentLineRatio - 8"
-                  >JUDGE · 82%</text>
-                </g>
-              </svg>
-              <div v-if="viewportFrame && viewportInstrumentation" class="viewport-instrumentation">
-                <span>BUF R{{ viewportFrame.revision }}</span>
-                <span>{{ viewportFrame.refreshed ? "REFRESH" : "REUSE" }}</span>
-                <span>
-                  BUILD {{ viewportInstrumentation.sceneBuildCount }} · REUSE
-                  {{ viewportInstrumentation.reusedFrameCount }}
-                </span>
-                <span>
-                  N {{ viewportInstrumentation.lastRenderedNoteCount }} / MAX
-                  {{ viewportInstrumentation.maximumRenderedNoteCount }}
-                </span>
-                <span>
-                  BUILD {{ formatMetric(viewportInstrumentation.lastBuildDurationMs) }} /
-                  {{ formatMetric(viewportInstrumentation.maximumBuildDurationMs) }} ms
-                </span>
-                <span>RAF P95 {{ formatMetric(frameP95Ms) }} ms</span>
-              </div>
-              <div class="viewport-legend" aria-hidden="true">
-                <span><i class="legend-mark legend-mark--selected"></i>Selected</span>
-                <span><i class="legend-mark legend-mark--saved"></i>Saved</span>
-                <span>Drag select · Shift scrub · Alt free</span>
-              </div>
-            </div>
+                {{ playbackState.playing ? "Pause" : "Play" }}
+                <kbd>Space</kbd>
+              </button>
+              <button
+                class="transport-button"
+                type="button"
+                :disabled="editorLocked || !parsedRange"
+                @click="playSelectionOnce"
+              >Selection <kbd>⇧Space</kbd></button>
+              <button
+                class="transport-button"
+                :class="{ 'is-active': playbackState.looping }"
+                type="button"
+                :disabled="editorLocked || !parsedRange"
+                :aria-pressed="playbackState.looping"
+                @click="toggleSelectionLoop"
+              >Loop <kbd>L</kbd></button>
+              <button
+                class="transport-button"
+                :class="{ 'is-active': musicEnabled }"
+                type="button"
+                :disabled="editorLocked"
+                :aria-pressed="musicEnabled"
+                @click="toggleMusic"
+              >Music {{ musicEnabled ? "on" : "off" }}</button>
+            </fieldset>
 
-            <div class="overview-shell">
-              <div class="overview-heading">
-                <span>Whole-chart density</span>
-                <strong>{{ selectedCount }} / {{ candidateNotes.length }} notes selected</strong>
-              </div>
-              <div class="overview-track">
-                <svg
-                  ref="overviewSvg"
-                  class="overview-timeline"
-                  viewBox="0 0 1000 72"
-                  role="img"
-                  aria-label="Chart density overview. Click to seek or drag empty space to create a range."
-                  @pointerdown="beginTimelineDrag($event, 'create')"
-                  @pointermove="moveTimelineDrag"
-                  @pointerup="endTimelineDrag"
-                  @pointercancel="endTimelineDrag"
-                >
-                <title>Whole-chart note density and annotation ranges</title>
-                <rect width="1000" height="72" class="overview-ground" />
-                <path v-if="overviewDensity" :d="overviewDensity.path" class="overview-density" />
-                <rect
-                  v-if="timelineViewport"
-                  class="overview-viewport-window"
-                  :x="timelineViewport.x"
-                  y="0"
-                  :width="timelineViewport.width"
-                  height="72"
-                  aria-hidden="true"
-                />
-                <!-- biome-ignore lint/a11y/noStaticElementInteractions: Saved ranges are duplicated by the keyboard-accessible annotation list. -->
-                <rect
-                  v-for="band in overviewAnnotationBands"
-                  :key="`overview-${band.annotation.id}`"
-                  class="overview-saved-range"
-                  :x="band.x"
-                  y="8"
-                  :width="band.width"
-                  height="56"
-                  @pointerdown.stop
-                  @click.stop="seekAnnotation(band.annotation)"
-                />
-                <g v-if="timelineSelection" class="overview-selection-range">
-                  <g>
-                    <rect
-                      class="overview-range-hit"
-                      :x="timelineSelection.x - timelineHandleHitWidth"
-                      y="0"
-                      :width="timelineHandleHitWidth"
-                      height="72"
-                      @pointerdown.stop="beginTimelineDrag($event, 'resize-start')"
-                    />
-                  </g>
-                  <g>
-                    <rect
-                      class="overview-range-hit"
-                      :x="timelineSelection.x + timelineSelection.width"
-                      y="0"
-                      :width="timelineHandleHitWidth"
-                      height="72"
-                      @pointerdown.stop="beginTimelineDrag($event, 'resize-end')"
-                    />
-                  </g>
-                  <rect
-                    class="overview-selection-body"
-                    :x="timelineSelection.x"
-                    y="10"
-                    :width="timelineSelection.width"
-                    height="52"
-                    @pointerdown.stop="beginTimelineDrag($event, 'move')"
-                  />
-                  <g aria-hidden="true">
-                    <rect
-                      class="overview-range-handle"
-                      :x="timelineSelection.x - 7"
-                      y="3"
-                      width="14"
-                      height="66"
-                    />
-                    <rect
-                      class="overview-range-handle"
-                      :x="timelineSelection.x + timelineSelection.width - 7"
-                      y="3"
-                      width="14"
-                      height="66"
-                    />
-                  </g>
-                </g>
-                <line
-                  class="overview-playhead"
-                  :x1="overviewPlayheadX"
-                  y1="0"
-                  :x2="overviewPlayheadX"
-                  y2="72"
-                />
-                </svg>
-              </div>
-              <div class="overview-caption">
-                <span>Click seek · drag empty create · drag band move · handles resize</span>
-                <span>Hold Alt/Option for free placement</span>
-              </div>
-            </div>
-
-            <div class="playback-strip">
-              <fieldset class="transport-controls" aria-label="Playback controls">
-                <button
-                  class="transport-button transport-button--primary"
-                  type="button"
-                  :disabled="operationLocked"
-                  :aria-pressed="playbackState.playing"
-                  @click="togglePlayback"
-                >
-                  {{ playbackState.playing ? "Pause" : "Play" }}
-                  <kbd>Space</kbd>
-                </button>
-                <button
-                  class="transport-button"
-                  type="button"
-                  :disabled="operationLocked || !parsedRange"
-                  @click="playSelectionOnce"
-                >Selection <kbd>⇧Space</kbd></button>
-                <button
-                  class="transport-button"
-                  :class="{ 'is-active': playbackState.looping }"
-                  type="button"
-                  :disabled="operationLocked || !parsedRange"
-                  :aria-pressed="playbackState.looping"
-                  @click="toggleSelectionLoop"
-                >Loop <kbd>L</kbd></button>
-                <button
-                  class="transport-button"
-                  :class="{ 'is-active': musicEnabled }"
-                  type="button"
-                  :disabled="operationLocked"
-                  :aria-pressed="musicEnabled"
-                  @click="toggleMusic"
-                >Music {{ musicEnabled ? "On" : "Off" }}</button>
-              </fieldset>
+            <div class="transport-tuning">
               <div class="speed-controls">
                 <span>Visual speed</span>
                 <div class="speed-presets">
@@ -3282,7 +3096,7 @@ function errorMessage(error: unknown): string {
                     :key="speed"
                     type="button"
                     :class="{ 'is-active': visualSpeed === speed }"
-                    :disabled="operationLocked"
+                    :disabled="editorLocked"
                     @click="selectVisualSpeed(speed)"
                   >{{ speed }}</button>
                 </div>
@@ -3294,7 +3108,7 @@ function errorMessage(error: unknown): string {
                     :min="minimumVisualSpeed"
                     :max="maximumVisualSpeed"
                     step="1"
-                    :disabled="operationLocked"
+                    :disabled="editorLocked"
                     aria-label="Custom visual speed in pixels per second"
                     @change="applyVisualSpeed"
                     @keydown.enter.prevent="applyVisualSpeed"
@@ -3302,28 +3116,55 @@ function errorMessage(error: unknown): string {
                   <small>px/s</small>
                 </label>
               </div>
-              <div class="playback-meta">
-                <strong>{{ formatTime(playheadMs) }}</strong>
-                <span>I/O edges · 1/2 salience · [ ] saved · ⌘/Ctrl Z undo</span>
-                <small
-                  class="audio-status"
-                  :class="`audio-status--${audioStatus.kind}`"
-                  role="status"
-                >{{ audioStatusText }}</small>
-                <small v-if="visualSpeedError" role="alert">{{ visualSpeedError }}</small>
+
+              <div class="audio-offset-control">
+                <div class="transport-control-label">
+                  <span>Audio offset</span>
+                  <small>Positive values play audio earlier</small>
+                </div>
+                <div class="audio-offset-editor">
+                  <button type="button" :disabled="editorLocked" @click="adjustAudioOffset(-10)">−10</button>
+                  <label>
+                    <span class="sr-only">Audio offset in milliseconds</span>
+                    <input
+                      v-model="audioOffsetDraft"
+                      type="number"
+                      step="10"
+                      :disabled="editorLocked"
+                      @blur="applyAudioOffset"
+                      @keydown.enter.prevent="applyAudioOffset"
+                    />
+                    <small>ms</small>
+                  </label>
+                  <button type="button" :disabled="editorLocked" @click="adjustAudioOffset(10)">+10</button>
+                  <button type="button" :disabled="editorLocked || audioOffsetMs === 0" @click="adjustAudioOffset(-audioOffsetMs)">
+                    Reset
+                  </button>
+                </div>
+              </div>
+
+              <div class="timeline-zoom-control">
+                <div class="transport-control-label">
+                  <span>Timeline lens</span>
+                  <small>Pinch or Control + wheel at the timeline</small>
+                </div>
+                <div class="timeline-zoom-buttons">
+                  <button type="button" :disabled="editorLocked" aria-label="Zoom timeline in" @click="zoomTimeline(1)" @keydown="handleTimelineControlKeydown">Zoom in</button>
+                  <button type="button" :disabled="editorLocked" aria-label="Zoom timeline out" @click="zoomTimeline(-1)" @keydown="handleTimelineControlKeydown">Zoom out</button>
+                  <button type="button" :disabled="editorLocked" aria-label="Fit the whole chart in the timeline" @click="fitTimeline" @keydown="handleTimelineControlKeydown">Fit</button>
+                </div>
               </div>
             </div>
-          </div>
-          <div v-else class="stage-empty">
-            Choose a resolvable chart from the task queue.
-          </div>
-        </section>
 
-        <aside
-          class="annotation-rail annotation-details-rail"
-          :class="{ 'is-mobile-active': activeMobilePanel === 'details' }"
-          aria-labelledby="selection-heading"
-        >
+            <div class="details-transport-meta">
+              <small class="audio-status" :class="`audio-status--${audioStatus.kind}`" role="status">
+                {{ audioStatusText }}
+              </small>
+              <small v-if="visualSpeedError" role="alert">{{ visualSpeedError }}</small>
+              <small v-if="audioOffsetError" role="alert">{{ audioOffsetError }}</small>
+            </div>
+          </section>
+
           <header class="annotation-rail-header">
             <div>
               <p class="section-kicker"><span class="section-number">03</span> Gold judgment</p>
