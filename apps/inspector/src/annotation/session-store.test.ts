@@ -35,6 +35,7 @@ describe("MemorySessionStore", () => {
     expect(await store.getDirectoryHandle("dataset")).toBe(handle);
     expect(await store.getPreferences()).toEqual({
       annotatorId: "expert-a",
+      audioOffsetMs: 0,
       musicEnabled: false,
       visualSpeed: 480,
     });
@@ -44,6 +45,37 @@ describe("MemorySessionStore", () => {
       start: "01:02.",
     });
     expect(await store.getDraft("dataset-b", "a".repeat(64))).toBeUndefined();
+  });
+
+  it("normalizes optional audio offset preferences", async () => {
+    const store = new MemorySessionStore();
+
+    await store.setPreferences({
+      annotatorId: "expert-a",
+      musicEnabled: true,
+      visualSpeed: 240,
+    });
+
+    expect(await store.getPreferences()).toEqual({
+      annotatorId: "expert-a",
+      audioOffsetMs: 0,
+      musicEnabled: true,
+      visualSpeed: 240,
+    });
+
+    await store.setPreferences({
+      annotatorId: "expert-a",
+      audioOffsetMs: -120,
+      musicEnabled: true,
+      visualSpeed: 240,
+    });
+
+    expect(await store.getPreferences()).toEqual({
+      annotatorId: "expert-a",
+      audioOffsetMs: -120,
+      musicEnabled: true,
+      visualSpeed: 240,
+    });
   });
 
   it("lists drafts for one dataset without sharing mutable records", async () => {

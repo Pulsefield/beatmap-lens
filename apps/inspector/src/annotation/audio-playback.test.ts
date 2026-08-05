@@ -1,6 +1,7 @@
 import { parseOsu } from "beatmap-lens";
 import { describe, expect, it } from "vitest";
 import {
+  AUDIO_OFFSET_PREFERENCE_KEY,
   AudioPlaybackController,
   audioFilenameFromParsedOsu,
   type BeatmapAudioFileContext,
@@ -55,6 +56,47 @@ describe("AudioPlaybackController", () => {
 
     await controller.setMusicEnabled(false);
     expect(preferenceStore.getItem(MUSIC_PREFERENCE_KEY)).toBe("off");
+  });
+
+  it("persists audio offset and retimes media without moving chart time", async () => {
+    const scheduler = new TestFrameScheduler();
+    const media = new FakeAudio();
+    const preferenceStore = new MemoryPreferenceStore();
+    preferenceStore.setItem(MUSIC_PREFERENCE_KEY, "on");
+    preferenceStore.setItem(AUDIO_OFFSET_PREFERENCE_KEY, "100");
+    const controller = controllerWith({ media, preferenceStore, scheduler });
+    await controller.loadBeatmapAudio(context(directory({ "song.ogg": audioFile("song.ogg") })));
+
+    expect(controller.audioOffsetMs).toBe(100);
+
+    controller.seek(1_000);
+    await controller.play();
+    expect(media.currentTime).toBe(1.1);
+
+    media.currentTime = 1.25;
+    scheduler.advance(16);
+    expect(controller.currentTimeMs).toBe(1_150);
+
+    controller.setAudioOffsetMs(-50);
+
+    expect(preferenceStore.getItem(AUDIO_OFFSET_PREFERENCE_KEY)).toBe("-50");
+    expect(controller.audioOffsetMs).toBe(-50);
+    expect(controller.currentTimeMs).toBe(1_150);
+    expect(media.currentTime).toBe(1.1);
+  });
+
+  it("does not move synthetic playback when Music is off and offset changes", async () => {
+    const scheduler = new TestFrameScheduler();
+    const preferenceStore = new MemoryPreferenceStore();
+    const controller = controllerWith({ preferenceStore, scheduler });
+
+    controller.seek(500);
+    await controller.play();
+    scheduler.advance(100);
+    controller.setAudioOffsetMs(120);
+
+    expect(controller.currentTimeMs).toBe(600);
+    expect(preferenceStore.getItem(AUDIO_OFFSET_PREFERENCE_KEY)).toBe("120");
   });
 
   it("preserves authoritative time and resume state when Music switches", async () => {
@@ -158,6 +200,24 @@ describe("AudioPlaybackController", () => {
 
     scheduler.advance(100);
     expect(controller.currentTimeMs).toBe(1_000);
+  });
+
+  it("falls back from media rejection without applying offset to chart time", async () => {
+    const scheduler = new TestFrameScheduler();
+    const media = new FakeAudio(new Error("Autoplay rejected"));
+    const preferenceStore = new MemoryPreferenceStore();
+    preferenceStore.setItem(AUDIO_OFFSET_PREFERENCE_KEY, "100");
+    const controller = controllerWith({ media, preferenceStore, scheduler });
+    await controller.loadBeatmapAudio(context(directory({ "song.ogg": audioFile("song.ogg") })));
+    controller.seek(900);
+    await controller.play();
+
+    await controller.setMusicEnabled(true);
+
+    expect(controller.audioStatus).toEqual({ kind: "rejected", message: "Autoplay rejected" });
+    expect(controller.playing).toBe(true);
+    expect(controller.currentTimeMs).toBe(900);
+    expect(media.currentTime).toBe(1);
   });
 
   it("does not resume fallback playback from a stale media rejection after pause", async () => {

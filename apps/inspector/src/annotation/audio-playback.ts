@@ -11,6 +11,7 @@ import {
 } from "./playback-clock";
 
 export const MUSIC_PREFERENCE_KEY = "beatmap-lens.inspector.music-enabled";
+export const AUDIO_OFFSET_PREFERENCE_KEY = "beatmap-lens.inspector.audio-offset-ms";
 
 export interface BeatmapAudioFileContext {
   readonly osuFile: FileSystemFileHandle;
@@ -60,6 +61,7 @@ export type AudioPlaybackStatus =
   | { readonly kind: "missing" | "unsupported" | "rejected"; readonly message: string };
 
 export interface AudioPlaybackControllerState {
+  readonly audioOffsetMs: number;
   readonly musicEnabled: boolean;
   readonly status: AudioPlaybackStatus;
 }
@@ -115,6 +117,7 @@ export class AudioPlaybackController implements PlaybackClock {
   #loadId = 0;
   #intentId = 0;
   #musicEnabled: boolean;
+  #audioOffsetMs: number;
   #status: AudioPlaybackStatus = { kind: "idle" };
   #disposed = false;
 
@@ -125,6 +128,9 @@ export class AudioPlaybackController implements PlaybackClock {
     this.#createObjectUrl = options.createObjectUrl ?? ((file) => URL.createObjectURL(file));
     this.#revokeObjectUrl = options.revokeObjectUrl ?? ((url) => URL.revokeObjectURL(url));
     this.#musicEnabled = this.#preferenceStore?.getItem(MUSIC_PREFERENCE_KEY) === "on";
+    this.#audioOffsetMs = parseAudioOffsetMs(
+      this.#preferenceStore?.getItem(AUDIO_OFFSET_PREFERENCE_KEY) ?? null,
+    );
     this.#syntheticClock = new SyntheticPlaybackClock(options.scheduler);
     this.#activeClock = this.#syntheticClock;
     this.#activeState = clockState(this.#syntheticClock);
@@ -148,6 +154,10 @@ export class AudioPlaybackController implements PlaybackClock {
 
   get audioStatus(): AudioPlaybackStatus {
     return this.#status;
+  }
+
+  get audioOffsetMs(): number {
+    return this.#audioOffsetMs;
   }
 
   async loadBeatmapAudio(context: BeatmapAudioFileContext): Promise<void> {
@@ -213,9 +223,14 @@ export class AudioPlaybackController implements PlaybackClock {
     }
 
     this.#objectUrl = objectUrl;
-    this.#mediaClock = new MediaPlaybackClock(media, this.#scheduler, (error) => {
-      this.#handleMediaFailure(error);
-    });
+    this.#mediaClock = new MediaPlaybackClock(
+      media,
+      this.#scheduler,
+      (error) => {
+        this.#handleMediaFailure(error);
+      },
+      this.#audioOffsetMs,
+    );
     this.#setStatus({ kind: "ready" });
 
     if (this.#musicEnabled) {
@@ -258,6 +273,13 @@ export class AudioPlaybackController implements PlaybackClock {
       this.#setStatus({ kind: "ready" });
       await this.#switchToMedia(intentId);
     }
+  }
+
+  setAudioOffsetMs(audioOffsetMs: number): void {
+    this.#audioOffsetMs = normalizeAudioOffsetMs(audioOffsetMs);
+    this.#preferenceStore?.setItem(AUDIO_OFFSET_PREFERENCE_KEY, String(this.#audioOffsetMs));
+    this.#mediaClock?.setAudioOffsetMs(this.#audioOffsetMs);
+    this.#emitAudio();
   }
 
   async play(): Promise<void> {
@@ -457,7 +479,11 @@ export class AudioPlaybackController implements PlaybackClock {
   }
 
   #audioState(): AudioPlaybackControllerState {
-    return { musicEnabled: this.#musicEnabled, status: this.#status };
+    return {
+      audioOffsetMs: this.#audioOffsetMs,
+      musicEnabled: this.#musicEnabled,
+      status: this.#status,
+    };
   }
 
   #emitAudio(): void {
@@ -490,6 +516,14 @@ function clockState(clock: PlaybackClock): PlaybackClockState {
 
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
+}
+
+function parseAudioOffsetMs(value: string | null): number {
+  return normalizeAudioOffsetMs(Number(value));
+}
+
+function normalizeAudioOffsetMs(audioOffsetMs: number): number {
+  return Number.isFinite(audioOffsetMs) ? audioOffsetMs : 0;
 }
 
 function browserPreferenceStore(): MusicPreferenceStore | undefined {

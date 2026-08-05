@@ -39,9 +39,14 @@ type StoredAnnotationDraft = Omit<AnnotationDraft, "exemplarRoles"> & {
 
 export interface SessionPreferences {
   annotatorId: string;
+  audioOffsetMs?: number;
   musicEnabled: boolean;
   visualSpeed: number;
 }
+
+type StoredSessionPreferences = Omit<SessionPreferences, "audioOffsetMs"> & {
+  readonly audioOffsetMs?: number;
+};
 
 export type DirectoryHandleKind = "corpus" | "dataset";
 
@@ -59,7 +64,7 @@ export interface SessionStore {
 export class MemorySessionStore implements SessionStore {
   readonly #drafts = new Map<string, AnnotationDraft>();
   readonly #handles = new Map<DirectoryHandleKind, unknown>();
-  #preferences?: SessionPreferences;
+  #preferences?: StoredSessionPreferences;
 
   async deleteDraft(datasetId: string, sourceSha256: string): Promise<void> {
     this.#drafts.delete(draftKey(datasetId, sourceSha256));
@@ -74,7 +79,7 @@ export class MemorySessionStore implements SessionStore {
   }
 
   async getPreferences(): Promise<SessionPreferences | undefined> {
-    return clone(this.#preferences);
+    return normalizeOptionalPreferences(this.#preferences);
   }
 
   async listDrafts(datasetId: string): Promise<readonly AnnotationDraft[]> {
@@ -93,7 +98,7 @@ export class MemorySessionStore implements SessionStore {
   }
 
   async setPreferences(preferences: SessionPreferences): Promise<void> {
-    this.#preferences = clone(preferences);
+    this.#preferences = clone(normalizePreferences(preferences));
   }
 }
 
@@ -125,9 +130,11 @@ export class IndexedDbSessionStore implements SessionStore {
   }
 
   async getPreferences(): Promise<SessionPreferences | undefined> {
-    return (await this.#request("preferences", "readonly", (store) => store.get("current"))) as
-      | SessionPreferences
-      | undefined;
+    return normalizeOptionalPreferences(
+      (await this.#request("preferences", "readonly", (store) => store.get("current"))) as
+        | StoredSessionPreferences
+        | undefined,
+    );
   }
 
   async listDrafts(datasetId: string): Promise<readonly AnnotationDraft[]> {
@@ -152,7 +159,9 @@ export class IndexedDbSessionStore implements SessionStore {
   }
 
   async setPreferences(preferences: SessionPreferences): Promise<void> {
-    await this.#request("preferences", "readwrite", (store) => store.put(preferences, "current"));
+    await this.#request("preferences", "readwrite", (store) =>
+      store.put(normalizePreferences(preferences), "current"),
+    );
   }
 
   async #request(
@@ -242,6 +251,24 @@ function normalizeOptionalDraft(
   return draft === undefined ? undefined : normalizeDraft(draft);
 }
 
+function normalizePreferences(preferences: StoredSessionPreferences): SessionPreferences {
+  const snapshot = snapshotReactiveData(preferences);
+  return {
+    ...snapshot,
+    audioOffsetMs: normalizeAudioOffsetMs(snapshot.audioOffsetMs),
+  };
+}
+
+function normalizeOptionalPreferences(
+  preferences: StoredSessionPreferences | undefined,
+): SessionPreferences | undefined {
+  return preferences === undefined ? undefined : clone(normalizePreferences(preferences));
+}
+
 function clone<T>(value: T): T {
   return value === undefined ? value : structuredClone(value);
+}
+
+function normalizeAudioOffsetMs(audioOffsetMs: number | undefined): number {
+  return audioOffsetMs === undefined || !Number.isFinite(audioOffsetMs) ? 0 : audioOffsetMs;
 }

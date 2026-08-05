@@ -19,6 +19,22 @@ describe("MediaPlaybackClock", () => {
     expect(clock.playing).toBe(true);
   });
 
+  it("maps chart time to media time with the configured offset", async () => {
+    const media = new FakeAudio();
+    const scheduler = new TestFrameScheduler();
+    const clock = new MediaPlaybackClock(asMedia(media), scheduler, undefined, 100);
+
+    clock.seek(1_250);
+    expect(media.currentTime).toBe(1.35);
+    expect(clock.currentTimeMs).toBe(1_250);
+
+    await clock.play();
+    media.currentTime = 3.5;
+    scheduler.frame();
+
+    expect(clock.currentTimeMs).toBe(3_400);
+  });
+
   it("does not couple playback to visual speed or media playbackRate", async () => {
     const media = new FakeAudio();
     const scheduler = new TestFrameScheduler();
@@ -31,6 +47,74 @@ describe("MediaPlaybackClock", () => {
     clock.pause();
 
     expect(media.playbackRate).toBe(1.25);
+  });
+
+  it("keeps chart time moving before a negative offset reaches media time zero", async () => {
+    const media = new FakeAudio({ durationMs: 1_000 });
+    const scheduler = new TestFrameScheduler();
+    const clock = new MediaPlaybackClock(asMedia(media), scheduler, undefined, -100);
+
+    clock.seek(0);
+    await clock.play();
+
+    expect(clock.playing).toBe(true);
+    expect(media.currentTime).toBe(0);
+    expect(media.paused).toBe(true);
+    expect(media.playCalls).toBe(0);
+
+    scheduler.advance(50);
+    expect(clock.currentTimeMs).toBe(50);
+    expect(media.paused).toBe(true);
+
+    scheduler.advance(60);
+    await Promise.resolve();
+
+    expect(clock.currentTimeMs).toBe(110);
+    expect(media.currentTime).toBe(0.01);
+    expect(media.paused).toBe(false);
+    expect(media.playCalls).toBe(1);
+  });
+
+  it("keeps chart time moving after a positive offset passes media duration", async () => {
+    const media = new FakeAudio({ durationMs: 1_000 });
+    const scheduler = new TestFrameScheduler();
+    const clock = new MediaPlaybackClock(asMedia(media), scheduler, undefined, 100);
+
+    clock.seek(950);
+    await clock.play();
+
+    expect(clock.playing).toBe(true);
+    expect(media.currentTime).toBe(1);
+    expect(media.paused).toBe(true);
+    expect(media.playCalls).toBe(0);
+
+    scheduler.advance(75);
+
+    expect(clock.currentTimeMs).toBe(1_025);
+    expect(media.currentTime).toBe(1);
+    expect(clock.playing).toBe(true);
+  });
+
+  it("continues chart time from the exact media end boundary", async () => {
+    const media = new FakeAudio({ durationMs: 1_000 });
+    const scheduler = new TestFrameScheduler();
+    const clock = new MediaPlaybackClock(asMedia(media), scheduler, undefined, 100);
+
+    clock.seek(800);
+    await clock.play();
+    media.currentTime = 1;
+    media.paused = true;
+    media.dispatchEvent(new Event("ended"));
+
+    expect(clock.currentTimeMs).toBe(900);
+    expect(media.currentTime).toBe(1);
+    expect(clock.playing).toBe(true);
+
+    scheduler.advance(50);
+
+    expect(clock.currentTimeMs).toBe(950);
+    expect(media.currentTime).toBe(1);
+    expect(clock.playing).toBe(true);
   });
 
   it("clamps selection playback and loops from the exact boundary", async () => {
@@ -55,6 +139,47 @@ describe("MediaPlaybackClock", () => {
     media.currentTime = 0.25;
     scheduler.frame();
     expect(clock.currentTimeMs).toBe(100);
+  });
+
+  it("checks selection playback boundaries in chart time when offset is non-zero", async () => {
+    const media = new FakeAudio();
+    const scheduler = new TestFrameScheduler();
+    const clock = new MediaPlaybackClock(asMedia(media), scheduler, undefined, 100);
+
+    await clock.playSelection({ startMs: 100, endMs: 250 });
+    expect(media.currentTime).toBe(0.2);
+
+    media.currentTime = 0.36;
+    scheduler.frame();
+
+    expect(clock.currentTimeMs).toBe(250);
+    expect(media.currentTime).toBe(0.35);
+    expect(clock.playing).toBe(false);
+
+    await clock.loopSelection({ startMs: 100, endMs: 250 });
+    media.currentTime = 0.35;
+    scheduler.frame();
+
+    expect(clock.currentTimeMs).toBe(100);
+    expect(media.currentTime).toBe(0.2);
+    expect(clock.playing).toBe(true);
+  });
+
+  it("retimes media without moving chart time when the offset changes during playback", async () => {
+    const media = new FakeAudio();
+    const scheduler = new TestFrameScheduler();
+    const clock = new MediaPlaybackClock(asMedia(media), scheduler);
+
+    await clock.play();
+    media.currentTime = 1.25;
+    scheduler.frame();
+
+    clock.setAudioOffsetMs(100);
+
+    expect(clock.audioOffsetMs).toBe(100);
+    expect(clock.currentTimeMs).toBe(1_250);
+    expect(media.currentTime).toBe(1.35);
+    expect(clock.playing).toBe(true);
   });
 
   it("does not restart a loop after an explicit pause at the boundary", async () => {
@@ -109,19 +234,23 @@ describe("MediaPlaybackClock", () => {
 
 class FakeAudio extends EventTarget {
   currentTime = 0;
+  duration = Number.NaN;
   error: MediaError | null = null;
   playbackRate = 1;
   paused = true;
+  playCalls = 0;
   readonly #deferPlay: boolean;
   #pendingPlay: (() => void) | undefined;
   #nextPlayError: Error | undefined;
 
-  constructor(options: { readonly deferPlay?: boolean } = {}) {
+  constructor(options: { readonly deferPlay?: boolean; readonly durationMs?: number } = {}) {
     super();
     this.#deferPlay = options.deferPlay ?? false;
+    if (options.durationMs !== undefined) this.duration = options.durationMs / 1_000;
   }
 
   play(): Promise<void> {
+    this.playCalls++;
     if (this.#nextPlayError) {
       const error = this.#nextPlayError;
       this.#nextPlayError = undefined;
@@ -166,10 +295,11 @@ function asMedia(media: FakeAudio): HTMLAudioElement {
 }
 
 class TestFrameScheduler implements PlaybackFrameScheduler {
+  #timeMs = 0;
   #callback: ((timeMs: number) => void) | undefined;
 
   now(): number {
-    return 0;
+    return this.#timeMs;
   }
 
   requestFrame(callback: (timeMs: number) => void): number {
@@ -184,6 +314,11 @@ class TestFrameScheduler implements PlaybackFrameScheduler {
   frame(): void {
     const callback = this.#callback;
     this.#callback = undefined;
-    callback?.(0);
+    callback?.(this.#timeMs);
+  }
+
+  advance(elapsedMs: number): void {
+    this.#timeMs += elapsedMs;
+    this.frame();
   }
 }
