@@ -39,6 +39,26 @@ describe("createOverviewDensityPath", () => {
     expect(density.counts.reduce((sum, count) => sum + count, 0)).toBe(1);
     expect(density.counts.at(-1)).toBe(1);
   });
+
+  it("builds vertical density with later time at the top", () => {
+    const density = createOverviewDensityPath(
+      {
+        ...chartWithNotes(0),
+        notes: [note("early-a", 0), note("early-b", 10), note("middle", 500)],
+      },
+      {
+        width: 10,
+        height: 30,
+        orientation: "vertical",
+        resolution: 3,
+        endMs: 1_000,
+      },
+    );
+
+    expect(density.counts).toEqual([2, 1, 0]);
+    expect(density.orientation).toBe("vertical");
+    expect(density.path).toBe("M 0 30 L 10 30 L 5 15 L 0 0 L 0 0 Z");
+  });
 });
 
 function chartWithNotes(count: number): ManiaChart {

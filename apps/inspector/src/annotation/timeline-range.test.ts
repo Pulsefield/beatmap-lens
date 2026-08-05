@@ -2,12 +2,23 @@ import type { ManiaNote } from "beatmap-lens";
 import { describe, expect, it } from "vitest";
 import { ManiaNoteTimeIndex } from "./note-time-index";
 import {
+  beginTimelineViewportPan,
+  centerTimelineViewportRange,
+  classifyTimelineGesture,
   createTimelineRange,
+  formatTimelineRangeLabels,
+  formatTimelineRangeTime,
+  hitTimelineRangeTarget,
   moveTimelineRange,
+  panTimelineViewportRange,
   parseManualRangeDraft,
   parseTimeInput,
   resizeTimelineRange,
+  timelineEdgeHitHeight,
   timelineEdgeHitWidth,
+  timelineRangeBodyContainsY,
+  timelineRangeOutOfView,
+  timelineRangeVerticalGeometry,
 } from "./timeline-range";
 
 describe("timeline range operations", () => {
@@ -50,6 +61,119 @@ describe("timeline range operations", () => {
 
     expect((hitWidth / 1_000) * 375).toBe(40);
   });
+
+  it("keeps forty CSS pixels of vertical edge target outside a narrow timeline body", () => {
+    const hitHeight = timelineEdgeHitHeight(900, 1_000);
+
+    expect((hitHeight / 1_000) * 900).toBe(40);
+  });
+});
+
+describe("vertical timeline range geometry", () => {
+  const mapping = { viewRange: { startMs: 0, endMs: 1_200 }, height: 120 };
+
+  it("places the range end above the range start on the reversed Y axis", () => {
+    expect(timelineRangeVerticalGeometry({ startMs: 300, endMs: 900 }, mapping)).toEqual({
+      y: 30,
+      height: 60,
+      startY: 90,
+      endY: 30,
+      clippedStart: false,
+      clippedEnd: false,
+    });
+  });
+
+  it("clips ranges to the current timeline lens before creating geometry", () => {
+    expect(
+      timelineRangeVerticalGeometry(
+        { startMs: 100, endMs: 1_100 },
+        { viewRange: { startMs: 300, endMs: 900 }, height: 60 },
+      ),
+    ).toEqual({
+      y: 0,
+      height: 60,
+      startY: 60,
+      endY: 0,
+      clippedStart: true,
+      clippedEnd: true,
+    });
+  });
+
+  it("reports whether a range is beyond the top or bottom of a zoomed lens", () => {
+    const viewRange = { startMs: 300, endMs: 900 };
+
+    expect(timelineRangeOutOfView({ startMs: 950, endMs: 1_000 }, viewRange)).toBe("above");
+    expect(timelineRangeOutOfView({ startMs: 100, endMs: 200 }, viewRange)).toBe("below");
+    expect(timelineRangeOutOfView({ startMs: 800, endMs: 1_000 }, viewRange)).toBeUndefined();
+  });
+
+  it("hits transparent start and end edge zones by nearest vertical edge", () => {
+    const geometry = timelineRangeVerticalGeometry(
+      { startMs: 490, endMs: 510 },
+      {
+        viewRange: { startMs: 0, endMs: 1_000 },
+        height: 1_000,
+      },
+    );
+
+    expect(hitTimelineRangeTarget(505, geometry, 40)).toBe("start-edge");
+    expect(hitTimelineRangeTarget(495, geometry, 40)).toBe("end-edge");
+    expect(timelineRangeBodyContainsY(500, geometry)).toBe(true);
+  });
+
+  it("locks gesture routing from the pointerdown hit and modifier snapshot", () => {
+    expect(classifyTimelineGesture({ shiftKey: true })).toBe("create-range");
+    expect(
+      classifyTimelineGesture({
+        controlKey: true,
+        rangeHit: "start-edge",
+        rangeBodyHit: false,
+      }),
+    ).toBe("resize-start");
+    expect(
+      classifyTimelineGesture({
+        rangeHit: "start-edge",
+        rangeBodyHit: false,
+      }),
+    ).toBe("pan-viewport");
+    expect(classifyTimelineGesture({ rangeBodyHit: true })).toBe("move-range");
+    expect(classifyTimelineGesture({ controlKey: true })).toBe("noop");
+  });
+});
+
+describe("timeline viewport pan helpers", () => {
+  it("keeps the grab offset when dragging inside the viewport window", () => {
+    const panStart = beginTimelineViewportPan(250, { startMs: 200, endMs: 400 }, 1_000);
+
+    expect(panStart).toEqual({
+      viewportRange: { startMs: 200, endMs: 400 },
+      grabOffsetMs: 50,
+    });
+    expect(panTimelineViewportRange(300, panStart, 1_000)).toEqual({
+      startMs: 250,
+      endMs: 450,
+    });
+  });
+
+  it("recenters the viewport before dragging when the pointer starts outside the window", () => {
+    const panStart = beginTimelineViewportPan(800, { startMs: 200, endMs: 400 }, 1_000);
+
+    expect(panStart).toEqual({
+      viewportRange: { startMs: 700, endMs: 900 },
+      grabOffsetMs: 100,
+    });
+    expect(panTimelineViewportRange(950, panStart, 1_000)).toEqual({
+      startMs: 800,
+      endMs: 1_000,
+    });
+  });
+
+  it("centers a viewport range within chart boundaries", () => {
+    expect(centerTimelineViewportRange(50, 200, 1_000)).toEqual({
+      startMs: 0,
+      endMs: 200,
+    });
+  });
 });
 
 describe("manual timeline input", () => {
@@ -81,6 +205,18 @@ describe("manual timeline input", () => {
     expect(parseTimeInput("   ")).toEqual({
       error: "Use milliseconds or mm:ss.mmm.",
       ok: false,
+    });
+  });
+});
+
+describe("timeline display labels", () => {
+  it("formats selection endpoints at tenth-second precision", () => {
+    expect(formatTimelineRangeTime(0)).toBe("00:00.0");
+    expect(formatTimelineRangeTime(123_456)).toBe("02:03.5");
+    expect(formatTimelineRangeTime(59_950)).toBe("01:00.0");
+    expect(formatTimelineRangeLabels({ startMs: 1_234, endMs: 5_678 })).toEqual({
+      start: "00:01.2",
+      end: "00:05.7",
     });
   });
 });

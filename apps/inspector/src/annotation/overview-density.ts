@@ -3,9 +3,12 @@ import { chartEndMs } from "./range";
 
 export const overviewDensityResolution = 256;
 
+export type OverviewDensityOrientation = "horizontal" | "vertical";
+
 export interface OverviewDensityOptions {
   readonly width: number;
   readonly height: number;
+  readonly orientation?: OverviewDensityOrientation;
   readonly resolution?: number;
   readonly startMs?: number;
   readonly endMs?: number;
@@ -16,6 +19,7 @@ export interface OverviewDensityPath {
   readonly counts: readonly number[];
   readonly maxCount: number;
   readonly resolution: number;
+  readonly orientation: OverviewDensityOrientation;
   readonly startMs: number;
   readonly endMs: number;
   readonly binDurationMs: number;
@@ -33,6 +37,7 @@ export function createOverviewDensityPath(
 
   const startMs = options.startMs ?? 0;
   const endMs = options.endMs ?? chartEndMs(chart);
+  const orientation = options.orientation ?? "horizontal";
   if (endMs <= startMs) {
     throw new RangeError("Density endMs must be greater than startMs.");
   }
@@ -51,24 +56,49 @@ export function createOverviewDensityPath(
   }
 
   const maxCount = Math.max(0, ...counts);
-  const points = counts.map((count, index) => {
-    const x = (index / (resolution - 1)) * options.width;
-    const y = maxCount === 0 ? options.height : options.height * (1 - count / maxCount);
-    return `${round3(x)} ${round3(y)}`;
-  });
-  const path = `M 0 ${round3(options.height)} L ${points.join(" L ")} L ${round3(
-    options.width,
-  )} ${round3(options.height)} Z`;
+  const path =
+    orientation === "vertical"
+      ? createVerticalDensityPath(counts, maxCount, options.width, options.height)
+      : createHorizontalDensityPath(counts, maxCount, options.width, options.height);
 
   return {
     path,
     counts,
     maxCount,
     resolution,
+    orientation,
     startMs,
     endMs,
     binDurationMs: durationMs / resolution,
   };
+}
+
+function createHorizontalDensityPath(
+  counts: readonly number[],
+  maxCount: number,
+  width: number,
+  height: number,
+): string {
+  const points = counts.map((count, index) => {
+    const x = (index / (counts.length - 1)) * width;
+    const y = maxCount === 0 ? height : height * (1 - count / maxCount);
+    return `${round3(x)} ${round3(y)}`;
+  });
+  return `M 0 ${round3(height)} L ${points.join(" L ")} L ${round3(width)} ${round3(height)} Z`;
+}
+
+function createVerticalDensityPath(
+  counts: readonly number[],
+  maxCount: number,
+  width: number,
+  height: number,
+): string {
+  const points = counts.map((count, index) => {
+    const x = maxCount === 0 ? 0 : width * (count / maxCount);
+    const y = height * (1 - index / (counts.length - 1));
+    return `${round3(x)} ${round3(y)}`;
+  });
+  return `M 0 ${round3(height)} L ${points.join(" L ")} L 0 0 Z`;
 }
 
 function round3(value: number): number {
