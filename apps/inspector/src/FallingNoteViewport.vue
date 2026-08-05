@@ -1,3 +1,4 @@
+<!-- biome-ignore-all lint/a11y/noNoninteractiveTabindex: The approved viewport spec requires the SVG root to be keyboard-focusable for arrow navigation. -->
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import {
@@ -13,6 +14,11 @@ import {
   viewportEdgePenetration,
   viewportPointerY,
 } from "./annotation/viewport-auto-scroll";
+import {
+  navigateViewportTime,
+  viewportArrowStepPx,
+  wheelDeltaPixels,
+} from "./annotation/viewport-navigation";
 
 interface ViewportSize {
   readonly width: number;
@@ -81,6 +87,7 @@ const emit = defineEmits<{
   "range-start": [intent: RangeStartIntent];
   resize: [size: ViewportSize];
   seek: [timeMs: number];
+  "viewport-navigate": [timeMs: number];
 }>();
 
 const viewportSvg = ref<SVGSVGElement>();
@@ -88,6 +95,8 @@ const viewportSvg = ref<SVGSVGElement>();
 let resizeObserver: ResizeObserver | undefined;
 let activeGesture: ViewportGesture | undefined;
 let selectFrame: number | undefined;
+let wheelFrame: number | undefined;
+let pendingWheelPixels = 0;
 let lastEmittedSize: ViewportSize | undefined;
 
 const viewBox = computed(() => `0 0 ${props.size.width} ${props.size.height}`);
@@ -98,7 +107,7 @@ const selectedCount = computed(() => props.selectedNoteIds.size);
 const candidateCount = computed(() => props.candidateNoteIds.size);
 const svgAriaLabel = computed(
   () =>
-    `${props.keyCount}K falling-note evidence for ${chartIdentity.value}. Drag to select, Shift-drag to scrub, or hold Alt for free placement.`,
+    `${props.keyCount}K falling-note evidence for ${chartIdentity.value}. Drag to select, Shift-drag to scrub, use Up and Down to navigate, or hold Alt for free placement.`,
 );
 
 onMounted(() => {
@@ -110,6 +119,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   cancelActiveGesture();
+  cancelWheelFrame();
   resizeObserver?.disconnect();
   window.removeEventListener("keydown", handleWindowKeydown);
 });
@@ -117,13 +127,19 @@ onBeforeUnmount(() => {
 watch(
   () => props.locked,
   (locked) => {
-    if (locked) cancelActiveGesture();
+    if (locked) {
+      cancelActiveGesture();
+      cancelWheelFrame();
+    }
   },
 );
 
 watch(
   () => props.chartEndMs,
-  () => cancelActiveGesture(),
+  () => {
+    cancelActiveGesture();
+    cancelWheelFrame();
+  },
 );
 
 function measureViewport(): void {
@@ -146,6 +162,7 @@ function beginViewportGesture(event: PointerEvent): void {
   if (!svg || props.locked || activeGesture || event.button !== 0) return;
 
   event.preventDefault();
+  svg.focus({ preventScroll: true });
   svg.setPointerCapture(event.pointerId);
 
   const startPlayheadMs = props.playheadMs;
@@ -258,7 +275,7 @@ function runSelectFrame(timestamp: number): void {
       viewportDurationMs: (props.size.height / props.visualSpeed) * 1_000,
     });
     gesture.workingPlayheadMs = advance.playheadMs;
-    if (advance.deltaMs !== 0) emitSeek(advance.playheadMs);
+    if (advance.deltaMs !== 0) emit("viewport-navigate", advance.playheadMs);
   }
 
   gesture.lastFrameTimestamp = timestamp;
@@ -274,6 +291,62 @@ function runSelectFrame(timestamp: number): void {
 function cancelSelectFrame(): void {
   if (selectFrame !== undefined) cancelAnimationFrame(selectFrame);
   selectFrame = undefined;
+}
+
+function handleWheel(event: WheelEvent): void {
+  if (
+    props.locked ||
+    event.ctrlKey ||
+    event.metaKey ||
+    event.altKey ||
+    event.shiftKey ||
+    event.deltaY === 0
+  ) {
+    return;
+  }
+
+  event.preventDefault();
+  pendingWheelPixels += wheelDeltaPixels(event.deltaY, event.deltaMode, props.size.height);
+  if (wheelFrame === undefined) wheelFrame = requestAnimationFrame(applyPendingWheel);
+}
+
+function applyPendingWheel(): void {
+  wheelFrame = undefined;
+  const deltaPixels = pendingWheelPixels;
+  pendingWheelPixels = 0;
+  navigateByPixels(deltaPixels);
+}
+
+function cancelWheelFrame(): void {
+  if (wheelFrame !== undefined) cancelAnimationFrame(wheelFrame);
+  wheelFrame = undefined;
+  pendingWheelPixels = 0;
+}
+
+function handleViewportKeydown(event: KeyboardEvent): void {
+  if (props.locked || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
+
+  event.preventDefault();
+  navigateByPixels(event.key === "ArrowUp" ? -viewportArrowStepPx : viewportArrowStepPx);
+}
+
+function navigateByPixels(deltaPixels: number): void {
+  const gesture = activeGesture;
+  const timeMs = navigateViewportTime({
+    chartEndMs: props.chartEndMs,
+    deltaPixels,
+    timeMs: gesture?.workingPlayheadMs ?? props.playheadMs,
+    visualSpeed: props.visualSpeed,
+  });
+  if (gesture?.kind === "select") {
+    gesture.workingPlayheadMs = timeMs;
+    gesture.moved = true;
+    emit("viewport-navigate", timeMs);
+    requestSelectFrame();
+    return;
+  }
+  if (gesture) gesture.workingPlayheadMs = timeMs;
+  emit("viewport-navigate", timeMs);
 }
 
 function emitScrubSeek(gesture: ViewportGesture): void {
@@ -360,13 +433,16 @@ function clamp(value: number, minimum: number, maximum: number): number {
       class="falling-note-viewport"
       :class="{ 'is-locked': locked }"
       :viewBox="viewBox"
-      role="img"
+      role="application"
       :aria-label="svgAriaLabel"
+      tabindex="0"
+      @keydown="handleViewportKeydown"
       @pointerdown="beginViewportGesture"
       @pointermove="moveViewportGesture"
       @pointerup="endViewportGesture"
       @pointercancel="cancelViewportGesture"
       @lostpointercapture="cancelViewportGesture"
+      @wheel="handleWheel"
     >
       <title>Interactive falling-note evidence</title>
       <defs>
@@ -479,7 +555,7 @@ function clamp(value: number, minimum: number, maximum: number): number {
       <span><i class="legend-mark legend-mark--selected"></i>Selected</span>
       <span><i class="legend-mark legend-mark--saved"></i>Saved</span>
       <span>{{ selectedCount }} / {{ candidateCount }} notes selected</span>
-      <span>Drag select · Shift scrub · Alt free</span>
+      <span>Drag select · Shift scrub · Wheel / ↑↓ navigate · Alt free</span>
     </div>
   </div>
 </template>

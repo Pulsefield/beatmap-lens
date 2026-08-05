@@ -74,7 +74,6 @@ import {
   type GestureFinalization,
   type GestureTransaction,
   previewGestureTransaction,
-  rollbackGestureTransaction,
   updateGestureTransaction,
 } from "./annotation/gesture-transaction";
 import {
@@ -226,6 +225,8 @@ const saveState = ref<SaveState>("idle");
 const saveMessage = ref("Local draft only");
 const draftStart = ref("0");
 const draftEnd = ref("1000");
+const committedRange = ref<TimeRangeV1>();
+const previewRange = ref<TimeRangeV1>();
 const rangeError = ref("");
 const selectedNoteIds = ref<ReadonlySet<string>>(new Set());
 const manualExclusions = ref<ReadonlySet<string>>(new Set());
@@ -294,6 +295,7 @@ let timelineDrag: TimelineDragState | undefined;
 let viewportDrag: ViewportDragState | undefined;
 let playbackAnimationFrame: number | undefined;
 let pendingTextUndo: EditorUndoState | undefined;
+let transientViewportTimeMs: number | undefined;
 let preferenceWrite = Promise.resolve();
 const rafMetrics = new RafMetrics();
 
@@ -301,7 +303,8 @@ const activeTask = computed(() =>
   queue.value.find((task) => task.id === activeTaskId.value),
 );
 const progress = computed(() => queueProgress(queue.value));
-const parsedRange = computed(() => readDraftRange(false));
+const parsedRange = computed(() => committedRange.value);
+const displayedRange = computed(() => previewRange.value ?? committedRange.value);
 const candidateNotes = computed(() => {
   if (!session.value || !parsedRange.value) return [];
   return rangeCandidates(session.value.chart, parsedRange.value);
@@ -419,8 +422,8 @@ const timelineViewport = computed(() => {
   return viewportFrame.value?.viewportRange;
 });
 const selectionBand = computed(() =>
-  parsedRange.value && viewportFrame.value
-    ? rangeSceneGeometry(parsedRange.value, viewportFrame.value)
+  displayedRange.value && viewportFrame.value
+    ? rangeSceneGeometry(displayedRange.value, viewportFrame.value)
     : undefined,
 );
 const annotationBands = computed(() =>
@@ -732,6 +735,8 @@ function restoreEditor(next: BeatmapSession): void {
   rangeError.value = "";
 
   const range = draft?.range ?? initialRange(next);
+  committedRange.value = range;
+  previewRange.value = undefined;
   draftStart.value = draft?.rangeEditor?.start ?? formatMs(range.startMs);
   draftEnd.value = draft?.rangeEditor?.end ?? formatMs(range.endMs);
   if (!draft) selectAllCandidates(range);
@@ -779,7 +784,7 @@ async function initializeInteractiveSession(): Promise<void> {
 
     playbackState.value = state;
     playheadMs.value = state.currentTimeMs;
-    updateViewportFrame(state.currentTimeMs);
+    if (transientViewportTimeMs === undefined) updateViewportFrame(state.currentTimeMs);
     syncPlaybackInstrumentation(state.playing);
   });
   unsubscribeAudio = controller.subscribeAudio((state) => {
@@ -827,6 +832,8 @@ function disposeInteractiveSession(): void {
   noteTimeIndex = undefined;
   viewportFrame.value = undefined;
   viewportInstrumentation.value = undefined;
+  transientViewportTimeMs = undefined;
+  previewRange.value = undefined;
   playbackState.value = { currentTimeMs: playheadMs.value, playing: false, looping: false };
   audioStatus.value = { kind: "idle" };
   timelineDrag = undefined;
@@ -853,7 +860,7 @@ function rebuildViewportController(): void {
     viewportHeight: height,
     pixelsPerSecond: visualSpeed.value,
   });
-  updateViewportFrame(playheadMs.value);
+  updateViewportFrame(transientViewportTimeMs ?? playheadMs.value);
   restartPlaybackInstrumentation();
 }
 
@@ -956,8 +963,14 @@ async function runPlaybackDiscontinuity(
   }
 }
 
+async function rebindActiveLoop(range: TimeRangeV1): Promise<void> {
+  const controller = playbackClock;
+  if (!controller || !playbackState.value.looping) return;
+  await runPlaybackDiscontinuity(controller, () => controller.loopSelection(range));
+}
+
 function pauseForEdit(): void {
-  if (!playbackClock?.playing) return;
+  if (!playbackClock?.playing || playbackState.value.looping) return;
   resetPlaybackInstrumentation();
   playbackClock.pause();
 }
@@ -971,6 +984,15 @@ function seekPlayhead(timeMs: number): void {
     playheadMs.value = time;
     updateViewportFrame(time);
   }
+}
+
+function navigateMainViewport(timeMs: number): void {
+  if (!viewportDrag) {
+    seekPlayhead(timeMs);
+    return;
+  }
+  transientViewportTimeMs = timeMs;
+  updateViewportFrame(timeMs);
 }
 
 async function selectVisualSpeed(speed: number): Promise<void> {
@@ -1041,9 +1063,9 @@ function applyTimelineRange(
   updateDraft = true,
 ): void {
   if (editorLocked.value) return;
-  pauseForEdit();
   if (captureUndo) recordEditorUndo();
   applyTimelineRangeState(range);
+  void rebindActiveLoop(range);
   if (updateDraft) markDraft();
 }
 
@@ -1060,6 +1082,7 @@ function applyTimelineRangeState(range: TimeRangeV1): void {
     : createNoteSelection(current.chart.notes, range, manualExclusions.value);
   draftStart.value = formatMs(selection.range.startMs);
   draftEnd.value = formatMs(selection.range.endMs);
+  committedRange.value = selection.range;
   selectedNoteIds.value = new Set(selection.selectedNotes.map((note) => note.id));
   manualExclusions.value = selection.manualExclusions;
   rangeNotePage.value = 0;
@@ -1081,7 +1104,6 @@ function beginTimelineRangeGesture(intent: TimelineRangeStartIntent): void {
   const range = parsedRange.value ?? undefined;
   if (intent.kind !== "create-range" && !range) return;
 
-  pauseForEdit();
   timelineDrag = {
     transaction: createGestureTransaction({
       anchorMs: intent.anchorMs,
@@ -1130,7 +1152,6 @@ function beginViewportRangeGesture(intent: ViewportRangeStartIntent): void {
   ) {
     return;
   }
-  pauseForEdit();
   viewportDrag = {
     transaction: createGestureTransaction({
       anchorMs: intent.anchorMs,
@@ -1142,6 +1163,7 @@ function beginViewportRangeGesture(intent: ViewportRangeStartIntent): void {
     freePlacement: intent.freePlacement,
     moved: false,
   };
+  transientViewportTimeMs = playheadMs.value;
   gestureActive.value = true;
 }
 
@@ -1309,74 +1331,39 @@ function applyGesturePreview(
   const preview = previewGestureTransaction(transaction, range);
   if (preview.outcome === "noop") return;
   if (preview.outcome === "restore") {
-    restoreGestureSnapshot(transaction);
+    previewRange.value = undefined;
     return;
   }
-  if (preview.firstValid && transaction.before.autosavePending && draftTimer !== undefined) {
-    window.clearTimeout(draftTimer);
-    draftTimer = undefined;
-  }
-  applyTimelineRangeState(preview.value);
-}
-
-function restoreGestureSnapshot(transaction: GestureTransaction<EditorUndoState>): void {
-  applyEditorState(transaction.before.editorState);
-  editorUndoStack.value = editorUndoStack.value.slice(0, transaction.before.undoStackLength);
-  rangeError.value = transaction.before.rangeError;
-  rangeNotePage.value = transaction.before.rangeNotePage;
+  previewRange.value = preview.value;
 }
 
 async function applyGestureFinalization<TKind extends string>(
   finalization: GestureFinalization<EditorUndoState, TKind, TimeRangeV1>,
 ): Promise<void> {
+  clearGesturePreview();
   if (finalization.outcome === "rollback") {
-    restoreGestureSnapshot(finalization.transaction);
-    if (
-      finalization.transaction.hasValidPreview &&
-      finalization.transaction.before.autosavePending &&
-      hasUncommittedDraft.value
-    ) {
-      await persistDraftNow(true);
-    }
     return;
   }
 
-  restoreGestureSnapshot(finalization.transaction);
   recordEditorUndo(finalization.transaction.before.editorState);
   applyTimelineRangeState(finalization.value);
   transitionDraft(false);
+  await rebindActiveLoop(finalization.value);
   await persistDraftNow(true);
 }
 
 function rollbackActiveGesturesForDispose(): void {
-  const transactions = [
-    timelineDrag?.transaction,
-    viewportDrag?.transaction,
-  ].flatMap((transaction) => (transaction ? [transaction] : []));
   timelineDrag = undefined;
   viewportDrag = undefined;
   gestureActive.value = false;
-  for (const transaction of transactions) {
-    const rollback = rollbackGestureTransaction(transaction);
-    restoreGestureSnapshot(rollback.transaction);
-    restoreGestureAutosave(rollback.transaction);
-  }
+  clearGesturePreview();
 }
 
-function restoreGestureAutosave(transaction: GestureTransaction<EditorUndoState>): void {
-  if (
-    !transaction.hasValidPreview ||
-    !transaction.before.autosavePending ||
-    !hasUncommittedDraft.value ||
-    draftTimer !== undefined
-  ) {
-    return;
-  }
-  workspaceLifecycle.draftLifecycle = "pending";
-  draftTimer = window.setTimeout(() => {
-    draftTimer = undefined;
-    void persistDraftNow(true).catch(() => {});
-  }, 160);
+function clearGesturePreview(): void {
+  previewRange.value = undefined;
+  if (transientViewportTimeMs === undefined) return;
+  transientViewportTimeMs = undefined;
+  updateViewportFrame(playheadMs.value);
 }
 
 async function handleWorkspaceKeydown(event: KeyboardEvent): Promise<void> {
@@ -1486,6 +1473,7 @@ function captureEditorState(): EditorUndoState {
 function applyEditorState(state: EditorUndoState): void {
   draftStart.value = state.draftStart;
   draftEnd.value = state.draftEnd;
+  committedRange.value = readDraftRange(false) ?? committedRange.value;
   selectedNoteIds.value = new Set(state.selectedNoteIds);
   manualExclusions.value = new Set(state.manualExclusions);
   draftLabels.value = state.labels;
@@ -1499,9 +1487,13 @@ function undoEditor(): void {
   const state = editorUndoStack.value.at(-1);
   if (!state) return;
   pauseForEdit();
+  const previousRange = committedRange.value;
   editorUndoStack.value = editorUndoStack.value.slice(0, -1);
   applyEditorState(state);
   rangeError.value = "";
+  if (committedRange.value && !sameRange(committedRange.value, previousRange)) {
+    void rebindActiveLoop(committedRange.value);
+  }
   markDraft();
 }
 
@@ -1519,9 +1511,31 @@ function finishTextEdit(): void {
   pendingTextUndo = undefined;
 }
 
-function finishRangeEdit(): void {
-  finishTextEdit();
-  applyManualRange(false);
+function beginRangeEdit(): void {
+  pendingTextUndo ??= captureEditorState();
+}
+
+async function finishRangeEdit(): Promise<void> {
+  const before = pendingTextUndo;
+  if (!before || editorLocked.value) return;
+  pendingTextUndo = undefined;
+
+  const range = readDraftRange(true);
+  if (!range) {
+    restoreCommittedRangeInputs();
+    return;
+  }
+  if (sameRange(range, committedRange.value)) {
+    draftStart.value = formatMs(range.startMs);
+    draftEnd.value = formatMs(range.endMs);
+    return;
+  }
+
+  recordEditorUndo(before);
+  applyTimelineRangeState(range);
+  transitionDraft(false);
+  await rebindActiveLoop(range);
+  await persistDraftNow(true);
 }
 
 function readUndoState(value: readonly unknown[] | undefined): readonly EditorUndoState[] {
@@ -1556,25 +1570,9 @@ function isNativeActivationTarget(target: EventTarget | null): boolean {
   );
 }
 
-function applyManualRange(captureUndo = true): void {
-  if (editorLocked.value) return;
-  const range = readDraftRange(true);
-  if (!range) return;
-  pauseForEdit();
-  if (captureUndo) recordEditorUndo();
-  const selection = createNoteSelection(
-    session.value?.chart.notes ?? [],
-    range,
-    manualExclusions.value,
-  );
-  manualExclusions.value = selection.manualExclusions;
-  selectedNoteIds.value = new Set(selection.selectedNotes.map((note) => note.id));
-  markDraft();
-}
-
 function toggleNote(note: ManiaNote): void {
   if (!session.value || editorLocked.value) return;
-  const range = readDraftRange(true);
+  const range = committedRange.value;
   if (!range) return;
   pauseForEdit();
   recordEditorUndo();
@@ -1585,8 +1583,10 @@ function toggleNote(note: ManiaNote): void {
   );
   draftStart.value = formatMs(selection.range.startMs);
   draftEnd.value = formatMs(selection.range.endMs);
+  committedRange.value = selection.range;
   selectedNoteIds.value = new Set(selection.selectedNotes.map((candidate) => candidate.id));
   manualExclusions.value = selection.manualExclusions;
+  if (!sameRange(selection.range, range)) void rebindActiveLoop(selection.range);
   markDraft();
 }
 
@@ -1760,7 +1760,7 @@ async function commitAnnotation(): Promise<void> {
     await finalizeActiveGestures();
     const current = session.value;
     const currentDirectory = directory.value;
-    const range = readDraftRange(true);
+    const range = committedRange.value;
     if (!current || !currentDirectory || !range) return;
     if (selectedNoteIds.value.size === 0) {
       return setRangeError("Select at least one intersecting note.");
@@ -1824,6 +1824,7 @@ function editAnnotation(annotation: GoldAnnotationV1): void {
   editingAnnotationId.value = annotation.id;
   draftStart.value = formatMs(annotation.range.startMs);
   draftEnd.value = formatMs(annotation.range.endMs);
+  committedRange.value = annotation.range;
   const selected = new Set(noteIdsForRefs(session.value, annotation.noteRefs));
   selectedNoteIds.value = selected;
   const exclusions = new Set(
@@ -2023,7 +2024,7 @@ async function addReviewNote(): Promise<void> {
     await finalizeActiveGestures();
     const active = session.value;
     if (!active) return;
-    const range = reviewNoteIncludeSelection.value ? readDraftRange(false) : undefined;
+    const range = reviewNoteIncludeSelection.value ? committedRange.value : undefined;
     if (reviewNoteIncludeSelection.value && !range) {
       qualityMessage.value = "Fix the selection range before attaching it to a review note.";
       return;
@@ -2479,7 +2480,7 @@ function buildDraft(current: BeatmapSession, datasetId: string): AnnotationDraft
       return ref ? [ref] : [];
     }),
     playheadMs: playheadMs.value,
-    range: readDraftRange(false),
+    range: committedRange.value ?? null,
     rangeEditor: { start: draftStart.value, end: draftEnd.value },
     reviewNoteIncludeSelection: reviewNoteIncludeSelection.value,
     reviewNoteText: reviewNoteText.value,
@@ -2495,6 +2496,7 @@ function clearEditor(startMs: number): void {
   editingAnnotationId.value = undefined;
   draftStart.value = formatMs(range.startMs);
   draftEnd.value = formatMs(range.endMs);
+  committedRange.value = range;
   draftLabels.value = [];
   draftExemplarRoles.value = [];
   judgmentNote.value = "";
@@ -2528,6 +2530,17 @@ function readDraftRange(reportError: boolean): TimeRangeV1 | null {
           : "";
   if (reportError) rangeError.value = message;
   return message ? null : { startMs: startMs as number, endMs: endMs as number };
+}
+
+function restoreCommittedRangeInputs(): void {
+  const range = committedRange.value;
+  if (!range) return;
+  draftStart.value = formatMs(range.startMs);
+  draftEnd.value = formatMs(range.endMs);
+}
+
+function sameRange(left: TimeRangeV1, right: TimeRangeV1 | undefined): boolean {
+  return left.startMs === right?.startMs && left.endMs === right.endMs;
 }
 
 function filterTags(status: FoundationTagV1["status"]): readonly FoundationTagV1[] {
@@ -3004,6 +3017,7 @@ function errorMessage(error: unknown): string {
               @range-start="beginViewportRangeGesture"
               @resize="resizeViewport"
               @seek="seekPlayhead"
+              @viewport-navigate="navigateMainViewport"
             />
           </div>
           <div v-else class="stage-empty">
@@ -3020,7 +3034,7 @@ function errorMessage(error: unknown): string {
           :playhead-ms="playheadMs"
           :saved-annotations="annotationList"
           :view-range="timelineViewRange"
-          v-bind="parsedRange ? { selection: parsedRange } : {}"
+          v-bind="displayedRange ? { selection: displayedRange } : {}"
           @annotation-seek="seekAnnotation"
           @gesture-active="setChildGestureActive"
           @range-cancel="cancelRangeGesture"
@@ -3191,8 +3205,8 @@ function errorMessage(error: unknown): string {
                   <input
                     v-model="draftStart"
                     inputmode="decimal"
-                    @focus="beginTextEdit"
-                    @input="markDraft()"
+                    @focus="beginRangeEdit"
+                    @keydown.enter.prevent="finishRangeEdit"
                     @blur="finishRangeEdit"
                   />
                 </label>
@@ -3201,8 +3215,8 @@ function errorMessage(error: unknown): string {
                   <input
                     v-model="draftEnd"
                     inputmode="decimal"
-                    @focus="beginTextEdit"
-                    @input="markDraft()"
+                    @focus="beginRangeEdit"
+                    @keydown.enter.prevent="finishRangeEdit"
                     @blur="finishRangeEdit"
                   />
                 </label>
