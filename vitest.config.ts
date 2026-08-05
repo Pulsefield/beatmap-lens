@@ -1,6 +1,14 @@
+import { fileURLToPath, URL } from "node:url";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      "beatmap-lens": fileURLToPath(
+        new URL("./packages/beatmap-lens/src/index.ts", import.meta.url),
+      ),
+    },
+  },
   test: {
     benchmark: {
       include: ["benchmarks/**/*.bench.ts"],

@@ -13,4 +13,6 @@ coverage/
 .env.*
 !.env.example
 
+/.local/**
+
 AGENTS.override.md
