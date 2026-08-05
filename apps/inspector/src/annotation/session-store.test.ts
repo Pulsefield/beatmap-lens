@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { reactive } from "vue";
 import { type AnnotationDraft, hasMeaningfulDraft, MemorySessionStore } from "./session-store";
 
 describe("MemorySessionStore", () => {
@@ -75,6 +76,54 @@ describe("MemorySessionStore", () => {
     expect(await store.listDrafts("dataset-a")).toEqual([{ ...legacy, exemplarRoles: [] }]);
     expect(hasMeaningfulDraft(legacy as AnnotationDraft)).toBe(true);
     expect(hasMeaningfulDraft(legacyDraftFor("dataset-a", "b") as AnnotationDraft)).toBe(false);
+  });
+
+  it("persists drafts assembled from Vue reactive state", async () => {
+    const store = new MemorySessionStore();
+    const state = reactive({
+      base: { revision: 2, sha256: "b".repeat(64) },
+      exemplarRoles: [{ kind: "strong" as const, tagId: "stream" }],
+      labels: [{ salience: 2 as const, tagId: "stream" }],
+      undoState: [
+        {
+          draftEnd: "2000",
+          draftStart: "1000",
+          editingAnnotationId: "annotation-a",
+          exemplarRoles: [{ kind: "strong" as const, tagId: "stream" }],
+          judgmentNote: "before edit",
+          labels: [{ salience: 2 as const, tagId: "stream" }],
+          manualExclusions: ["note-b"],
+          selectedNoteIds: ["note-a"],
+        },
+      ],
+    });
+    const draft = draftFor("dataset-a", "a", {
+      base: state.base,
+      exemplarRoles: state.exemplarRoles,
+      labels: state.labels,
+      undoState: state.undoState,
+    });
+
+    await store.putDraft(draft);
+
+    expect(await store.getDraft("dataset-a", "a".repeat(64))).toEqual({
+      ...draft,
+      base: { revision: 2, sha256: "b".repeat(64) },
+      exemplarRoles: [{ kind: "strong", tagId: "stream" }],
+      labels: [{ salience: 2, tagId: "stream" }],
+      undoState: [
+        {
+          draftEnd: "2000",
+          draftStart: "1000",
+          editingAnnotationId: "annotation-a",
+          exemplarRoles: [{ kind: "strong", tagId: "stream" }],
+          judgmentNote: "before edit",
+          labels: [{ salience: 2, tagId: "stream" }],
+          manualExclusions: ["note-b"],
+          selectedNoteIds: ["note-a"],
+        },
+      ],
+    });
   });
 
   it("distinguishes meaningful editor drafts from recoverable playback state", () => {

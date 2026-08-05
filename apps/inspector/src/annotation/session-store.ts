@@ -1,3 +1,4 @@
+import { toRaw } from "vue";
 import type { GoldExemplarRoleV1, StableNoteRefV1, TimeRangeV1 } from "./contracts";
 
 export interface DraftLabel {
@@ -222,7 +223,17 @@ function compareDrafts(left: StoredAnnotationDraft, right: StoredAnnotationDraft
 }
 
 function normalizeDraft(draft: StoredAnnotationDraft): AnnotationDraft {
-  return { ...draft, exemplarRoles: draft.exemplarRoles ?? [] };
+  const snapshot = snapshotReactiveData(draft);
+  return { ...snapshot, exemplarRoles: snapshot.exemplarRoles ?? [] };
+}
+
+function snapshotReactiveData<T>(value: T): T {
+  const raw = toRaw(value);
+  if (Array.isArray(raw)) return raw.map(snapshotReactiveData) as T;
+  if (typeof raw !== "object" || raw === null) return raw;
+  return Object.fromEntries(
+    Object.entries(raw).map(([key, entry]) => [key, snapshotReactiveData(entry)]),
+  ) as T;
 }
 
 function normalizeOptionalDraft(
