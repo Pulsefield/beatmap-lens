@@ -36,6 +36,9 @@ for await (const loadedBeatmap of iterateOsz(oszBytes, { maxConcurrency: 1 })) {
 }
 ```
 
+Render time runs from bottom to top by default: `startTime` is at the lower edge and `endTime` is at
+the upper edge. Pass `timeDirection: "top-to-bottom"` to preserve the previous orientation.
+
 The package is ESM-only, DOM-free, and performs no implicit file or network reads. It detects the
 key count of valid `osu!mania` files from `[Difficulty] CircleSize` and supports 4K-10K normal
 notes, long notes, bounded render scenes, SVG serialization, and in-memory `.osz` archives.

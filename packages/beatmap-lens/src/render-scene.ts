@@ -6,6 +6,7 @@ import type {
   RenderOptions,
   RenderPadding,
   RenderScene,
+  RenderTimeDirection,
 } from "./types.js";
 
 const defaultPadding: RenderPadding = {
@@ -30,6 +31,7 @@ export function createRenderScene(chart: ManiaChart, options: RenderOptions = {}
   const startTime = options.startTime ?? 0;
   const naturalEndTime = Math.max(startTime + 1000, ...chart.notes.map((note) => note.endTime));
   const endTime = options.endTime ?? naturalEndTime;
+  const timeDirection = options.timeDirection ?? "bottom-to-top";
   validateRenderGeometry({
     endTime,
     keyCount: chart.keyCount,
@@ -70,6 +72,7 @@ export function createRenderScene(chart: ManiaChart, options: RenderOptions = {}
       contentHeight,
       endTime,
       noteHeight,
+      timeDirection,
       startTime,
       pixelsPerMillisecond,
       paddingTop: padding.top,
@@ -79,6 +82,7 @@ export function createRenderScene(chart: ManiaChart, options: RenderOptions = {}
   return {
     kind: "mania",
     keyCount: chart.keyCount,
+    timeDirection,
     width,
     height,
     viewBox: [0, 0, width, height],
@@ -102,6 +106,7 @@ function createNoteGlyph(
     contentHeight: number;
     endTime: number;
     noteHeight: number;
+    timeDirection: RenderTimeDirection;
     startTime: number;
     pixelsPerMillisecond: number;
     paddingTop: number;
@@ -116,22 +121,26 @@ function createNoteGlyph(
   const startY = timeToY(
     visibleStartTime,
     options.startTime,
+    options.endTime,
     options.pixelsPerMillisecond,
     options.paddingTop,
+    options.timeDirection,
   );
   const endY = timeToY(
     visibleEndTime,
     options.startTime,
+    options.endTime,
     options.pixelsPerMillisecond,
     options.paddingTop,
+    options.timeDirection,
   );
   const isLong = note.kind === "long";
   const effectiveNoteHeight = Math.min(options.noteHeight, options.contentHeight);
   const y = isLong
-    ? clamp(startY, laneTop, laneBottom)
+    ? clamp(Math.min(startY, endY), laneTop, laneBottom)
     : clamp(startY - effectiveNoteHeight / 2, laneTop, laneBottom - effectiveNoteHeight);
   const height = isLong
-    ? Math.min(Math.max(endY - startY, effectiveNoteHeight), Math.max(laneBottom - y, 0))
+    ? Math.min(Math.max(Math.abs(endY - startY), effectiveNoteHeight), Math.max(laneBottom - y, 0))
     : effectiveNoteHeight;
 
   return {
@@ -210,10 +219,13 @@ function validateRenderGeometry(options: {
 function timeToY(
   time: number,
   startTime: number,
+  endTime: number,
   pixelsPerMillisecond: number,
   paddingTop: number,
+  timeDirection: RenderTimeDirection,
 ): number {
-  return round3(paddingTop + (time - startTime) * pixelsPerMillisecond);
+  const offset = timeDirection === "bottom-to-top" ? endTime - time : time - startTime;
+  return round3(paddingTop + offset * pixelsPerMillisecond);
 }
 
 function round3(value: number): number {

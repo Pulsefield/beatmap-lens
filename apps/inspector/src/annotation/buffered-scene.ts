@@ -258,8 +258,8 @@ export class BufferedSceneController {
     const lineRatio = this.options.judgmentLineRatio ?? judgmentLineRatio;
     const judgmentY = this.options.viewportHeight * lineRatio;
     const playheadSceneY =
-      buffer.scene.padding.top + (playheadMs - buffer.range.startMs) * pixelsPerMillisecond;
-    return `matrix(1 0 0 -1 0 ${round3(judgmentY + playheadSceneY)})`;
+      buffer.scene.padding.top + (buffer.range.endMs - playheadMs) * pixelsPerMillisecond;
+    return `translate(0 ${round3(judgmentY - playheadSceneY)})`;
   }
 }
 

@@ -138,9 +138,12 @@ export interface RenderPadding {
   readonly left: number;
 }
 
+export type RenderTimeDirection = "bottom-to-top" | "top-to-bottom";
+
 export interface RenderOptions {
   readonly startTime?: number;
   readonly endTime?: number;
+  readonly timeDirection?: RenderTimeDirection;
   readonly width?: number;
   readonly pixelsPerSecond?: number;
   readonly laneWidth?: number;
@@ -152,6 +155,7 @@ export interface RenderOptions {
 export interface RenderScene {
   readonly kind: "mania";
   readonly keyCount: number;
+  readonly timeDirection: RenderTimeDirection;
   readonly width: number;
   readonly height: number;
   readonly viewBox: readonly [number, number, number, number];

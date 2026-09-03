@@ -2639,7 +2639,7 @@ function rangeSceneGeometry(
     x: frame.scene.padding.left,
     y:
       frame.scene.padding.top +
-      (startMs - frame.bufferRange.startMs) * pixelsPerMillisecond,
+      (frame.bufferRange.endMs - endMs) * pixelsPerMillisecond,
     width:
       frame.scene.width - frame.scene.padding.left - frame.scene.padding.right,
     height: Math.max(1, (endMs - startMs) * pixelsPerMillisecond),

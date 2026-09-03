@@ -93,6 +93,9 @@ for await (const loadedBeatmap of iterateOsz(oszBytes, { maxConcurrency: 1 })) {
 }
 ```
 
+Render time runs from bottom to top by default: `startTime` is at the lower edge and `endTime` is at
+the upper edge. Pass `timeDirection: "top-to-bottom"` to preserve the previous orientation.
+
 The stages expose lower-level data when a caller needs it. The planned convenience inspection API
 will compose them; it will not hide I/O or browser state inside the package. `createBeatmap` accepts
 an optional `BeatmapAudio`, and `connectBeatmapAudio` returns a new beatmap that points to the exact

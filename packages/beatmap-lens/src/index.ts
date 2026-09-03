@@ -29,4 +29,5 @@ export type {
   RenderPadding,
   RenderScene,
   RenderSvgOptions,
+  RenderTimeDirection,
 } from "./types.js";

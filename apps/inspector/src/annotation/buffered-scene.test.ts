@@ -19,6 +19,7 @@ describe("BufferedSceneController", () => {
 
     expect(frame.bufferRange.endMs - frame.bufferRange.startMs).toBe(3_000);
     expect(frame.scene.keyCount).toBe(7);
+    expect(frame.scene.timeDirection).toBe("bottom-to-top");
     expect(frame.keyedNotes).toHaveLength(counters.lastBufferedNoteCount);
     expect(counters.lastBufferedNoteCount).toBeLessThanOrEqual(31);
     expect(counters.sceneBuildCount).toBe(1);
@@ -68,10 +69,11 @@ describe("BufferedSceneController", () => {
 
     const frame = controller.frame(5_000);
     const playheadNote = frame.scene.notes.find(({ startTime }) => startTime === 5_000);
-    const translationY = Number(frame.noteGroupTransform.match(/ ([\d.]+)\)$/)?.[1]);
+    const translationY = Number(frame.noteGroupTransform.match(/translate\(0 (-?[\d.]+)\)/)?.[1]);
     const transformedCenter =
-      translationY - ((playheadNote?.y ?? 0) + (playheadNote?.height ?? 0) / 2);
+      translationY + (playheadNote?.y ?? 0) + (playheadNote?.height ?? 0) / 2;
 
+    expect(frame.noteGroupTransform).toMatch(/^translate\(0 /);
     expect(transformedCenter).toBe(196.8);
   });
 

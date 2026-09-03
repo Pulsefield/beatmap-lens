@@ -12,6 +12,7 @@ describe("render scene and SVG", () => {
 
     expect(scene.kind).toBe("mania");
     expect(scene.keyCount).toBe(4);
+    expect(scene.timeDirection).toBe("bottom-to-top");
     expect(scene.width).toBe(640);
     expect(scene.height).toBe(408);
     expect(scene.timeRange.pixelsPerSecond).toBe(240);
@@ -22,10 +23,10 @@ describe("render scene and SVG", () => {
       [3, 475, 149],
     ]);
     expect(scene.notes.map((note) => [note.id, note.x, note.y, note.width, note.height])).toEqual([
-      ["note-0001", 21, 140, 139, 8],
-      ["note-0002", 174, 260, 139, 8],
-      ["note-0003", 327, 260, 139, 8],
-      ["note-0004", 480, 376, 139, 8],
+      ["note-0001", 21, 260, 139, 8],
+      ["note-0002", 174, 140, 139, 8],
+      ["note-0003", 327, 140, 139, 8],
+      ["note-0004", 480, 24, 139, 8],
     ]);
   });
 
@@ -52,8 +53,19 @@ describe("render scene and SVG", () => {
     expect(svg).toContain(
       'id="note-0001" data-kind="normal" data-source-kind="normal" data-column="0"',
     );
-    expect(svg).toContain('data-source-line="21" x="480" y="376" width="139" height="8"');
+    expect(svg).toContain('data-source-line="21" x="480" y="24" width="139" height="8"');
     expect(svg.endsWith("</svg>\n")).toBe(true);
+  });
+
+  it("can render time from top to bottom explicitly", () => {
+    const chart = toManiaChart(parseOsu(foundation4k));
+    const scene = createRenderScene(chart, { timeDirection: "top-to-bottom" });
+
+    expect(scene.timeDirection).toBe("top-to-bottom");
+    expect(scene.notes.map(({ y }) => y)).toEqual([140, 260, 260, 376]);
+    expect(renderSvg(chart, { timeDirection: "top-to-bottom" })).toContain(
+      'data-source-line="21" x="480" y="376" width="139" height="8"',
+    );
   });
 
   it("supports benchmark-style render options", () => {
