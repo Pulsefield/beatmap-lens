@@ -45,11 +45,11 @@ export function createOverviewDensityPath(
   const counts = Array.from({ length: resolution }, () => 0);
   const durationMs = endMs - startMs;
   for (const note of chart.notes) {
-    if (note.startTime < startMs || note.startTime >= endMs) {
+    if (note.startMs < startMs || note.startMs >= endMs) {
       continue;
     }
     const bin = Math.min(
-      Math.floor(((note.startTime - startMs) / durationMs) * resolution),
+      Math.floor(((note.startMs - startMs) / durationMs) * resolution),
       resolution - 1,
     );
     counts[bin] = (counts[bin] ?? 0) + 1;

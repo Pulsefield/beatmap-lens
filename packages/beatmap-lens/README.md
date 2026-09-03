@@ -6,9 +6,9 @@ The package is not published, and its API can still change.
 
 ```ts
 import {
-  createBeatmap,
   createRenderScene,
   iterateOsz,
+  parseBeatmap,
   parseOsz,
   parseOsu,
   renderSvg,
@@ -16,28 +16,87 @@ import {
   toManiaChart,
 } from "beatmap-lens";
 
-const document = parseOsu(osuSource);
-const chart = toManiaChart(document);
-const beatmap = createBeatmap({ osuSource });
-const beatmapSet = await parseOsz(oszBytes);
-const options = {
-  startTime: 0,
-  endTime: 15_000,
-  width: 640,
-  pixelsPerSecond: 240,
+const beatmap = parseBeatmap(osuSource);
+const sceneOptions = {
+  range: beatmap.chart.range,
 };
+const svg = renderSvg(beatmap.chart, sceneOptions);
 
-const scene = createRenderScene(chart, options);
-const svg = renderSvg(chart, options);
+// Advanced path: use each stage independently.
+const parsedOsu = parseOsu(osuSource);
+const chart = toManiaChart(parsedOsu);
+const scene = createRenderScene(chart, { range: chart.range });
 const sameSvg = serializeSvg(scene);
+
+const beatmapSet = await parseOsz(oszBytes);
 
 for await (const loadedBeatmap of iterateOsz(oszBytes, { maxConcurrency: 1 })) {
   // Each beatmap is complete and already linked to its shared audio when present.
 }
 ```
 
-Render time runs from bottom to top by default: `startTime` is at the lower edge and `endTime` is at
-the upper edge. Pass `timeDirection: "top-to-bottom"` to preserve the previous orientation.
+`parseBeatmap` is the ordinary entry point: retain its `Beatmap`, then pass `beatmap.chart` to
+`renderSvg`. `parseOsu`/`toManiaChart` and `createRenderScene`/`serializeSvg` remain the advanced,
+composable boundaries.
+
+Every render describes one bounded, contiguous source-time interval. `range` is the only required
+`RenderSceneOptions` field and uses half-open `[startMs, endMs)` membership. Use `chart.range` for
+an intentional complete-chart render; there is no zero-option, implicitly unbounded render. Time
+runs from bottom to top by default, placing `startMs` at the lower edge and later time progressively
+higher. Set `timeDirection: "top-to-bottom"` for the opposite presentation.
+
+`pixelsPerSecond`, `playfield`, `timeDirection`, and `theme` are optional. The linear scale defaults
+to `240 px/s`, while the playfield defaults to the complete scene size `{ widthPx: 640 }`. A supplied
+playfield must choose exactly one sizing mode:
+
+```ts
+const sceneOptions = {
+  range: { startMs: 60_000, endMs: 75_000 },
+  playfield: { laneWidthPx: 72 }, // Or: { widthPx: 640 }, never both.
+  theme: {
+    metrics: {
+      paddingPx: { top: 32, bottom: 32 },
+      laneGapPx: 6,
+      noteHeightPx: 10,
+    },
+  },
+};
+
+const svg = renderSvg(beatmap.chart, sceneOptions, { title: "60s to 75s" });
+```
+
+`theme.metrics` is nested and partial: unspecified padding sides and metrics retain their defaults.
+SVG-only metadata such as `title` is a separate serializer option, accepted by the third argument
+of `renderSvg` or the second argument of `serializeSvg`.
+
+### Render defaults
+
+| Input | Required | Default |
+| --- | --- | --- |
+| `range` | Yes | None; use `chart.range` intentionally for the complete chart |
+| `pixelsPerSecond` | No | `240` |
+| `playfield` | No | `{ widthPx: 640 }` |
+| `timeDirection` | No | `"bottom-to-top"` |
+| `theme.metrics.paddingPx` | No | `{ top: 24, right: 16, bottom: 24, left: 16 }` |
+| `theme.metrics.laneGapPx` | No | `4` |
+| `theme.metrics.noteHeightPx` | No | `8` |
+| `theme.metrics.noteInsetPx` | No | `5` |
+| `theme.metrics.noteRadiusPx` | No | `2` |
+| serializer `title` | No | Metadata artist/title/version plus the key-count label; the key-count label alone when metadata is absent |
+
+Use the scene's canonical projection for every time/scene coordinate conversion:
+
+```ts
+import { projectTime, unprojectTime } from "beatmap-lens";
+
+const yPx = projectTime(scene.projection, chart.range.startMs);
+const sourceMs = unprojectTime(scene.projection, yPx);
+```
+
+`projectTime` and `unprojectTime` use scene-local Y coordinates. Their geometric domain is closed,
+so both projection endpoints are valid even though note membership is half-open. Non-finite or
+out-of-domain inputs throw `RangeError`. `RenderScene` retains resolved numeric precision; the SVG
+serializer preserves finite JavaScript numeric values when encoding text.
 
 The package is ESM-only, DOM-free, and performs no implicit file or network reads. It detects the
 key count of valid `osu!mania` files from `[Difficulty] CircleSize` and supports 4K-10K normal
@@ -74,3 +133,7 @@ layer; that narrower delivery priority does not reduce the package range.
 Semantic chart-quality findings and synchronized audio playback remain project direction, not
 current package features. See the [repository](https://github.com/Pulsefield/beatmap-lens) for the
 status and architecture.
+
+One `RenderScene` intentionally covers one range and one playfield. Maximum dimension solving,
+automatic readable-scale selection, horizontal multi-playfield layout, pagination, osu! scroll-speed
+adapters, and PNG/raster output are deferred layers rather than current renderer options.

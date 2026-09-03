@@ -8,15 +8,16 @@ describe("chartRenderRange", () => {
       keyCount: 4,
       metadata: {},
       notes: [
-        note({ endTime: 10_000, kind: "long", sourceKind: "hold", startTime: 0 }),
-        note({ endTime: 9_000, id: "later-normal", startTime: 9_000 }),
+        note({ endMs: 10_000, kind: "long", sourceKind: "hold", startMs: 0 }),
+        note({ endMs: 9_000, id: "later-normal", startMs: 9_000 }),
       ],
+      range: { startMs: 0, endMs: 10_001 },
       diagnostics: [],
     };
 
     expect(chartRenderRange(chart)).toEqual({
-      startTime: 0,
-      endTime: 10_500,
+      startMs: 0,
+      endMs: 10_500,
     });
   });
 });
@@ -27,8 +28,8 @@ function note(overrides: Partial<ManiaNote>): ManiaNote {
     kind: "normal",
     sourceKind: "normal",
     column: 0,
-    startTime: 0,
-    endTime: 0,
+    startMs: 0,
+    endMs: 0,
     sourceLine: 1,
     x: 64,
     hitSound: 0,

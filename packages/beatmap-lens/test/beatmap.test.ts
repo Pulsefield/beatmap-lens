@@ -1,13 +1,10 @@
 import { describe, expect, it } from "vitest";
 import foundation4k from "../../../fixtures/beatmaps/foundation-4k.osu?raw";
-import { type BeatmapAudio, connectBeatmapAudio, createBeatmap } from "../src/index";
+import { type BeatmapAudio, connectBeatmapAudio, parseBeatmap } from "../src/index";
 
 describe("Beatmap", () => {
   it("composes one .osu source into the runtime model without requiring audio", () => {
-    const beatmap = createBeatmap({
-      osuFilename: "foundation.osu",
-      osuSource: foundation4k,
-    });
+    const beatmap = parseBeatmap(foundation4k, { filename: "foundation.osu" });
 
     expect(beatmap.osuFilename).toBe("foundation.osu");
     expect(beatmap.audioFilename).toBe("foundation.mp3");
@@ -22,8 +19,8 @@ describe("Beatmap", () => {
       bytes: new Uint8Array([1, 2, 3]),
       mimeType: "audio/mpeg",
     };
-    const createdWithAudio = createBeatmap({ osuSource: foundation4k, audio });
-    const beatmap = createBeatmap({ osuSource: foundation4k });
+    const createdWithAudio = parseBeatmap(foundation4k, { audio });
+    const beatmap = parseBeatmap(foundation4k);
     const connected = connectBeatmapAudio(beatmap, audio);
 
     expect(createdWithAudio.audio).toBe(audio);

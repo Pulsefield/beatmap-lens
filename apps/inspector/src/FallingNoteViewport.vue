@@ -350,8 +350,17 @@ function navigateByPixels(deltaPixels: number): void {
 }
 
 function emitScrubSeek(gesture: ViewportGesture): void {
-  const deltaY = gesture.startClientY - gesture.lastClientY;
-  emitSeek(gesture.startPlayheadMs + (deltaY / props.visualSpeed) * 1_000);
+  const startSourceMs = sourceTimeFromClientY(
+    gesture.startClientY,
+    gesture.startPlayheadMs,
+    false,
+  );
+  const currentSourceMs = sourceTimeFromClientY(
+    gesture.lastClientY,
+    gesture.startPlayheadMs,
+    false,
+  );
+  emitSeek(gesture.startPlayheadMs + currentSourceMs - startSourceMs);
 }
 
 function emitSeek(timeMs: number): void {
@@ -366,13 +375,19 @@ function toggleNote(noteId: string): void {
   if (!props.locked) emit("note-toggle", noteId);
 }
 
-function sourceTimeFromClientY(clientY: number, playheadMs: number): number {
+function sourceTimeFromClientY(
+  clientY: number,
+  playheadMs: number,
+  clampToChart = true,
+): number {
+  const frame = props.frame;
+  if (!frame) return clamp(playheadMs, 0, props.chartEndMs);
   return viewportYToSourceTime({
-    chartEndMs: props.chartEndMs,
-    pixelsPerSecond: props.visualSpeed,
+    projection: frame.scene.projection,
     playheadMs,
     viewportHeight: props.size.height,
     viewportY: viewportYFromClientY(clientY),
+    ...(clampToChart ? { sourceRange: { startMs: 0, endMs: props.chartEndMs } } : {}),
   });
 }
 

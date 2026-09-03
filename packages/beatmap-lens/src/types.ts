@@ -51,7 +51,7 @@ export interface OsuHitObject {
   readonly kind: OsuHitObjectKind;
   readonly x: number;
   readonly y: number;
-  readonly time: number;
+  readonly timeMs: number;
   readonly type: number;
   readonly hitSound: number;
   readonly params: readonly string[];
@@ -84,11 +84,17 @@ export interface ManiaNote {
   readonly kind: ManiaNoteKind;
   readonly sourceKind: "normal" | "hold";
   readonly column: number;
-  readonly startTime: number;
-  readonly endTime: number;
+  readonly startMs: number;
+  readonly endMs: number;
   readonly sourceLine: number;
   readonly x: number;
   readonly hitSound: number;
+}
+
+export interface TimeRange {
+  /** Half-open source-time interval [startMs, endMs). */
+  readonly startMs: number;
+  readonly endMs: number;
 }
 
 export interface ManiaChart {
@@ -97,6 +103,7 @@ export interface ManiaChart {
   readonly mode?: number;
   readonly metadata: ManiaMetadata;
   readonly notes: readonly ManiaNote[];
+  readonly range: TimeRange;
   readonly diagnostics: readonly OsuDiagnostic[];
 }
 
@@ -106,9 +113,8 @@ export interface BeatmapAudio {
   readonly mimeType?: string;
 }
 
-export interface BeatmapInput {
-  readonly osuSource: string;
-  readonly osuFilename?: string;
+export interface ParseBeatmapOptions {
+  readonly filename?: string;
   readonly audio?: BeatmapAudio;
 }
 
@@ -140,32 +146,64 @@ export interface RenderPadding {
 
 export type RenderTimeDirection = "bottom-to-top" | "top-to-bottom";
 
-export interface RenderOptions {
-  readonly startTime?: number;
-  readonly endTime?: number;
-  readonly timeDirection?: RenderTimeDirection;
-  readonly width?: number;
+export interface LinearRenderTimeProjection {
+  readonly type: "linear";
+  readonly range: TimeRange;
+  readonly direction: RenderTimeDirection;
+  readonly pixelsPerSecond: number;
+  readonly contentTopPx: number;
+  readonly contentHeightPx: number;
+}
+
+export type RenderTimeProjection = LinearRenderTimeProjection;
+
+export type PlayfieldSize =
+  | {
+      readonly widthPx: number;
+      readonly laneWidthPx?: never;
+    }
+  | {
+      readonly laneWidthPx: number;
+      readonly widthPx?: never;
+    };
+
+export interface RenderMetrics {
+  readonly paddingPx: RenderPadding;
+  readonly laneGapPx: number;
+  readonly noteHeightPx: number;
+  readonly noteInsetPx: number;
+  readonly noteRadiusPx: number;
+}
+
+export interface RenderMetricOptions {
+  readonly paddingPx?: Partial<RenderPadding>;
+  readonly laneGapPx?: number;
+  readonly noteHeightPx?: number;
+  readonly noteInsetPx?: number;
+  readonly noteRadiusPx?: number;
+}
+
+export interface RenderThemeInput {
+  readonly metrics?: RenderMetricOptions;
+}
+
+export interface RenderSceneOptions {
+  readonly range: TimeRange;
   readonly pixelsPerSecond?: number;
-  readonly laneWidth?: number;
-  readonly laneGap?: number;
-  readonly noteHeight?: number;
-  readonly padding?: Partial<RenderPadding>;
+  readonly playfield?: PlayfieldSize;
+  readonly timeDirection?: RenderTimeDirection;
+  readonly theme?: RenderThemeInput;
 }
 
 export interface RenderScene {
   readonly kind: "mania";
   readonly keyCount: number;
-  readonly timeDirection: RenderTimeDirection;
-  readonly width: number;
-  readonly height: number;
-  readonly viewBox: readonly [number, number, number, number];
-  readonly timeRange: {
-    readonly startTime: number;
-    readonly endTime: number;
-    readonly pixelsPerMillisecond: number;
-    readonly pixelsPerSecond: number;
+  readonly size: {
+    readonly widthPx: number;
+    readonly heightPx: number;
   };
-  readonly padding: RenderPadding;
+  readonly projection: RenderTimeProjection;
+  readonly metrics: RenderMetrics;
   readonly metadata: ManiaMetadata;
   readonly lanes: readonly RenderLane[];
   readonly notes: readonly RenderNoteGlyph[];
@@ -187,8 +225,10 @@ export interface RenderNoteGlyph {
   readonly kind: ManiaNoteKind;
   readonly sourceKind: "normal" | "hold";
   readonly column: number;
-  readonly startTime: number;
-  readonly endTime: number;
+  readonly startMs: number;
+  readonly endMs: number;
+  readonly continuesBefore: boolean;
+  readonly continuesAfter: boolean;
   readonly x: number;
   readonly y: number;
   readonly width: number;
@@ -199,6 +239,6 @@ export interface RenderNoteGlyph {
   readonly sourceLine: number;
 }
 
-export interface RenderSvgOptions {
+export interface SerializeSvgOptions {
   readonly title?: string;
 }

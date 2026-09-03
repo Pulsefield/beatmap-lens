@@ -100,10 +100,17 @@ describe("gesture transaction", () => {
   it("rolls back the same collapsed final state after viewport projection", () => {
     const transaction = createTransaction();
     const viewport = {
-      chartEndMs: 4_000,
       judgmentLineRatio: 0.8,
-      pixelsPerSecond: 250,
       playheadMs: 1_000,
+      projection: {
+        type: "linear" as const,
+        range: { startMs: -1_000, endMs: 5_000 },
+        direction: "bottom-to-top" as const,
+        pixelsPerSecond: 250,
+        contentTopPx: 24,
+        contentHeightPx: 1_500,
+      },
+      sourceRange: { startMs: 0, endMs: 4_000 },
       viewportHeight: 500,
     };
     const anchorMs = viewportYToSourceTime({ ...viewport, viewportY: 400 });
@@ -195,16 +202,16 @@ const notes = [maniaNote("snap-1000", 1_000), maniaNote("snap-2000", 2_000)];
 const noteIndex = new ManiaNoteTimeIndex(notes);
 const rangeOptions = { chartEndMs: 4_000 };
 
-function maniaNote(id: string, startTime: number): ManiaNote {
+function maniaNote(id: string, startMs: number): ManiaNote {
   return {
     column: 0,
-    endTime: startTime,
+    endMs: startMs,
     hitSound: 0,
     id,
     kind: "normal",
     sourceKind: "normal",
     sourceLine: 1,
-    startTime,
+    startMs,
     x: 64,
   };
 }

@@ -10,7 +10,7 @@ import {
 
 describe("half-open annotation ranges", () => {
   it("places a normal note in only the section containing its onset", () => {
-    const normal = note({ startTime: 100, endTime: 100 });
+    const normal = note({ startMs: 100, endMs: 100 });
 
     expect(noteIntersectsRange(normal, { startMs: 0, endMs: 100 })).toBe(false);
     expect(noteIntersectsRange(normal, { startMs: 100, endMs: 200 })).toBe(true);
@@ -19,7 +19,7 @@ describe("half-open annotation ranges", () => {
   });
 
   it("includes a long note in every section with interval overlap", () => {
-    const long = note({ kind: "long", sourceKind: "hold", startTime: 50, endTime: 150 });
+    const long = note({ kind: "long", sourceKind: "hold", startMs: 50, endMs: 150 });
 
     expect(noteIntersectsRange(long, { startMs: 0, endMs: 50 })).toBe(false);
     expect(noteIntersectsRange(long, { startMs: 50, endMs: 100 })).toBe(true);
@@ -36,13 +36,13 @@ describe("half-open annotation ranges", () => {
   });
 
   it("expands a range when an explicitly selected note is outside it", () => {
-    const normal = note({ startTime: 100, endTime: 100 });
+    const normal = note({ startMs: 100, endMs: 100 });
     const long = note({
       id: "long",
       kind: "long",
       sourceKind: "hold",
-      startTime: 200,
-      endTime: 350,
+      startMs: 200,
+      endMs: 350,
     });
 
     expect(expandRangeToIncludeNote({ startMs: 0, endMs: 100 }, normal)).toEqual({
@@ -66,8 +66,8 @@ function note(overrides: Partial<ManiaNote>): ManiaNote {
     kind: "normal",
     sourceKind: "normal",
     column: 0,
-    startTime: 0,
-    endTime: 0,
+    startMs: 0,
+    endMs: 0,
     sourceLine: 1,
     x: 64,
     hitSound: 0,

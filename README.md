@@ -62,9 +62,9 @@ Experiment tracking, model execution, storage, and dashboards belong outside thi
 
 ```ts
 import {
-  createBeatmap,
   createRenderScene,
   iterateOsz,
+  parseBeatmap,
   parseOsz,
   parseOsu,
   renderSvg,
@@ -72,32 +72,72 @@ import {
   toManiaChart,
 } from "beatmap-lens";
 
-const document = parseOsu(osuSource);
-const chart = toManiaChart(document);
-const beatmap = createBeatmap({ osuSource });
-const beatmapSet = await parseOsz(oszBytes);
-
-const viewport = {
-  startTime: 60_000,
-  endTime: 75_000,
-  width: 640,
-  pixelsPerSecond: 240,
+const beatmap = parseBeatmap(osuSource);
+const sceneOptions = {
+  range: beatmap.chart.range,
 };
+const svg = renderSvg(beatmap.chart, sceneOptions);
 
-const scene = createRenderScene(chart, viewport);
-const svg = renderSvg(chart, viewport);
+// Advanced path: keep the parser, normalized chart, scene, and serializer boundaries explicit.
+const parsedOsu = parseOsu(osuSource);
+const chart = toManiaChart(parsedOsu);
+const scene = createRenderScene(chart, { range: chart.range });
 const sameSvg = serializeSvg(scene);
+
+const beatmapSet = await parseOsz(oszBytes);
 
 for await (const loadedBeatmap of iterateOsz(oszBytes, { maxConcurrency: 1 })) {
   // Each yielded beatmap already points to its audio when the archive contains it.
 }
 ```
 
-Render time runs from bottom to top by default: `startTime` is at the lower edge and `endTime` is at
-the upper edge. Pass `timeDirection: "top-to-bottom"` to preserve the previous orientation.
+Every render describes one bounded, contiguous source-time interval. `range` is the only required
+`RenderSceneOptions` field and follows half-open `[startMs, endMs)` membership; pass `chart.range`
+when the intentional operation is a complete-chart render. It is never inferred by a zero-option
+call. Render time runs from bottom to top by default: `startMs` is at the lower edge and later time
+appears progressively higher. Pass `timeDirection: "top-to-bottom"` for the opposite presentation.
+
+The remaining scene options are optional. `pixelsPerSecond` defaults to `240`, and `playfield`
+defaults to `{ widthPx: 640 }`. When supplied, `playfield` accepts exactly one of the complete scene
+`widthPx` or a per-lane `laneWidthPx`. The complete metric and serializer defaults are listed in the
+[package README](./packages/beatmap-lens/README.md#render-defaults).
+
+```ts
+const excerpt = renderSvg(
+  beatmap.chart,
+  {
+    range: { startMs: 60_000, endMs: 75_000 },
+    playfield: { laneWidthPx: 72 },
+    theme: {
+      metrics: {
+        paddingPx: { top: 32, bottom: 32 },
+        noteHeightPx: 10,
+      },
+    },
+  },
+  { title: "60s to 75s" },
+);
+```
+
+`theme.metrics` is a nested, partial geometry override; unspecified metrics keep their renderer
+defaults. SVG-only metadata such as `title` belongs to the separate third argument of `renderSvg`
+or the second argument of `serializeSvg`, never to scene geometry.
+
+Use the scene's canonical projection instead of reimplementing time-to-Y arithmetic:
+
+```ts
+import { projectTime, unprojectTime } from "beatmap-lens";
+
+const yPx = projectTime(scene.projection, chart.range.startMs);
+const sourceMs = unprojectTime(scene.projection, yPx);
+```
+
+These helpers use scene-local Y coordinates. Their geometric domain includes both projection
+endpoints, while note membership remains half-open; non-finite or out-of-domain inputs throw
+`RangeError`.
 
 The stages expose lower-level data when a caller needs it. The planned convenience inspection API
-will compose them; it will not hide I/O or browser state inside the package. `createBeatmap` accepts
+will compose them; it will not hide I/O or browser state inside the package. `parseBeatmap` accepts
 an optional `BeatmapAudio`, and `connectBeatmapAudio` returns a new beatmap that points to the exact
 audio object supplied by the caller.
 
@@ -119,20 +159,26 @@ fallback is not included in this first archive implementation.
 ## Architecture
 
 ```text
-.osu text -> createBeatmap ---------------------> Beatmap
-                 |                            /      \
-                 v                           v        v
-     ParsedOsu -> ManiaChart       BeatmapAudio?   RenderScene
-                                                   |
-.osz bytes -> iterateOsz -> Beatmap --------------+
-                 |                                |
-                 +-> parseOsz -> BeatmapSet       v
-                                  |        serializeSvg
-                                  +-> Beatmap[] + shared BeatmapAudio[]
+.osu text -> parseBeatmap -> Beatmap -> Beatmap.chart -> renderSvg
+
+.osu text -> parseOsu -> ParsedOsu -> toManiaChart -> ManiaChart
+                                                       |
+                                                       v
+                                              createRenderScene
+                                                       |
+                                                       v
+                                                  RenderScene
+                                                       |
+                                                       v
+                                                  serializeSvg
+
+.osz bytes -> iterateOsz -> Beatmap
+           +-> parseOsz -> BeatmapSet -> Beatmap[] + shared BeatmapAudio[]
 ```
 
-`renderSvg(chart, options)` is the current shortcut from a normalized chart to SVG. Future
-analysis will read `ManiaChart` and produce structured findings beside the rendering path.
+`renderSvg(chart, sceneOptions, svgOptions?)` is exactly the shortcut for
+`serializeSvg(createRenderScene(chart, sceneOptions), svgOptions)`. Future analysis will read
+`ManiaChart` and produce structured findings beside the rendering path.
 
 The workspace has one release boundary:
 
@@ -182,6 +228,11 @@ Beatmap Lens is not a beatmap editor, gameplay simulator, difficulty calculator,
 experiment tracker, or general-purpose rhythm-game framework. Canvas, a CLI, a plugin SDK, a query
 language, key modes outside 4K-10K, native bindings, and WebAssembly are not commitments. Each
 needs a concrete consumer or measured constraint before entering scope.
+
+One `RenderScene` deliberately remains one contiguous range and one playfield. Maximum width or
+height solving, density-aware scale selection, horizontal multi-playfield flow, pagination,
+osu!stable/lazer scroll-speed adapters, and PNG or other raster output are deferred policy/backend
+layers. They are not options or capabilities of the current renderer.
 
 ## Development
 

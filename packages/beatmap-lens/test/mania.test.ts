@@ -18,17 +18,16 @@ describe("toManiaChart", () => {
       creator: "Beatmap Lens",
       version: "Normal",
     });
-    expect(chart.notes.map((note) => [note.id, note.column, note.startTime, note.endTime])).toEqual(
-      [
-        ["note-0001", 0, 500, 500],
-        ["note-0002", 1, 1000, 1000],
-        ["note-0003", 2, 1000, 1000],
-        ["note-0004", 3, 1500, 1500],
-      ],
+    expect(chart.notes.map((note) => [note.id, note.column, note.startMs, note.endMs])).toEqual([
+      ["note-0001", 0, 500, 500],
+      ["note-0002", 1, 1000, 1000],
+      ["note-0003", 2, 1000, 1000],
+      ["note-0004", 3, 1500, 1500],
+    ]);
+    expect(chart.notes.every((note) => note.kind === "normal" && note.startMs === note.endMs)).toBe(
+      true,
     );
-    expect(
-      chart.notes.every((note) => note.kind === "normal" && note.startTime === note.endTime),
-    ).toBe(true);
+    expect(chart.range).toEqual({ startMs: 0, endMs: 1501 });
   });
 
   it.each(supportedKeyCounts)(
@@ -56,8 +55,8 @@ describe("toManiaChart", () => {
         note.kind,
         note.sourceKind,
         note.column,
-        note.startTime,
-        note.endTime,
+        note.startMs,
+        note.endMs,
       ]),
     ).toEqual([
       ["note-0001", "normal", "normal", 3, 500, 500],
@@ -66,10 +65,9 @@ describe("toManiaChart", () => {
       ["note-0004", "long", "hold", 2, 1100, 1600],
     ]);
     expect(
-      chart.notes
-        .filter((note) => note.kind === "long")
-        .every((note) => note.endTime > note.startTime),
+      chart.notes.filter((note) => note.kind === "long").every((note) => note.endMs > note.startMs),
     ).toBe(true);
+    expect(chart.range).toEqual({ startMs: 0, endMs: 1601 });
   });
 
   it("accepts integral decimal properties and preserves fractional note times", () => {
@@ -93,7 +91,7 @@ CircleSize:4.0
     expect(chart.keyCount).toBe(4);
     expect(chart.sourceKeyCount).toBe(4);
     expect(
-      chart.notes.map((note) => [note.kind, note.sourceKind, note.startTime, note.endTime]),
+      chart.notes.map((note) => [note.kind, note.sourceKind, note.startMs, note.endMs]),
     ).toEqual([
       ["normal", "normal", 1000.5, 1000.5],
       ["normal", "hold", 2000.5, 2000.5],
@@ -106,6 +104,43 @@ CircleSize:4.0
         "zero-length-long-note",
       ]),
     );
+    expect(chart.range).toEqual({ startMs: 0, endMs: 3501.75 });
+  });
+
+  it("exposes a non-empty complete-chart range for an empty chart", () => {
+    const chart = toManiaChart(
+      parseOsu(`osu file format v14
+
+[General]
+Mode:3
+
+[Difficulty]
+CircleSize:4
+
+[HitObjects]
+`),
+    );
+
+    expect(chart.notes).toEqual([]);
+    expect(chart.range).toEqual({ startMs: 0, endMs: 1 });
+  });
+
+  it("includes negative source timestamps in the complete-chart range", () => {
+    const chart = toManiaChart(
+      parseOsu(`osu file format v14
+
+[General]
+Mode:3
+
+[Difficulty]
+CircleSize:4
+
+[HitObjects]
+64,192,-250,1,0,0:0:0:0:
+`),
+    );
+
+    expect(chart.range).toEqual({ startMs: -250, endMs: -249 });
   });
 });
 

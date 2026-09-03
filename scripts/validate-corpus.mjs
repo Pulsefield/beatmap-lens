@@ -3,7 +3,14 @@
 import { createHash } from "node:crypto";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { extname, relative, resolve } from "node:path";
-import { parseOsu, renderSvg, toManiaChart } from "../packages/beatmap-lens/dist/index.js";
+import {
+  createRenderScene,
+  parseOsu,
+  projectTime,
+  serializeSvg,
+  toManiaChart,
+  unprojectTime,
+} from "../packages/beatmap-lens/dist/index.js";
 
 const supportedManiaKeyCounts = [4, 5, 6, 7, 8, 9, 10];
 
@@ -93,12 +100,31 @@ async function validateCorpus(rootArgumentValue, requestedSampleSize) {
         continue;
       }
 
-      const svg = renderSvg(chart, {
-        startTime: 0,
-        endTime: 15_000,
-        width: 640,
+      const scene = createRenderScene(chart, {
+        range: chart.range,
+        playfield: { widthPx: 640 },
         pixelsPerSecond: 40,
       });
+      if (scene.notes.length !== chart.notes.length) {
+        failures.push({
+          fileId: pathId(root, path),
+          stage: "render",
+          message: "Full-chart render omitted normalized notes.",
+        });
+        continue;
+      }
+
+      const projectionFailure = checkProjectionEndpoints(scene.projection);
+      if (projectionFailure) {
+        failures.push({
+          fileId: pathId(root, path),
+          stage: "projection",
+          message: projectionFailure,
+        });
+        continue;
+      }
+
+      const svg = serializeSvg(scene);
       if (!svg.startsWith('<svg xmlns="http://www.w3.org/2000/svg"')) {
         failures.push({
           fileId: pathId(root, path),
@@ -266,21 +292,32 @@ function parsePositiveInteger(rawValue, name) {
 }
 
 function checkChartInvariants(chart) {
+  if (
+    !Number.isFinite(chart.range.startMs) ||
+    !Number.isFinite(chart.range.endMs) ||
+    chart.range.endMs <= chart.range.startMs
+  ) {
+    return "Chart range is not a finite, non-empty interval.";
+  }
+
   const seenIds = new Set();
   let previousNote;
 
   for (const note of chart.notes) {
-    if (!Number.isFinite(note.startTime) || !Number.isFinite(note.endTime)) {
+    if (!Number.isFinite(note.startMs) || !Number.isFinite(note.endMs)) {
       return `Note ${note.id} has a non-finite time.`;
     }
     if (!Number.isInteger(note.column) || note.column < 0 || note.column >= chart.keyCount) {
       return `Note ${note.id} has an invalid column.`;
     }
-    if (note.endTime < note.startTime) {
+    if (note.endMs < note.startMs) {
       return `Note ${note.id} ends before it starts.`;
     }
-    if (note.kind === "long" && note.endTime === note.startTime) {
+    if (note.kind === "long" && note.endMs === note.startMs) {
       return `Long note ${note.id} has zero duration.`;
+    }
+    if (note.startMs < chart.range.startMs || note.endMs >= chart.range.endMs) {
+      return `Chart range does not contain note ${note.id}.`;
     }
     if (seenIds.has(note.id)) {
       return `Note id ${note.id} is duplicated.`;
@@ -296,10 +333,30 @@ function checkChartInvariants(chart) {
   return undefined;
 }
 
+function checkProjectionEndpoints(projection) {
+  for (const direction of ["bottom-to-top", "top-to-bottom"]) {
+    const current = { ...projection, direction };
+    const contentBottomPx = current.contentTopPx + current.contentHeightPx;
+
+    for (const timeMs of [current.range.startMs, current.range.endMs]) {
+      if (unprojectTime(current, projectTime(current, timeMs)) !== timeMs) {
+        return `Projection ${direction} time endpoint did not round-trip exactly.`;
+      }
+    }
+    for (const yPx of [current.contentTopPx, contentBottomPx]) {
+      if (projectTime(current, unprojectTime(current, yPx)) !== yPx) {
+        return `Projection ${direction} visual endpoint did not round-trip exactly.`;
+      }
+    }
+  }
+
+  return undefined;
+}
+
 function compareNotes(left, right) {
   return (
-    left.startTime - right.startTime ||
-    left.endTime - right.endTime ||
+    left.startMs - right.startMs ||
+    left.endMs - right.endMs ||
     left.column - right.column ||
     left.sourceLine - right.sourceLine ||
     left.kind.localeCompare(right.kind)

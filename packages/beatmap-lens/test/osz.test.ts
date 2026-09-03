@@ -21,6 +21,10 @@ describe("parseOsz", () => {
       "Hard.osu",
     ]);
     expect(beatmapSet.beatmaps.map((beatmap) => beatmap.chart.keyCount)).toEqual([4, 7]);
+    expect(beatmapSet.beatmaps.map((beatmap) => beatmap.chart.range)).toEqual([
+      { startMs: 0, endMs: 501 },
+      { startMs: 0, endMs: 501 },
+    ]);
     expect(beatmapSet.audios).toHaveLength(1);
     expect(beatmapSet.audios[0]).toMatchObject({
       filename: "audio/song.mp3",

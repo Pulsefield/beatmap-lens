@@ -1,19 +1,19 @@
 import { toManiaChart } from "./mania.js";
 import { getLastPropertyValue, parseOsu } from "./parser.js";
-import type { Beatmap, BeatmapAudio, BeatmapInput } from "./types.js";
+import type { Beatmap, BeatmapAudio, ParseBeatmapOptions } from "./types.js";
 
-export function createBeatmap(input: BeatmapInput): Beatmap {
-  const document = parseOsu(input.osuSource);
+export function parseBeatmap(osuSource: string, options: ParseBeatmapOptions = {}): Beatmap {
+  const document = parseOsu(osuSource);
   const audioFilename = getLastPropertyValue(document, "General", "AudioFilename");
   const beatmap: Beatmap = {
-    osuSource: input.osuSource,
-    ...(input.osuFilename !== undefined ? { osuFilename: input.osuFilename } : {}),
+    osuSource,
+    ...(options.filename !== undefined ? { osuFilename: options.filename } : {}),
     document,
     chart: toManiaChart(document),
     ...(audioFilename !== undefined ? { audioFilename } : {}),
   };
 
-  return input.audio ? connectBeatmapAudio(beatmap, input.audio) : beatmap;
+  return options.audio ? connectBeatmapAudio(beatmap, options.audio) : beatmap;
 }
 
 export function connectBeatmapAudio(beatmap: Beatmap, audio: BeatmapAudio): Beatmap {

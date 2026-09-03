@@ -15,25 +15,25 @@ export class ManiaNoteTimeIndex {
   constructor(notes: readonly ManiaNote[]) {
     this.notes = [...notes].sort(compareNotes);
     this.longNotes = this.notes.filter((note) => note.kind === "long");
-    this.longNoteMaxEnds = prefixMax(this.longNotes.map((note) => note.endTime));
+    this.longNoteMaxEnds = prefixMax(this.longNotes.map((note) => note.endMs));
     this.snapPoints = uniqueSorted([
-      ...this.notes.map((note) => note.startTime),
-      ...this.longNotes.map((note) => note.endTime),
+      ...this.notes.map((note) => note.startMs),
+      ...this.longNotes.map((note) => note.endMs),
     ]);
   }
 
   /** Returns normal-note onsets and every long note overlapping the half-open range. */
   notesInRange(range: TimeRangeV1): readonly ManiaNote[] {
-    const onsetStart = lowerBound(this.notes, range.startMs, (note) => note.startTime);
-    const onsetEnd = lowerBound(this.notes, range.endMs, (note) => note.startTime);
+    const onsetStart = lowerBound(this.notes, range.startMs, (note) => note.startMs);
+    const onsetEnd = lowerBound(this.notes, range.endMs, (note) => note.startMs);
     const result = this.notes.slice(onsetStart, onsetEnd);
 
-    const earlierLongEnd = lowerBound(this.longNotes, range.startMs, (note) => note.startTime);
+    const earlierLongEnd = lowerBound(this.longNotes, range.startMs, (note) => note.startMs);
     const firstPossibleLong = upperBound(this.longNoteMaxEnds, range.startMs, (value) => value);
 
     for (let index = firstPossibleLong; index < earlierLongEnd; index += 1) {
       const note = this.longNotes[index];
-      if (note?.endTime !== undefined && note.endTime > range.startMs) {
+      if (note?.endMs !== undefined && note.endMs > range.startMs) {
         result.push(note);
       }
     }
@@ -61,8 +61,8 @@ export class ManiaNoteTimeIndex {
 
 function compareNotes(left: ManiaNote, right: ManiaNote): number {
   return (
-    left.startTime - right.startTime ||
-    left.endTime - right.endTime ||
+    left.startMs - right.startMs ||
+    left.endMs - right.endMs ||
     left.column - right.column ||
     left.id.localeCompare(right.id)
   );

@@ -1,15 +1,16 @@
-export { connectBeatmapAudio, createBeatmap } from "./beatmap.js";
+export { connectBeatmapAudio, parseBeatmap } from "./beatmap.js";
 export { toManiaChart } from "./mania.js";
 export { iterateOsz, parseOsz } from "./osz.js";
 export { parseOsu } from "./parser.js";
+export { projectTime, unprojectTime } from "./projection.js";
 export { createRenderScene } from "./render-scene.js";
 export { renderSvg, serializeSvg } from "./svg.js";
 export type {
   Beatmap,
   BeatmapAudio,
-  BeatmapInput,
   BeatmapSet,
   DiagnosticSeverity,
+  LinearRenderTimeProjection,
   ManiaChart,
   ManiaMetadata,
   ManiaNote,
@@ -21,13 +22,20 @@ export type {
   OsuSection,
   OsuSourceLine,
   OsuSourceLineKind,
+  ParseBeatmapOptions,
   ParsedOsu,
   ParseOszOptions,
+  PlayfieldSize,
   RenderLane,
+  RenderMetricOptions,
+  RenderMetrics,
   RenderNoteGlyph,
-  RenderOptions,
   RenderPadding,
   RenderScene,
-  RenderSvgOptions,
+  RenderSceneOptions,
+  RenderThemeInput,
   RenderTimeDirection,
+  RenderTimeProjection,
+  SerializeSvgOptions,
+  TimeRange,
 } from "./types.js";

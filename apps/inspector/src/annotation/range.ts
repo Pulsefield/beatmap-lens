@@ -2,13 +2,13 @@ import type { ManiaChart, ManiaNote } from "beatmap-lens";
 import type { TimeRangeV1 } from "./contracts";
 
 export function chartEndMs(chart: Pick<ManiaChart, "notes">): number {
-  return Math.max(0, ...chart.notes.map((note) => note.endTime)) + 1;
+  return Math.max(0, ...chart.notes.map((note) => note.endMs)) + 1;
 }
 
 export function noteIntersectsRange(note: ManiaNote, range: TimeRangeV1): boolean {
   return note.kind === "long"
-    ? note.startTime < range.endMs && note.endTime > range.startMs
-    : range.startMs <= note.startTime && note.startTime < range.endMs;
+    ? note.startMs < range.endMs && note.endMs > range.startMs
+    : range.startMs <= note.startMs && note.startMs < range.endMs;
 }
 
 export function rangeCandidates(
@@ -35,8 +35,8 @@ export function expandRangeToIncludeNote(range: TimeRangeV1, note: ManiaNote): T
   if (noteIntersectsRange(note, range)) return range;
 
   return {
-    startMs: Math.min(range.startMs, note.startTime),
-    endMs: Math.max(range.endMs, note.kind === "long" ? note.endTime : note.startTime + 1),
+    startMs: Math.min(range.startMs, note.startMs),
+    endMs: Math.max(range.endMs, note.kind === "long" ? note.endMs : note.startMs + 1),
   };
 }
 

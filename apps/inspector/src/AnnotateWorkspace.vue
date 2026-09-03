@@ -31,6 +31,7 @@ import {
   judgmentLineRatio,
   maximumVisualSpeed,
   minimumVisualSpeed,
+  projectSceneRange,
   visualSpeedPresets,
 } from "./annotation/buffered-scene";
 import {
@@ -2599,7 +2600,7 @@ async function runSetupAction(action: () => Promise<void>): Promise<void> {
 }
 
 function initialRange(current: BeatmapSession): TimeRangeV1 {
-  const startMs = current.chart.notes[0]?.startTime ?? 0;
+  const startMs = current.chart.notes[0]?.startMs ?? 0;
   return boundedRange(startMs, startMs + 1_000, current.chartEndMs);
 }
 
@@ -2631,18 +2632,17 @@ function rangeSceneGeometry(
   range: TimeRangeV1,
   frame: BufferedSceneFrame,
 ): { x: number; y: number; width: number; height: number } | undefined {
-  const startMs = Math.max(range.startMs, frame.bufferRange.startMs);
-  const endMs = Math.min(range.endMs, frame.bufferRange.endMs);
-  if (startMs >= endMs) return undefined;
-  const pixelsPerMillisecond = frame.scene.timeRange.pixelsPerMillisecond;
+  const projection = frame.scene.projection;
+  const projected = projectSceneRange(projection, range);
+  if (!projected) return undefined;
   return {
-    x: frame.scene.padding.left,
-    y:
-      frame.scene.padding.top +
-      (frame.bufferRange.endMs - endMs) * pixelsPerMillisecond,
+    x: frame.scene.metrics.paddingPx.left,
+    y: projected.y,
     width:
-      frame.scene.width - frame.scene.padding.left - frame.scene.padding.right,
-    height: Math.max(1, (endMs - startMs) * pixelsPerMillisecond),
+      frame.scene.size.widthPx -
+      frame.scene.metrics.paddingPx.left -
+      frame.scene.metrics.paddingPx.right,
+    height: projected.height,
   };
 }
 
@@ -3237,8 +3237,8 @@ function errorMessage(error: unknown): string {
                     @change="toggleNote(note)"
                   />
                   <span>C{{ note.column + 1 }}</span>
-                  <strong>{{ formatMs(note.startTime) }}</strong>
-                  <small>{{ note.kind === "long" ? `LN to ${formatMs(note.endTime)}` : "rice" }}</small>
+                  <strong>{{ formatMs(note.startMs) }}</strong>
+                  <small>{{ note.kind === "long" ? `LN to ${formatMs(note.endMs)}` : "rice" }}</small>
                 </label>
               </div>
               <div v-if="rangeNotePageCount > 1" class="range-note-pagination">

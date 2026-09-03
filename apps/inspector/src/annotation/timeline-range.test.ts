@@ -223,8 +223,8 @@ describe("timeline display labels", () => {
 
 function note(
   id: string,
-  startTime: number,
-  endTime = startTime,
+  startMs: number,
+  endMs = startMs,
   kind: ManiaNote["kind"] = "normal",
 ): ManiaNote {
   return {
@@ -232,8 +232,8 @@ function note(
     kind,
     sourceKind: kind === "long" ? "hold" : "normal",
     column: 0,
-    startTime,
-    endTime,
+    startMs,
+    endMs,
     sourceLine: 1,
     x: 64,
     hitSound: 0,

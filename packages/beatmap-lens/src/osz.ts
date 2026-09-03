@@ -6,7 +6,7 @@ import {
   type UnzipFileInfo,
   unzipSync,
 } from "fflate";
-import { connectBeatmapAudio, createBeatmap } from "./beatmap.js";
+import { connectBeatmapAudio, parseBeatmap } from "./beatmap.js";
 import type { Beatmap, BeatmapAudio, BeatmapSet, ParseOszOptions } from "./types.js";
 
 interface ArchiveEntry {
@@ -85,7 +85,7 @@ export async function* iterateOsz(
       settings.maxConcurrency,
       async (entry) => {
         const contents = await loader.load(entry);
-        return createBeatmap({ osuFilename: entry.path, osuSource: strFromU8(contents) });
+        return parseBeatmap(strFromU8(contents), { filename: entry.path });
       },
     )) {
       if (isSupportedBeatmap(beatmap)) beatmaps.push(beatmap);

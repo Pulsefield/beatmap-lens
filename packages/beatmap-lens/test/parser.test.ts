@@ -80,7 +80,7 @@ CircleSize:4
 64,192,1000.5,1,0,0:0:0:0:
 `);
 
-    expect(parsed.hitObjects[0]?.time).toBe(1000.5);
+    expect(parsed.hitObjects[0]?.timeMs).toBe(1000.5);
     expect(parsed.diagnostics).toContainEqual(
       expect.objectContaining({
         code: "fractional-hitobject-time",

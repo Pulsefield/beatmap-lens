@@ -1,7 +1,8 @@
-import type { ManiaChart, ManiaNote } from "beatmap-lens";
+import { type ManiaChart, type ManiaNote, projectTime } from "beatmap-lens";
 import { describe, expect, it } from "vitest";
 import {
   BufferedSceneController,
+  projectSceneRange,
   viewportYRangeToSourceRange,
   viewportYToSourceTime,
 } from "./buffered-scene";
@@ -19,7 +20,7 @@ describe("BufferedSceneController", () => {
 
     expect(frame.bufferRange.endMs - frame.bufferRange.startMs).toBe(3_000);
     expect(frame.scene.keyCount).toBe(7);
-    expect(frame.scene.timeDirection).toBe("bottom-to-top");
+    expect(frame.scene.projection.direction).toBe("bottom-to-top");
     expect(frame.keyedNotes).toHaveLength(counters.lastBufferedNoteCount);
     expect(counters.lastBufferedNoteCount).toBeLessThanOrEqual(31);
     expect(counters.sceneBuildCount).toBe(1);
@@ -68,7 +69,7 @@ describe("BufferedSceneController", () => {
     });
 
     const frame = controller.frame(5_000);
-    const playheadNote = frame.scene.notes.find(({ startTime }) => startTime === 5_000);
+    const playheadNote = frame.scene.notes.find(({ startMs }) => startMs === 5_000);
     const translationY = Number(frame.noteGroupTransform.match(/translate\(0 (-?[\d.]+)\)/)?.[1]);
     const transformedCenter =
       translationY + (playheadNote?.y ?? 0) + (playheadNote?.height ?? 0) / 2;
@@ -90,14 +91,40 @@ describe("BufferedSceneController", () => {
     expect(faster.revision).toBe(initial.revision + 1);
     expect(faster.bufferRange.endMs - faster.bufferRange.startMs).toBe(1_500);
   });
+
+  it("passes grouped theme metrics to buffered scenes", () => {
+    const controller = new BufferedSceneController(denseChart(100), {
+      viewportHeight: 240,
+      width: 420,
+      theme: {
+        metrics: {
+          laneGapPx: 6,
+          noteHeightPx: 10,
+        },
+      },
+    });
+
+    expect(controller.frame(1_000).scene.metrics).toMatchObject({
+      laneGapPx: 6,
+      noteHeightPx: 10,
+    });
+  });
 });
 
 describe("viewport source-time projection", () => {
+  const projection = {
+    type: "linear" as const,
+    range: { startMs: 8_000, endMs: 12_000 },
+    direction: "bottom-to-top" as const,
+    pixelsPerSecond: 250,
+    contentTopPx: 24,
+    contentHeightPx: 1_000,
+  };
   const options = {
+    projection,
     playheadMs: 10_000,
     viewportHeight: 500,
-    pixelsPerSecond: 250,
-    chartEndMs: 20_000,
+    sourceRange: { startMs: 0, endMs: 20_000 },
     judgmentLineRatio: 0.8,
   };
 
@@ -111,8 +138,27 @@ describe("viewport source-time projection", () => {
   });
 
   it("clamps projected source time to the chart range", () => {
-    expect(viewportYToSourceTime({ ...options, playheadMs: 100, viewportY: 500 })).toBe(0);
-    expect(viewportYToSourceTime({ ...options, playheadMs: 19_000, viewportY: 0 })).toBe(20_000);
+    const wideProjection = {
+      ...projection,
+      range: { startMs: -2_000, endMs: 22_000 },
+      contentHeightPx: 6_000,
+    };
+    expect(
+      viewportYToSourceTime({
+        ...options,
+        projection: wideProjection,
+        playheadMs: 100,
+        viewportY: 500,
+      }),
+    ).toBe(0);
+    expect(
+      viewportYToSourceTime({
+        ...options,
+        projection: wideProjection,
+        playheadMs: 19_000,
+        viewportY: 0,
+      }),
+    ).toBe(20_000);
   });
 
   it("creates the same source range for upward and downward drags", () => {
@@ -122,6 +168,70 @@ describe("viewport source-time projection", () => {
     expect(upward).toEqual({ startMs: 9_600, endMs: 11_600 });
     expect(downward).toEqual(upward);
   });
+
+  it.each(["bottom-to-top", "top-to-bottom"] as const)(
+    "round-trips pointer Y after a non-zero moving-group translation for %s",
+    (direction) => {
+      const currentProjection = { ...projection, direction };
+      const judgmentY = options.viewportHeight * options.judgmentLineRatio;
+      const translateY = judgmentY - projectTime(currentProjection, options.playheadMs);
+      const sourceMs = 11_250;
+      const viewportY = projectTime(currentProjection, sourceMs) + translateY;
+
+      expect(translateY).not.toBe(0);
+      expect(
+        viewportYToSourceTime({ ...options, projection: currentProjection, viewportY }),
+      ).toBeCloseTo(sourceMs, 9);
+    },
+  );
+
+  it.each([
+    ["bottom-to-top", { y: 774, height: 250 }],
+    ["top-to-bottom", { y: 24, height: 250 }],
+  ] as const)("projects clipped overlay geometry for %s", (direction, expected) => {
+    expect(
+      projectSceneRange({ ...projection, direction }, { startMs: 7_500, endMs: 9_000 }),
+    ).toEqual(expected);
+    expect(
+      projectSceneRange({ ...projection, direction }, { startMs: 12_000, endMs: 13_000 }),
+    ).toBeUndefined();
+  });
+
+  it.each([
+    [0, 240],
+    [1_000_000, 720],
+  ])(
+    "normalizes floating error at inclusive buffer boundaries near %ims at %ipx/s",
+    (playheadMs, pixelsPerSecond) => {
+      const controller = new BufferedSceneController(denseChart(100), {
+        viewportHeight: 240,
+        width: 420,
+        pixelsPerSecond,
+      });
+      const initial = controller.frame(playheadMs);
+      const maximum = initial.refreshThreshold.maximumPlayheadMs;
+      const minimum = initial.refreshThreshold.minimumPlayheadMs;
+      const maximumFrame = controller.frame(maximum);
+      const minimumFrame = controller.frame(minimum);
+
+      expect(
+        viewportYToSourceTime({
+          projection: maximumFrame.scene.projection,
+          playheadMs: maximum,
+          viewportHeight: 240,
+          viewportY: 0,
+        }),
+      ).toBe(maximumFrame.scene.projection.range.endMs);
+      expect(
+        viewportYToSourceTime({
+          projection: minimumFrame.scene.projection,
+          playheadMs: minimum,
+          viewportHeight: 240,
+          viewportY: 240,
+        }),
+      ).toBe(minimumFrame.scene.projection.range.startMs);
+    },
+  );
 });
 
 function denseChart(noteCount: number, keyCount = 7): ManiaChart {
@@ -129,19 +239,20 @@ function denseChart(noteCount: number, keyCount = 7): ManiaChart {
     keyCount,
     metadata: {},
     notes: Array.from({ length: noteCount }, (_, index) => note(index, keyCount)),
+    range: { startMs: 0, endMs: Math.max(1, (noteCount - 1) * 100 + 1) },
     diagnostics: [],
   };
 }
 
 function note(index: number, keyCount: number): ManiaNote {
-  const startTime = index * 100;
+  const startMs = index * 100;
   return {
     id: `note-${index}`,
     kind: "normal",
     sourceKind: "normal",
     column: index % keyCount,
-    startTime,
-    endTime: startTime,
+    startMs,
+    endMs: startMs,
     sourceLine: index + 1,
     x: 64,
     hitSound: 0,

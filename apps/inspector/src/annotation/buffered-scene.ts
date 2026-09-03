@@ -1,10 +1,14 @@
 import {
   createRenderScene,
   type ManiaChart,
+  projectTime,
   type RenderLane,
   type RenderNoteGlyph,
-  type RenderOptions,
   type RenderScene,
+  type RenderSceneOptions,
+  type RenderTimeProjection,
+  type TimeRange,
+  unprojectTime,
 } from "beatmap-lens";
 import type { TimeRangeV1 } from "./contracts";
 import { ManiaNoteTimeIndex } from "./note-time-index";
@@ -20,23 +24,26 @@ export interface BufferedSceneOptions {
   readonly width: number;
   readonly pixelsPerSecond?: number;
   readonly judgmentLineRatio?: number;
-  readonly laneGap?: RenderOptions["laneGap"];
-  readonly noteHeight?: RenderOptions["noteHeight"];
-  readonly padding?: RenderOptions["padding"];
+  readonly theme?: RenderSceneOptions["theme"];
 }
 
 export interface ViewportSourceTimeOptions {
+  readonly projection: RenderTimeProjection;
   readonly playheadMs: number;
   readonly viewportY: number;
   readonly viewportHeight: number;
-  readonly pixelsPerSecond: number;
-  readonly chartEndMs: number;
+  readonly sourceRange?: TimeRange;
   readonly judgmentLineRatio?: number;
 }
 
 export interface ViewportSourceRangeOptions extends Omit<ViewportSourceTimeOptions, "viewportY"> {
   readonly anchorY: number;
   readonly focusY: number;
+}
+
+export interface ProjectedSceneRange {
+  readonly y: number;
+  readonly height: number;
 }
 
 export interface KeyedRenderNote {
@@ -90,9 +97,12 @@ interface SceneBuffer {
 export function viewportYToSourceTime(options: ViewportSourceTimeOptions): number {
   const lineRatio = options.judgmentLineRatio ?? judgmentLineRatio;
   const judgmentY = options.viewportHeight * lineRatio;
-  const sourceTimeMs =
-    options.playheadMs + ((judgmentY - options.viewportY) / options.pixelsPerSecond) * 1_000;
-  return clamp(sourceTimeMs, 0, options.chartEndMs);
+  const translateY = judgmentY - projectTime(options.projection, options.playheadMs);
+  const sceneY = normalizeProjectionBoundary(options.projection, options.viewportY - translateY);
+  const sourceTimeMs = unprojectTime(options.projection, sceneY);
+  return options.sourceRange
+    ? clamp(sourceTimeMs, options.sourceRange.startMs, options.sourceRange.endMs)
+    : sourceTimeMs;
 }
 
 export function viewportYRangeToSourceRange(
@@ -103,6 +113,22 @@ export function viewportYRangeToSourceRange(
   const startMs = Math.min(anchorMs, focusMs);
   const endMs = Math.max(anchorMs, focusMs);
   return startMs < endMs ? { startMs, endMs } : undefined;
+}
+
+export function projectSceneRange(
+  projection: RenderTimeProjection,
+  range: TimeRange,
+): ProjectedSceneRange | undefined {
+  const startMs = Math.max(range.startMs, projection.range.startMs);
+  const endMs = Math.min(range.endMs, projection.range.endMs);
+  if (startMs >= endMs) return undefined;
+
+  const startY = projectTime(projection, startMs);
+  const endY = projectTime(projection, endMs);
+  return {
+    y: Math.min(startY, endY),
+    height: Math.max(1, Math.abs(endY - startY)),
+  };
 }
 
 /**
@@ -196,13 +222,10 @@ export class BufferedSceneController {
     const scene = createRenderScene(
       { ...this.chart, notes },
       {
-        startTime: range.startMs,
-        endTime: range.endMs,
-        width: this.options.width,
+        range,
+        playfield: { widthPx: this.options.width },
         pixelsPerSecond: this.pixelsPerSecond,
-        ...(this.options.laneGap === undefined ? {} : { laneGap: this.options.laneGap }),
-        ...(this.options.noteHeight === undefined ? {} : { noteHeight: this.options.noteHeight }),
-        ...(this.options.padding === undefined ? {} : { padding: this.options.padding }),
+        ...(this.options.theme === undefined ? {} : { theme: this.options.theme }),
       },
     );
     const keyedNotes = scene.notes.map((glyph) => ({ key: glyph.id, glyph }));
@@ -254,12 +277,10 @@ export class BufferedSceneController {
   }
 
   private noteGroupTransform(buffer: SceneBuffer, playheadMs: number): string {
-    const pixelsPerMillisecond = this.pixelsPerSecond / 1_000;
     const lineRatio = this.options.judgmentLineRatio ?? judgmentLineRatio;
     const judgmentY = this.options.viewportHeight * lineRatio;
-    const playheadSceneY =
-      buffer.scene.padding.top + (buffer.range.endMs - playheadMs) * pixelsPerMillisecond;
-    return `translate(0 ${round3(judgmentY - playheadSceneY)})`;
+    const playheadSceneY = projectTime(buffer.scene.projection, playheadMs);
+    return `translate(0 ${judgmentY - playheadSceneY})`;
   }
 }
 
@@ -286,8 +307,18 @@ function validateVisualSpeed(pixelsPerSecond: number): void {
   }
 }
 
-function round3(value: number): number {
-  return Math.round(value * 1_000) / 1_000;
+function normalizeProjectionBoundary(projection: RenderTimeProjection, yPx: number): number {
+  const topPx = projection.contentTopPx;
+  const bottomPx = topPx + projection.contentHeightPx;
+  const sourceMagnitudePx =
+    (Math.max(Math.abs(projection.range.startMs), Math.abs(projection.range.endMs)) *
+      projection.pixelsPerSecond) /
+    1_000;
+  const tolerance =
+    Number.EPSILON * 32 * Math.max(1, Math.abs(topPx), Math.abs(bottomPx), sourceMagnitudePx);
+  if (yPx < topPx && topPx - yPx <= tolerance) return topPx;
+  if (yPx > bottomPx && yPx - bottomPx <= tolerance) return bottomPx;
+  return yPx;
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {

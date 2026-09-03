@@ -8,8 +8,8 @@ export function createStableNoteRefV1(note: ManiaNote): StableNoteRefV1 {
     sourceLine: note.sourceLine,
     column: note.column,
     kind: note.kind,
-    startMs: note.startTime,
-    endMs: note.endTime,
+    startMs: note.startMs,
+    endMs: note.endMs,
   };
 }
 
@@ -59,8 +59,8 @@ export function stableNoteRefMatchesNote(ref: StableNoteRefV1, note: ManiaNote):
     ref.sourceLine === note.sourceLine &&
     ref.column === note.column &&
     ref.kind === note.kind &&
-    ref.startMs === note.startTime &&
-    ref.endMs === note.endTime
+    ref.startMs === note.startMs &&
+    ref.endMs === note.endMs
   );
 }
 

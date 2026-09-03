@@ -2,11 +2,10 @@
 import {
   type ManiaChart,
   parseOsu,
-  renderSvg,
   toManiaChart,
 } from "beatmap-lens";
 import { computed, nextTick, onMounted, ref } from "vue";
-import { chartRenderRange } from "./chart-range";
+import { renderStaticPreviewSvg } from "./static-preview";
 import WorkspaceModeSwitch from "./WorkspaceModeSwitch.vue";
 import type { WorkspaceMode } from "./workspace-mode";
 
@@ -126,15 +125,9 @@ async function runPipeline(): Promise<void> {
     const normalizeStartedAt = performance.now();
     const chart = toManiaChart(document);
     const normalizeDuration = performance.now() - normalizeStartedAt;
-    const renderRange = chartRenderRange(chart);
 
     const renderStartedAt = performance.now();
-    const svg = renderSvg(chart, {
-      startTime: renderRange.startTime,
-      endTime: renderRange.endTime,
-      width: 640,
-      pixelsPerSecond: 45,
-    });
+    const svg = renderStaticPreviewSvg(chart);
     const renderDuration = performance.now() - renderStartedAt;
 
     mountSvg(svg);

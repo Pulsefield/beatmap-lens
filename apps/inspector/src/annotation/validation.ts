@@ -1009,8 +1009,8 @@ function sameNormalizedNotes(
         note.sourceLine === other.sourceLine &&
         note.column === other.column &&
         note.kind === other.kind &&
-        note.startTime === other.startTime &&
-        note.endTime === other.endTime
+        note.startMs === other.startMs &&
+        note.endMs === other.endMs
       );
     })
   );

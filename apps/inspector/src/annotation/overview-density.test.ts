@@ -66,18 +66,19 @@ function chartWithNotes(count: number): ManiaChart {
     keyCount: 7,
     metadata: {},
     notes: Array.from({ length: count }, (_, index) => note(`note-${index}`, index)),
+    range: { startMs: 0, endMs: Math.max(1, count) },
     diagnostics: [],
   };
 }
 
-function note(id: string, startTime: number): ManiaNote {
+function note(id: string, startMs: number): ManiaNote {
   return {
     id,
     kind: "normal",
     sourceKind: "normal",
     column: 0,
-    startTime,
-    endTime: startTime,
+    startMs,
+    endMs: startMs,
     sourceLine: 1,
     x: 64,
     hitSound: 0,

@@ -22,6 +22,8 @@ export function toManiaChart(parsed: ParsedOsu): ManiaChart {
       id: `note-${String(index + 1).padStart(4, "0")}`,
       ...note,
     }));
+  const startMs = Math.min(0, ...notes.map((note) => note.startMs));
+  const endMs = Math.max(startMs + 1, ...notes.map((note) => note.endMs + 1));
 
   return {
     keyCount,
@@ -29,6 +31,7 @@ export function toManiaChart(parsed: ParsedOsu): ManiaChart {
     mode,
     metadata: readMetadata(parsed),
     notes,
+    range: { startMs, endMs },
     diagnostics: [...parsed.diagnostics, ...diagnostics],
   };
 }
@@ -44,8 +47,8 @@ function convertHitObject(
         kind: "normal",
         sourceKind: "normal",
         column: columnFromX(hitObject.x, keyCount, hitObject, diagnostics),
-        startTime: hitObject.time,
-        endTime: hitObject.time,
+        startMs: hitObject.timeMs,
+        endMs: hitObject.timeMs,
         sourceLine: hitObject.sourceLine,
         x: hitObject.x,
         hitSound: hitObject.hitSound,
@@ -54,8 +57,8 @@ function convertHitObject(
   }
 
   if (hitObject.kind === "hold") {
-    const endTime = parseLongNoteEndTime(hitObject);
-    if (endTime === undefined) {
+    const endMs = parseLongNoteEndMs(hitObject);
+    if (endMs === undefined) {
       diagnostics.push({
         severity: "warning",
         code: "invalid-long-note-end-time",
@@ -67,7 +70,7 @@ function convertHitObject(
       return [];
     }
 
-    if (endTime < hitObject.time) {
+    if (endMs < hitObject.timeMs) {
       diagnostics.push({
         severity: "warning",
         code: "negative-long-note-duration",
@@ -79,7 +82,7 @@ function convertHitObject(
       return [];
     }
 
-    if (endTime === hitObject.time) {
+    if (endMs === hitObject.timeMs) {
       diagnostics.push({
         severity: "warning",
         code: "zero-length-long-note",
@@ -93,8 +96,8 @@ function convertHitObject(
           kind: "normal",
           sourceKind: "hold",
           column: columnFromX(hitObject.x, keyCount, hitObject, diagnostics),
-          startTime: hitObject.time,
-          endTime,
+          startMs: hitObject.timeMs,
+          endMs,
           sourceLine: hitObject.sourceLine,
           x: hitObject.x,
           hitSound: hitObject.hitSound,
@@ -102,14 +105,14 @@ function convertHitObject(
       ];
     }
 
-    if (!Number.isInteger(endTime)) {
+    if (!Number.isInteger(endMs)) {
       diagnostics.push({
         severity: "warning",
         code: "fractional-long-note-end-time",
         message: "A mania hold note uses a fractional end time; the value was preserved.",
         line: hitObject.sourceLine,
         section: "HitObjects",
-        value: String(endTime),
+        value: String(endMs),
       });
     }
 
@@ -118,8 +121,8 @@ function convertHitObject(
         kind: "long",
         sourceKind: "hold",
         column: columnFromX(hitObject.x, keyCount, hitObject, diagnostics),
-        startTime: hitObject.time,
-        endTime,
+        startMs: hitObject.timeMs,
+        endMs,
         sourceLine: hitObject.sourceLine,
         x: hitObject.x,
         hitSound: hitObject.hitSound,
@@ -158,14 +161,14 @@ function columnFromX(
   return clamp(Math.floor((x * keyCount) / 512), 0, keyCount - 1);
 }
 
-function parseLongNoteEndTime(hitObject: OsuHitObject): number | undefined {
+function parseLongNoteEndMs(hitObject: OsuHitObject): number | undefined {
   const encodedEndTime = hitObject.params[0]?.split(":")[0];
   if (encodedEndTime === undefined || encodedEndTime.trim() === "") {
     return undefined;
   }
 
-  const endTime = Number(encodedEndTime);
-  return Number.isFinite(endTime) ? endTime : undefined;
+  const endMs = Number(encodedEndTime);
+  return Number.isFinite(endMs) ? endMs : undefined;
 }
 
 function readMetadata(parsed: ParsedOsu): ManiaMetadata {
@@ -185,8 +188,8 @@ function readMetadata(parsed: ParsedOsu): ManiaMetadata {
 
 function compareDraftNotes(left: DraftNote, right: DraftNote): number {
   return (
-    left.startTime - right.startTime ||
-    left.endTime - right.endTime ||
+    left.startMs - right.startMs ||
+    left.endMs - right.endMs ||
     left.column - right.column ||
     left.sourceLine - right.sourceLine ||
     left.kind.localeCompare(right.kind)

@@ -3,29 +3,30 @@ import type {
   ManiaChart,
   RenderLane,
   RenderNoteGlyph,
-  RenderOptions,
   RenderScene,
-  RenderSvgOptions,
+  RenderSceneOptions,
+  SerializeSvgOptions,
 } from "./types.js";
 
 export function renderSvg(
   chart: ManiaChart,
-  options: RenderOptions & RenderSvgOptions = {},
+  sceneOptions: RenderSceneOptions,
+  svgOptions?: SerializeSvgOptions,
 ): string {
-  const scene = createRenderScene(chart, options);
-  return serializeSvg(scene, options);
+  return serializeSvg(createRenderScene(chart, sceneOptions), svgOptions);
 }
 
-export function serializeSvg(scene: RenderScene, options: RenderSvgOptions = {}): string {
+export function serializeSvg(scene: RenderScene, options: SerializeSvgOptions = {}): string {
   const title = options.title ?? sceneTitle(scene);
+  const { heightPx, widthPx } = scene.size;
   const lines = [
     tag(
       "svg",
       [
         ["xmlns", "http://www.w3.org/2000/svg"],
-        ["viewBox", scene.viewBox.map(formatNumber).join(" ")],
-        ["width", formatNumber(scene.width)],
-        ["height", formatNumber(scene.height)],
+        ["viewBox", `0 0 ${formatNumber(widthPx)} ${formatNumber(heightPx)}`],
+        ["width", formatNumber(widthPx)],
+        ["height", formatNumber(heightPx)],
         ["role", "img"],
         ["aria-label", title],
       ],
@@ -35,8 +36,8 @@ export function serializeSvg(scene: RenderScene, options: RenderSvgOptions = {})
     `  ${tag("rect", [
       ["x", "0"],
       ["y", "0"],
-      ["width", formatNumber(scene.width)],
-      ["height", formatNumber(scene.height)],
+      ["width", formatNumber(widthPx)],
+      ["height", formatNumber(heightPx)],
       ["fill", "#101820"],
     ])}`,
     `  ${tag("g", [["data-layer", "lanes"]], false)}`,
@@ -69,8 +70,10 @@ function renderNote(note: RenderNoteGlyph): string {
     ["data-kind", note.kind],
     ["data-source-kind", note.sourceKind],
     ["data-column", String(note.column)],
-    ["data-start-time", String(note.startTime)],
-    ["data-end-time", String(note.endTime)],
+    ["data-start-ms", String(note.startMs)],
+    ["data-end-ms", String(note.endMs)],
+    ...(note.continuesBefore ? ([["data-continues-before", "true"]] as const) : []),
+    ...(note.continuesAfter ? ([["data-continues-after", "true"]] as const) : []),
     ["data-source-line", String(note.sourceLine)],
     ["x", formatNumber(note.x)],
     ["y", formatNumber(note.y)],
@@ -114,9 +117,5 @@ function escapeText(value: string): string {
 }
 
 function formatNumber(value: number): string {
-  if (Number.isInteger(value)) {
-    return String(value);
-  }
-
-  return String(Math.round(value * 1000) / 1000);
+  return String(value);
 }

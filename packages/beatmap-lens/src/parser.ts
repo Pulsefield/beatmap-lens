@@ -282,13 +282,13 @@ function parseHitObjectLine(
 
   const x = parseInteger(fields[0]);
   const y = parseInteger(fields[1]);
-  const time = parseFiniteNumber(fields[2]);
+  const timeMs = parseFiniteNumber(fields[2]);
   const type = parseInteger(fields[3]);
   const hitSound = parseInteger(fields[4]);
   if (
     x === undefined ||
     y === undefined ||
-    time === undefined ||
+    timeMs === undefined ||
     type === undefined ||
     hitSound === undefined
   ) {
@@ -303,7 +303,7 @@ function parseHitObjectLine(
     return undefined;
   }
 
-  if (!Number.isInteger(time)) {
+  if (!Number.isInteger(timeMs)) {
     addDiagnostic({
       severity: "warning",
       code: "fractional-hitobject-time",
@@ -330,7 +330,7 @@ function parseHitObjectLine(
     kind,
     x,
     y,
-    time,
+    timeMs,
     type,
     hitSound,
     params: fields.slice(5),
