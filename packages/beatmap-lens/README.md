@@ -6,13 +6,16 @@ The package is not published, and its API can still change.
 
 ```ts
 import {
+  createRenderDocument,
   createRenderScene,
   iterateOsz,
   parseBeatmap,
   parseOsz,
   parseOsu,
   renderSvg,
+  renderSvgPages,
   serializeSvg,
+  serializeSvgPages,
   toManiaChart,
 } from "beatmap-lens";
 
@@ -28,6 +31,17 @@ const chart = toManiaChart(parsedOsu);
 const scene = createRenderScene(chart, { range: chart.range });
 const sameSvg = serializeSvg(scene);
 
+// Fixed-size static review pages.
+const pages = renderSvgPages(beatmap.chart, {
+  range: beatmap.chart.range,
+});
+
+// Advanced document path: inspect resolved layout before serialization.
+const document = createRenderDocument(beatmap.chart, {
+  range: beatmap.chart.range,
+});
+const samePages = serializeSvgPages(document);
+
 const beatmapSet = await parseOsz(oszBytes);
 
 for await (const loadedBeatmap of iterateOsz(oszBytes, { maxConcurrency: 1 })) {
@@ -36,8 +50,9 @@ for await (const loadedBeatmap of iterateOsz(oszBytes, { maxConcurrency: 1 })) {
 ```
 
 `parseBeatmap` is the ordinary entry point: retain its `Beatmap`, then pass `beatmap.chart` to
-`renderSvg`. `parseOsu`/`toManiaChart` and `createRenderScene`/`serializeSvg` remain the advanced,
-composable boundaries.
+`renderSvg` for one scene or `renderSvgPages` for a fixed-size review document.
+`parseOsu`/`toManiaChart`, `createRenderScene`/`serializeSvg`, and
+`createRenderDocument`/`serializeSvgPages` remain the advanced, composable boundaries.
 
 Every render describes one bounded, contiguous source-time interval. `range` is the only required
 `RenderSceneOptions` field and uses half-open `[startMs, endMs)` membership. Use `chart.range` for
@@ -84,6 +99,62 @@ of `renderSvg` or the second argument of `serializeSvg`.
 | `theme.metrics.noteRadiusPx` | No | `2` |
 | serializer `title` | No | Metadata artist/title/version plus the key-count label; the key-count label alone when metadata is absent |
 
+### Fixed-size static review documents
+
+`renderSvgPages` returns a deterministic array because document layout may need more than one
+image. Every page uses the same exact size; panels run chronologically from left to right and then
+continue on the next page. A panel remains an ordinary bounded `RenderScene` with half-open range
+membership and its own narrow source-time axis.
+
+```ts
+const pages = renderSvgPages(beatmap.chart, {
+  range: { startMs: 60_000, endMs: 70_000 },
+  page: {
+    size: { widthPx: 1600, heightPx: 900 },
+    columns: "auto",
+  },
+  panel: {
+    playfield: { laneWidthPx: 48 },
+    maxNoteRows: 32,
+    maxSourceDurationMs: 10_000,
+  },
+  scale: { type: "linear", pixelsPerSecond: 240 },
+});
+```
+
+Page width controls how many panels fit, while `maxNoteRows` controls where one panel may break.
+Simultaneous notes count as one row. The default document is `1600 x 900px`, uses `24px` page
+padding, a `12px` panel gap, a `48px` lane width, up to 32 note rows and 10 seconds per panel,
+bottom-to-top time, linear `240px/s`, auto columns, and an attached left-side `32px` axis. Import
+`renderDefaults` to
+inspect the exported baseline values; inspect `document.resolved` for the chart-specific runtime
+result.
+
+Three scale modes keep their intent explicit:
+
+- `linear` uses one hard pixels-per-second value and adds panels or pages when needed;
+- `fit` remains true linear time and chooses one global value between its preferred and minimum
+  scales to attain the minimum reachable page count;
+- `row-aware` uses a piecewise-linear projection, expands dense distinct rows, and compresses only
+  empty time that contains no active long note.
+
+```ts
+const compactPages = renderSvgPages(beatmap.chart, {
+  range: { startMs: 60_000, endMs: 70_000 },
+  scale: {
+    type: "row-aware",
+    basePixelsPerSecond: 240,
+    minRowGapPx: 12,
+    maxEmptyGapPx: 72,
+  },
+});
+```
+
+Row-aware axis labels still show true source time, but visual distance is intentionally non-linear.
+Its SVG panels carry `data-time-scale="row-aware"`, and enabled axes mark compressed ranges.
+`RenderTimeProjection` is a discriminated union; narrow on `projection.type` before reading the
+linear-only `pixelsPerSecond` field.
+
 ### osu!lazer mania visual speed
 
 Use `osuLazerManiaPixelsPerSecond` to match lazer's baseline note spacing for its standard desktop
@@ -98,6 +169,19 @@ const pixelsPerSecond = osuLazerManiaPixelsPerSecond({
 
 Pass the final landscape gameplay rectangle. Its dimensions and the returned speed use the same
 pixel coordinate space; physical DPI/PPI is not an input.
+
+The adapter result can also be passed as a hard document scale:
+
+```ts
+const pages = renderSvgPages(beatmap.chart, {
+  range: { startMs: 60_000, endMs: 70_000 },
+  scale: { type: "linear", pixelsPerSecond },
+});
+```
+
+Here the simulated gameplay viewport is not the export page size. Using the value as
+`row-aware.basePixelsPerSecond` only makes it a local spacing reference; that non-linear output no
+longer matches osu!lazer scroll distance.
 
 Use the scene's canonical projection for every time/scene coordinate conversion:
 
@@ -149,6 +233,6 @@ Semantic chart-quality findings and synchronized audio playback remain project d
 current package features. See the [repository](https://github.com/Pulsefield/beatmap-lens) for the
 status and architecture.
 
-One `RenderScene` intentionally covers one range and one playfield. Maximum dimension solving,
-automatic readable-scale selection, horizontal multi-playfield layout, pagination, full osu!
-scroll-speed parity, and PNG/raster output are deferred layers rather than current renderer options.
+One `RenderScene` intentionally covers one range and one playfield. Fixed-size solving, horizontal
+layout, pagination, and readable spacing live in the separate `RenderDocument` layer. Beat-aligned
+pagination, full timing/SV scroll-speed parity, and PNG/raster output remain deferred.

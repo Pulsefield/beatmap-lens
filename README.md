@@ -16,7 +16,8 @@ The package is not published, and its API can still change.
 - a runtime `Beatmap` model with optional, shared audio resources;
 - a deterministic 4K-10K mania model for normal notes and long notes;
 - bounded time-range projection into a render scene;
-- DOM-free SVG serialization;
+- fixed-size, multi-panel static review documents with linear, fit, and row-aware spacing;
+- DOM-free single-scene and multi-page SVG serialization;
 - fixtures, unit tests, corpus invariants, and a private browser app for static inspection.
 
 It does not yet provide semantic chart-quality rules, audio playback, clickable findings, or a
@@ -62,13 +63,16 @@ Experiment tracking, model execution, storage, and dashboards belong outside thi
 
 ```ts
 import {
+  createRenderDocument,
   createRenderScene,
   iterateOsz,
   parseBeatmap,
   parseOsz,
   parseOsu,
   renderSvg,
+  renderSvgPages,
   serializeSvg,
+  serializeSvgPages,
   toManiaChart,
 } from "beatmap-lens";
 
@@ -83,6 +87,15 @@ const parsedOsu = parseOsu(osuSource);
 const chart = toManiaChart(parsedOsu);
 const scene = createRenderScene(chart, { range: chart.range });
 const sameSvg = serializeSvg(scene);
+
+const pages = renderSvgPages(beatmap.chart, {
+  range: beatmap.chart.range,
+});
+
+const document = createRenderDocument(beatmap.chart, {
+  range: beatmap.chart.range,
+});
+const samePages = serializeSvgPages(document);
 
 const beatmapSet = await parseOsz(oszBytes);
 
@@ -118,6 +131,23 @@ const excerpt = renderSvg(
   { title: "60s to 75s" },
 );
 ```
+
+For a fixed-size static review artifact, use the separate document operation:
+
+```ts
+const pages = renderSvgPages(beatmap.chart, {
+  range: { startMs: 60_000, endMs: 70_000 },
+  page: { size: { widthPx: 1600, heightPx: 900 }, columns: "auto" },
+  panel: { playfield: { laneWidthPx: 48 }, maxNoteRows: 32 },
+  scale: { type: "linear", pixelsPerSecond: 240 },
+});
+```
+
+Every returned page has the same exact size. Page width determines horizontal panel capacity;
+`maxNoteRows` independently determines where a panel may break. `linear` preserves a hard global
+time scale, `fit` chooses one global linear scale within explicit bounds, and `row-aware` exposes a
+piecewise-linear readability projection that marks compressed empty time and never compresses an
+active long note below its baseline distance.
 
 ### osu!lazer mania visual speed
 
@@ -181,7 +211,8 @@ fallback is not included in this first archive implementation.
 ## Architecture
 
 ```text
-.osu text -> parseBeatmap -> Beatmap -> Beatmap.chart -> renderSvg
+.osu text -> parseBeatmap -> Beatmap -> Beatmap.chart -+-> renderSvg
+                                                       `-> renderSvgPages
 
 .osu text -> parseOsu -> ParsedOsu -> toManiaChart -> ManiaChart
                                                        |
@@ -193,6 +224,8 @@ fallback is not included in this first archive implementation.
                                                        |
                                                        v
                                                   serializeSvg
+
+ManiaChart -> createRenderDocument -> RenderDocument -> serializeSvgPages
 
 .osz bytes -> iterateOsz -> Beatmap
            +-> parseOsz -> BeatmapSet -> Beatmap[] + shared BeatmapAudio[]
@@ -251,10 +284,10 @@ experiment tracker, or general-purpose rhythm-game framework. Canvas, a CLI, a p
 language, key modes outside 4K-10K, native bindings, and WebAssembly are not commitments. Each
 needs a concrete consumer or measured constraint before entering scope.
 
-One `RenderScene` deliberately remains one contiguous range and one playfield. Maximum width or
-height solving, density-aware scale selection, horizontal multi-playfield flow, pagination, full
-osu! scroll-speed parity, and PNG or other raster output are deferred policy/backend layers. They
-are not options or capabilities of the current renderer.
+One `RenderScene` deliberately remains one contiguous range and one playfield. Fixed page sizing,
+readable-scale policy, horizontal multi-playfield flow, and pagination compose scenes in the
+separate `RenderDocument` layer; they are not `RenderSceneOptions`. Beat/measure-aligned breaks,
+full timing/SV scroll-speed parity, and PNG or other raster output remain deferred layers.
 
 ## Development
 

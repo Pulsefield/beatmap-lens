@@ -2,6 +2,7 @@ import {
   type Beatmap,
   type BeatmapAudio,
   type BeatmapSet,
+  createRenderDocument,
   createRenderScene,
   type DiagnosticSeverity,
   type LinearRenderTimeProjection,
@@ -20,20 +21,41 @@ import {
   type ParseBeatmapOptions,
   type ParsedOsu,
   type ParseOszOptions,
+  type PiecewiseLinearRenderTimeProjection,
   type PlayfieldSize,
+  type RenderDiagnostic,
+  type RenderDocument,
+  type RenderDocumentOptions,
+  type RenderDocumentScaleInput,
   type RenderLane,
   type RenderMetricOptions,
   type RenderMetrics,
   type RenderNoteGlyph,
   type RenderPadding,
+  type RenderPaddingInput,
+  type RenderPage,
+  type RenderPanel,
   type RenderScene,
   type RenderSceneOptions,
   type RenderThemeInput,
+  type RenderTimeAxis,
+  type RenderTimeAxisInput,
+  type RenderTimeAxisTick,
+  type RenderTimeCompressionMark,
   type RenderTimeDirection,
   type RenderTimeProjection,
+  type ResolvedPlayfieldSize,
+  type ResolvedRenderDocumentOptions,
+  type ResolvedRenderDocumentScale,
+  type ResolvedRenderTimeAxisOptions,
   renderSvg,
+  renderSvgPages,
+  type SerializedSvgPage,
   type SerializeSvgOptions,
+  type SerializeSvgPagesOptions,
+  type SizePx,
   serializeSvg,
+  serializeSvgPages,
   type TimeRange,
 } from "../src/index.js";
 
@@ -58,19 +80,53 @@ export interface PublicTypeContract {
   ParsedOsu: ParsedOsu;
   ParseBeatmapOptions: ParseBeatmapOptions;
   ParseOszOptions: ParseOszOptions;
+  PiecewiseLinearRenderTimeProjection: PiecewiseLinearRenderTimeProjection;
   PlayfieldSize: PlayfieldSize;
+  RenderDiagnostic: RenderDiagnostic;
+  RenderDocument: RenderDocument;
+  RenderDocumentOptions: RenderDocumentOptions;
+  RenderDocumentScaleInput: RenderDocumentScaleInput;
   RenderLane: RenderLane;
   RenderMetricOptions: RenderMetricOptions;
   RenderMetrics: RenderMetrics;
   RenderNoteGlyph: RenderNoteGlyph;
+  RenderPage: RenderPage;
   RenderPadding: RenderPadding;
+  RenderPaddingInput: RenderPaddingInput;
+  RenderPanel: RenderPanel;
+  ResolvedPlayfieldSize: ResolvedPlayfieldSize;
+  ResolvedRenderDocumentOptions: ResolvedRenderDocumentOptions;
+  ResolvedRenderDocumentScale: ResolvedRenderDocumentScale;
+  ResolvedRenderTimeAxisOptions: ResolvedRenderTimeAxisOptions;
   RenderScene: RenderScene;
   RenderSceneOptions: RenderSceneOptions;
   RenderThemeInput: RenderThemeInput;
+  RenderTimeAxis: RenderTimeAxis;
+  RenderTimeAxisInput: RenderTimeAxisInput;
+  RenderTimeAxisTick: RenderTimeAxisTick;
+  RenderTimeCompressionMark: RenderTimeCompressionMark;
   RenderTimeDirection: RenderTimeDirection;
   RenderTimeProjection: RenderTimeProjection;
+  SerializedSvgPage: SerializedSvgPage;
   SerializeSvgOptions: SerializeSvgOptions;
+  SerializeSvgPagesOptions: SerializeSvgPagesOptions;
+  SizePx: SizePx;
   TimeRange: TimeRange;
+}
+
+export function assertRequiredDocumentRange(chart: ManiaChart): void {
+  const options: RenderDocumentOptions = { range: chart.range };
+  const document = createRenderDocument(chart, options);
+
+  renderSvgPages(chart, options);
+  serializeSvgPages(document);
+
+  // @ts-expect-error -- a bounded range is required for every document.
+  createRenderDocument(chart);
+  // @ts-expect-error -- an empty options object cannot select a document operation.
+  createRenderDocument(chart, {});
+  // @ts-expect-error -- the SVG pages shortcut has the same required range.
+  renderSvgPages(chart, {});
 }
 
 export function assertRequiredRenderRange(chart: ManiaChart): void {

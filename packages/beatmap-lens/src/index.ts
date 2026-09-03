@@ -4,8 +4,11 @@ export { osuLazerManiaPixelsPerSecond } from "./osu-lazer.js";
 export { iterateOsz, parseOsz } from "./osz.js";
 export { parseOsu } from "./parser.js";
 export { projectTime, unprojectTime } from "./projection.js";
+export { renderDefaults } from "./render-defaults.js";
+export { createRenderDocument } from "./render-document.js";
 export { createRenderScene } from "./render-scene.js";
 export { renderSvg, serializeSvg } from "./svg.js";
+export { renderSvgPages, serializeSvgPages } from "./svg-pages.js";
 export type {
   Beatmap,
   BeatmapAudio,
@@ -27,17 +30,36 @@ export type {
   ParseBeatmapOptions,
   ParsedOsu,
   ParseOszOptions,
+  PiecewiseLinearRenderTimeProjection,
   PlayfieldSize,
+  RenderDiagnostic,
+  RenderDocument,
+  RenderDocumentOptions,
+  RenderDocumentScaleInput,
   RenderLane,
   RenderMetricOptions,
   RenderMetrics,
   RenderNoteGlyph,
   RenderPadding,
+  RenderPaddingInput,
+  RenderPage,
+  RenderPanel,
   RenderScene,
   RenderSceneOptions,
   RenderThemeInput,
+  RenderTimeAxis,
+  RenderTimeAxisInput,
+  RenderTimeAxisTick,
+  RenderTimeCompressionMark,
   RenderTimeDirection,
   RenderTimeProjection,
+  ResolvedPlayfieldSize,
+  ResolvedRenderDocumentOptions,
+  ResolvedRenderDocumentScale,
+  ResolvedRenderTimeAxisOptions,
+  SerializedSvgPage,
   SerializeSvgOptions,
+  SerializeSvgPagesOptions,
+  SizePx,
   TimeRange,
 } from "./types.js";

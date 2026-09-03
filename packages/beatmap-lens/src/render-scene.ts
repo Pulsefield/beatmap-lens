@@ -1,4 +1,5 @@
-import { projectTime } from "./projection.js";
+import { projectTimeFromValidatedProjection, validateRenderTimeProjection } from "./projection.js";
+import { renderDefaults } from "./render-defaults.js";
 import type {
   LinearRenderTimeProjection,
   ManiaChart,
@@ -10,32 +11,26 @@ import type {
   RenderScene,
   RenderSceneOptions,
   RenderThemeInput,
+  RenderTimeProjection,
+  ResolvedPlayfieldSize,
 } from "./types.js";
 
-const defaultMetrics: RenderMetrics = {
-  paddingPx: {
-    top: 24,
-    right: 16,
-    bottom: 24,
-    left: 16,
-  },
-  laneGapPx: 4,
-  noteHeightPx: 8,
-  noteInsetPx: 5,
-  noteRadiusPx: 2,
-};
+export interface ResolvedRenderSceneStyle {
+  readonly metrics: RenderMetrics;
+  readonly playfield: ResolvedPlayfieldSize;
+}
 
-const defaultPlayfieldWidthPx = 640;
-const defaultPixelsPerSecond = 240;
-
-export function createRenderScene(chart: ManiaChart, options: RenderSceneOptions): RenderScene {
+export function createRenderScene(
+  chart: ManiaChart,
+  options: RenderSceneOptions,
+): RenderScene & { readonly projection: LinearRenderTimeProjection } {
   if (!options?.range) {
     throw new RangeError("A finite render range with startMs and endMs is required.");
   }
   const metrics = resolveMetrics(options.theme);
-  const pixelsPerSecond = options.pixelsPerSecond ?? defaultPixelsPerSecond;
+  const pixelsPerSecond = options.pixelsPerSecond ?? renderDefaults.scene.pixelsPerSecond;
   const { startMs, endMs } = options.range;
-  const timeDirection = options.timeDirection ?? "bottom-to-top";
+  const timeDirection = options.timeDirection ?? renderDefaults.scene.timeDirection;
   validateRenderInputs({
     endMs,
     metrics,
@@ -50,8 +45,7 @@ export function createRenderScene(chart: ManiaChart, options: RenderSceneOptions
   if (!Number.isFinite(heightPx) || heightPx <= 0) {
     throw new RangeError("Resolved scene heightPx must be finite and positive.");
   }
-  const { laneWidthPx, widthPx } = resolvePlayfield(options.playfield, metrics, chart.keyCount);
-  validateResolvedPlayfield(laneWidthPx, widthPx, metrics.noteInsetPx);
+  const style = resolveRenderSceneStyle(chart, options.playfield, options.theme);
   const projection: LinearRenderTimeProjection = {
     type: "linear",
     range: { startMs, endMs },
@@ -60,6 +54,44 @@ export function createRenderScene(chart: ManiaChart, options: RenderSceneOptions
     contentTopPx: metrics.paddingPx.top,
     contentHeightPx,
   };
+
+  return createRenderSceneFromProjection(chart, projection, style) as RenderScene & {
+    readonly projection: LinearRenderTimeProjection;
+  };
+}
+
+export function resolveRenderSceneStyle(
+  chart: ManiaChart,
+  playfield?: PlayfieldSize,
+  theme?: RenderThemeInput,
+): ResolvedRenderSceneStyle {
+  const metrics = resolveMetrics(theme);
+  validateMetrics(metrics);
+  const resolvedPlayfield = resolvePlayfield(playfield, metrics, chart.keyCount);
+  validateResolvedPlayfield(
+    resolvedPlayfield.laneWidthPx,
+    resolvedPlayfield.widthPx,
+    metrics.noteInsetPx,
+  );
+  return { metrics, playfield: resolvedPlayfield };
+}
+
+export function createRenderSceneFromProjection(
+  chart: ManiaChart,
+  projection: RenderTimeProjection,
+  style: ResolvedRenderSceneStyle,
+): RenderScene {
+  validateRenderTimeProjection(projection);
+  if (projection.contentTopPx !== style.metrics.paddingPx.top) {
+    throw new RangeError("projection.contentTopPx must equal the resolved top padding.");
+  }
+
+  const { metrics } = style;
+  const { laneWidthPx, widthPx } = style.playfield;
+  const heightPx = metrics.paddingPx.top + projection.contentHeightPx + metrics.paddingPx.bottom;
+  if (!Number.isFinite(heightPx) || heightPx <= 0) {
+    throw new RangeError("Resolved scene heightPx must be finite and positive.");
+  }
 
   const lanes = Array.from({ length: chart.keyCount }, (_, column): RenderLane => {
     const x = metrics.paddingPx.left + column * (laneWidthPx + metrics.laneGapPx);
@@ -77,8 +109,8 @@ export function createRenderScene(chart: ManiaChart, options: RenderSceneOptions
 
   const visibleNotes = chart.notes.filter((note) =>
     note.kind === "long"
-      ? note.endMs > startMs && note.startMs < endMs
-      : note.startMs >= startMs && note.startMs < endMs,
+      ? note.endMs > projection.range.startMs && note.startMs < projection.range.endMs
+      : note.startMs >= projection.range.startMs && note.startMs < projection.range.endMs,
   );
   const notes = visibleNotes.map((note) =>
     createNoteGlyph(note, lanes[note.column] as RenderLane, {
@@ -107,7 +139,7 @@ function createNoteGlyph(
   lane: RenderLane,
   options: {
     metrics: RenderMetrics;
-    projection: LinearRenderTimeProjection;
+    projection: RenderTimeProjection;
   },
 ): RenderNoteGlyph {
   const width = lane.width - options.metrics.noteInsetPx * 2;
@@ -115,8 +147,8 @@ function createNoteGlyph(
   const laneBottom = laneTop + options.projection.contentHeightPx;
   const visibleStartMs = Math.max(note.startMs, options.projection.range.startMs);
   const visibleEndMs = Math.min(note.endMs, options.projection.range.endMs);
-  const startY = projectTime(options.projection, visibleStartMs);
-  const endY = projectTime(options.projection, visibleEndMs);
+  const startY = projectTimeFromValidatedProjection(options.projection, visibleStartMs);
+  const endY = projectTimeFromValidatedProjection(options.projection, visibleEndMs);
   const isLong = note.kind === "long";
   const effectiveNoteHeight = Math.min(
     options.metrics.noteHeightPx,
@@ -152,11 +184,11 @@ function createNoteGlyph(
 function resolveMetrics(theme: RenderThemeInput | undefined): RenderMetrics {
   const metrics = theme?.metrics;
   return {
-    paddingPx: { ...defaultMetrics.paddingPx, ...metrics?.paddingPx },
-    laneGapPx: metrics?.laneGapPx ?? defaultMetrics.laneGapPx,
-    noteHeightPx: metrics?.noteHeightPx ?? defaultMetrics.noteHeightPx,
-    noteInsetPx: metrics?.noteInsetPx ?? defaultMetrics.noteInsetPx,
-    noteRadiusPx: metrics?.noteRadiusPx ?? defaultMetrics.noteRadiusPx,
+    paddingPx: { ...renderDefaults.scene.metrics.paddingPx, ...metrics?.paddingPx },
+    laneGapPx: metrics?.laneGapPx ?? renderDefaults.scene.metrics.laneGapPx,
+    noteHeightPx: metrics?.noteHeightPx ?? renderDefaults.scene.metrics.noteHeightPx,
+    noteInsetPx: metrics?.noteInsetPx ?? renderDefaults.scene.metrics.noteInsetPx,
+    noteRadiusPx: metrics?.noteRadiusPx ?? renderDefaults.scene.metrics.noteRadiusPx,
   };
 }
 
@@ -165,7 +197,7 @@ function resolvePlayfield(
   metrics: RenderMetrics,
   keyCount: ManiaChart["keyCount"],
 ): { readonly laneWidthPx: number; readonly widthPx: number } {
-  const candidate = (playfield ?? { widthPx: defaultPlayfieldWidthPx }) as {
+  const candidate = (playfield ?? renderDefaults.scene.playfield) as {
     readonly laneWidthPx?: unknown;
     readonly widthPx?: unknown;
   };
@@ -208,22 +240,7 @@ function validateRenderInputs(options: {
   pixelsPerSecond: number;
   startMs: number;
 }): void {
-  const paddingValues = Object.values(options.metrics.paddingPx);
-  if (paddingValues.some((value) => !Number.isFinite(value) || value < 0)) {
-    throw new RangeError("theme.metrics.paddingPx values must be finite and non-negative.");
-  }
-  if (!Number.isFinite(options.metrics.laneGapPx) || options.metrics.laneGapPx < 0) {
-    throw new RangeError("theme.metrics.laneGapPx must be finite and non-negative.");
-  }
-  if (!Number.isFinite(options.metrics.noteHeightPx) || options.metrics.noteHeightPx <= 0) {
-    throw new RangeError("theme.metrics.noteHeightPx must be finite and positive.");
-  }
-  if (!Number.isFinite(options.metrics.noteInsetPx) || options.metrics.noteInsetPx < 0) {
-    throw new RangeError("theme.metrics.noteInsetPx must be finite and non-negative.");
-  }
-  if (!Number.isFinite(options.metrics.noteRadiusPx) || options.metrics.noteRadiusPx < 0) {
-    throw new RangeError("theme.metrics.noteRadiusPx must be finite and non-negative.");
-  }
+  validateMetrics(options.metrics);
   if (!Number.isFinite(options.pixelsPerSecond) || options.pixelsPerSecond <= 0) {
     throw new RangeError("pixelsPerSecond must be finite and positive.");
   }
@@ -233,6 +250,25 @@ function validateRenderInputs(options: {
     options.endMs <= options.startMs
   ) {
     throw new RangeError("range.endMs must be finite and greater than range.startMs.");
+  }
+}
+
+function validateMetrics(metrics: RenderMetrics): void {
+  const paddingValues = Object.values(metrics.paddingPx);
+  if (paddingValues.some((value) => !Number.isFinite(value) || value < 0)) {
+    throw new RangeError("theme.metrics.paddingPx values must be finite and non-negative.");
+  }
+  if (!Number.isFinite(metrics.laneGapPx) || metrics.laneGapPx < 0) {
+    throw new RangeError("theme.metrics.laneGapPx must be finite and non-negative.");
+  }
+  if (!Number.isFinite(metrics.noteHeightPx) || metrics.noteHeightPx <= 0) {
+    throw new RangeError("theme.metrics.noteHeightPx must be finite and positive.");
+  }
+  if (!Number.isFinite(metrics.noteInsetPx) || metrics.noteInsetPx < 0) {
+    throw new RangeError("theme.metrics.noteInsetPx must be finite and non-negative.");
+  }
+  if (!Number.isFinite(metrics.noteRadiusPx) || metrics.noteRadiusPx < 0) {
+    throw new RangeError("theme.metrics.noteRadiusPx must be finite and non-negative.");
   }
 }
 

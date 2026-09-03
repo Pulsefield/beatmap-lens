@@ -310,9 +310,11 @@ function validateVisualSpeed(pixelsPerSecond: number): void {
 function normalizeProjectionBoundary(projection: RenderTimeProjection, yPx: number): number {
   const topPx = projection.contentTopPx;
   const bottomPx = topPx + projection.contentHeightPx;
+  const pixelsPerSecond =
+    projection.type === "linear" ? projection.pixelsPerSecond : projection.basePixelsPerSecond;
   const sourceMagnitudePx =
     (Math.max(Math.abs(projection.range.startMs), Math.abs(projection.range.endMs)) *
-      projection.pixelsPerSecond) /
+      pixelsPerSecond) /
     1_000;
   const tolerance =
     Number.EPSILON * 32 * Math.max(1, Math.abs(topPx), Math.abs(bottomPx), sourceMagnitudePx);

@@ -40,16 +40,42 @@ export function serializeSvg(scene: RenderScene, options: SerializeSvgOptions = 
       ["height", formatNumber(heightPx)],
       ["fill", "#101820"],
     ])}`,
-    `  ${tag("g", [["data-layer", "lanes"]], false)}`,
-    ...scene.lanes.map((lane) => `    ${renderLane(lane)}`),
-    "  </g>",
-    `  ${tag("g", [["data-layer", "notes"]], false)}`,
-    ...scene.notes.map((note) => `    ${renderNote(note)}`),
-    "  </g>",
+    ...serializeSceneLayers(scene, { indent: "  " }),
     "</svg>",
   ];
 
   return `${lines.join("\n")}\n`;
+}
+
+interface SerializeSceneLayersOptions {
+  readonly indent?: string;
+  readonly noteIdPrefix?: string;
+}
+
+export function serializeSceneLayers(
+  scene: RenderScene,
+  options: SerializeSceneLayersOptions = {},
+): readonly string[] {
+  const indent = options.indent ?? "";
+  return [
+    `${indent}${tag("g", [["data-layer", "lanes"]], false)}`,
+    ...scene.lanes.map((lane) => `${indent}  ${renderLane(lane)}`),
+    `${indent}</g>`,
+    `${indent}${tag("g", [["data-layer", "notes"]], false)}`,
+    ...scene.notes.map(
+      (note) =>
+        `${indent}  ${renderNote(
+          note,
+          options.noteIdPrefix
+            ? [
+                ["id", `${options.noteIdPrefix}-${note.id}`],
+                ["data-note-id", note.id],
+              ]
+            : undefined,
+        )}`,
+    ),
+    `${indent}</g>`,
+  ];
 }
 
 function renderLane(lane: RenderLane): string {
@@ -64,9 +90,12 @@ function renderLane(lane: RenderLane): string {
   ]);
 }
 
-function renderNote(note: RenderNoteGlyph): string {
+function renderNote(
+  note: RenderNoteGlyph,
+  attributes: readonly (readonly [name: string, value: string])[] = [["id", note.id]],
+): string {
   return tag("rect", [
-    ["id", note.id],
+    ...attributes,
     ["data-kind", note.kind],
     ["data-source-kind", note.sourceKind],
     ["data-column", String(note.column)],
@@ -85,7 +114,7 @@ function renderNote(note: RenderNoteGlyph): string {
   ]);
 }
 
-function tag(
+export function tag(
   name: string,
   attributes: readonly (readonly [name: string, value: string])[],
   selfClosing = true,
@@ -96,7 +125,7 @@ function tag(
   return selfClosing ? `<${name} ${serializedAttributes}/>` : `<${name} ${serializedAttributes}>`;
 }
 
-function sceneTitle(scene: RenderScene): string {
+export function sceneTitle(scene: RenderScene): string {
   const parts = [scene.metadata.artist, scene.metadata.title, scene.metadata.version].filter(
     (part): part is string => typeof part === "string" && part.length > 0,
   );
@@ -112,10 +141,10 @@ function escapeAttribute(value: string): string {
     .replace(/>/g, "&gt;");
 }
 
-function escapeText(value: string): string {
+export function escapeText(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-function formatNumber(value: number): string {
+export function formatNumber(value: number): string {
   return String(value);
 }

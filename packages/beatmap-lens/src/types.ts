@@ -97,6 +97,11 @@ export interface TimeRange {
   readonly endMs: number;
 }
 
+export interface SizePx {
+  readonly widthPx: number;
+  readonly heightPx: number;
+}
+
 export interface ManiaChart {
   readonly keyCount: number;
   readonly sourceKeyCount?: number;
@@ -155,7 +160,21 @@ export interface LinearRenderTimeProjection {
   readonly contentHeightPx: number;
 }
 
-export type RenderTimeProjection = LinearRenderTimeProjection;
+export interface PiecewiseLinearRenderTimeProjection {
+  readonly type: "piecewise-linear";
+  readonly range: TimeRange;
+  readonly direction: RenderTimeDirection;
+  readonly contentTopPx: number;
+  readonly contentHeightPx: number;
+  readonly basePixelsPerSecond: number;
+  readonly anchors: readonly {
+    readonly timeMs: number;
+    readonly distancePx: number;
+  }[];
+  readonly compressedRanges: readonly TimeRange[];
+}
+
+export type RenderTimeProjection = LinearRenderTimeProjection | PiecewiseLinearRenderTimeProjection;
 
 export type PlayfieldSize =
   | {
@@ -187,11 +206,57 @@ export interface RenderThemeInput {
   readonly metrics?: RenderMetricOptions;
 }
 
+export type RenderPaddingInput = number | Partial<RenderPadding>;
+
 export interface RenderSceneOptions {
   readonly range: TimeRange;
   readonly pixelsPerSecond?: number;
   readonly playfield?: PlayfieldSize;
   readonly timeDirection?: RenderTimeDirection;
+  readonly theme?: RenderThemeInput;
+}
+
+export type RenderDocumentScaleInput =
+  | {
+      readonly type: "linear";
+      readonly pixelsPerSecond?: number;
+    }
+  | {
+      readonly type: "fit";
+      readonly preferredPixelsPerSecond?: number;
+      readonly minPixelsPerSecond?: number;
+    }
+  | {
+      readonly type: "row-aware";
+      readonly basePixelsPerSecond?: number;
+      readonly minRowGapPx?: number;
+      readonly maxEmptyGapPx?: number;
+    };
+
+export interface RenderTimeAxisInput {
+  readonly side?: "left" | "right";
+  readonly widthPx?: number;
+  readonly labels?: "bounds" | "major";
+  readonly tickStepMs?: number | "auto";
+  readonly showCompressionMarks?: boolean;
+}
+
+export interface RenderDocumentOptions {
+  readonly range: TimeRange;
+  readonly page?: {
+    readonly size?: SizePx;
+    readonly paddingPx?: RenderPaddingInput;
+    readonly gapPx?: number;
+    readonly columns?: "auto" | number;
+  };
+  readonly panel?: {
+    readonly playfield?: PlayfieldSize;
+    readonly maxNoteRows?: number | "unbounded";
+    readonly maxSourceDurationMs?: number;
+  };
+  readonly scale?: RenderDocumentScaleInput;
+  readonly timeDirection?: RenderTimeDirection;
+  readonly timeAxis?: false | RenderTimeAxisInput;
   readonly theme?: RenderThemeInput;
 }
 
@@ -216,6 +281,113 @@ export interface RenderScene {
   readonly metadata: ManiaMetadata;
   readonly lanes: readonly RenderLane[];
   readonly notes: readonly RenderNoteGlyph[];
+}
+
+export interface ResolvedPlayfieldSize {
+  readonly widthPx: number;
+  readonly laneWidthPx: number;
+}
+
+export type ResolvedRenderDocumentScale =
+  | {
+      readonly type: "linear";
+      readonly pixelsPerSecond: number;
+    }
+  | {
+      readonly type: "fit";
+      readonly preferredPixelsPerSecond: number;
+      readonly minPixelsPerSecond: number;
+      readonly pixelsPerSecond: number;
+    }
+  | {
+      readonly type: "row-aware";
+      readonly basePixelsPerSecond: number;
+      readonly minRowGapPx: number;
+      readonly maxEmptyGapPx: number;
+    };
+
+export interface ResolvedRenderTimeAxisOptions {
+  readonly side: "left" | "right";
+  readonly widthPx: number;
+  readonly gapPx: number;
+  readonly labels: "bounds" | "major";
+  readonly tickStepMs: number | "auto";
+  readonly showCompressionMarks: boolean;
+}
+
+export interface ResolvedRenderDocumentOptions {
+  readonly pageSize: SizePx;
+  readonly pagePaddingPx: RenderPadding;
+  readonly pageGapPx: number;
+  readonly columnsPerPage: number;
+  readonly panelPlayfield: ResolvedPlayfieldSize;
+  readonly panelWidthPx: number;
+  readonly panelContentHeightPx: number;
+  readonly maxNoteRows: number | "unbounded";
+  readonly maxSourceDurationMs: number;
+  readonly scale: ResolvedRenderDocumentScale;
+  readonly timeDirection: RenderTimeDirection;
+  readonly timeAxis: false | ResolvedRenderTimeAxisOptions;
+  readonly panelCount: number;
+  readonly pageCount: number;
+}
+
+export interface RenderDiagnostic {
+  readonly severity: "warning";
+  readonly code: "fit-minimum-reached";
+  readonly message: string;
+}
+
+export interface RenderTimeAxisTick {
+  readonly kind: "start" | "major" | "end";
+  readonly timeMs: number;
+  readonly y: number;
+  readonly label: string;
+}
+
+export interface RenderTimeCompressionMark {
+  readonly range: TimeRange;
+  readonly y: number;
+}
+
+export interface RenderTimeAxis {
+  readonly side: "left" | "right";
+  readonly widthPx: number;
+  readonly gapPx: number;
+  readonly labels: "bounds" | "major";
+  readonly tickStepMs: number;
+  readonly ticks: readonly RenderTimeAxisTick[];
+  readonly compressionMarks: readonly RenderTimeCompressionMark[];
+}
+
+export interface RenderPanel {
+  readonly index: number;
+  readonly range: TimeRange;
+  readonly noteRowCount: number;
+  readonly frame: {
+    readonly x: number;
+    readonly y: number;
+    readonly width: number;
+    readonly height: number;
+  };
+  readonly scene: RenderScene;
+  readonly timeAxis?: RenderTimeAxis;
+}
+
+export interface RenderPage {
+  readonly index: number;
+  readonly size: SizePx;
+  readonly range: TimeRange;
+  readonly panels: readonly RenderPanel[];
+}
+
+export interface RenderDocument {
+  readonly kind: "mania-document";
+  readonly range: TimeRange;
+  readonly pageSize: SizePx;
+  readonly resolved: ResolvedRenderDocumentOptions;
+  readonly pages: readonly RenderPage[];
+  readonly diagnostics: readonly RenderDiagnostic[];
 }
 
 export interface RenderLane {
@@ -250,4 +422,16 @@ export interface RenderNoteGlyph {
 
 export interface SerializeSvgOptions {
   readonly title?: string;
+}
+
+export interface SerializeSvgPagesOptions {
+  readonly title?: string;
+}
+
+export interface SerializedSvgPage {
+  readonly index: number;
+  readonly count: number;
+  readonly range: TimeRange;
+  readonly size: SizePx;
+  readonly svg: string;
 }

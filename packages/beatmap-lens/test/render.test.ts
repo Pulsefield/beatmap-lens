@@ -100,6 +100,10 @@ describe("render scene and SVG", () => {
     );
   });
 
+  it("keeps the foundation 4K single-SVG output byte-identical to the baseline", () => {
+    expect(serializeSvg(foundationScene())).toBe(foundation4kSvgGolden);
+  });
+
   it("can render time from top to bottom explicitly", () => {
     const chart = toManiaChart(parseOsu(foundation4k));
     const scene = createRenderScene(chart, {
@@ -433,3 +437,21 @@ CircleSize:${keyCount}
 ${x},192,500,1,0,0:0:0:0:
 `;
 }
+
+const foundation4kSvgGolden = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 408.24" width="640" height="408.24" role="img" aria-label="Beatmap Lens - Foundation 4K - Normal 4K mania chart">
+  <title>Beatmap Lens - Foundation 4K - Normal 4K mania chart</title>
+  <rect x="0" y="0" width="640" height="408.24" fill="#101820"/>
+  <g data-layer="lanes">
+    <rect data-column="0" x="16" y="24" width="149" height="360.24" fill="#18232f" stroke="#314254"/>
+    <rect data-column="1" x="169" y="24" width="149" height="360.24" fill="#1f2d3a" stroke="#314254"/>
+    <rect data-column="2" x="322" y="24" width="149" height="360.24" fill="#18232f" stroke="#314254"/>
+    <rect data-column="3" x="475" y="24" width="149" height="360.24" fill="#1f2d3a" stroke="#314254"/>
+  </g>
+  <g data-layer="notes">
+    <rect id="note-0001" data-kind="normal" data-source-kind="normal" data-column="0" data-start-ms="500" data-end-ms="500" data-source-line="18" x="21" y="260.24" width="139" height="8" rx="2" fill="#f2c14e" stroke="#916f1d"/>
+    <rect id="note-0002" data-kind="normal" data-source-kind="normal" data-column="1" data-start-ms="1000" data-end-ms="1000" data-source-line="19" x="174" y="140.24" width="139" height="8" rx="2" fill="#f2c14e" stroke="#916f1d"/>
+    <rect id="note-0003" data-kind="normal" data-source-kind="normal" data-column="2" data-start-ms="1000" data-end-ms="1000" data-source-line="20" x="327" y="140.24" width="139" height="8" rx="2" fill="#f2c14e" stroke="#916f1d"/>
+    <rect id="note-0004" data-kind="normal" data-source-kind="normal" data-column="3" data-start-ms="1500" data-end-ms="1500" data-source-line="21" x="480" y="24" width="139" height="8" rx="2" fill="#f2c14e" stroke="#916f1d"/>
+  </g>
+</svg>
+`;
