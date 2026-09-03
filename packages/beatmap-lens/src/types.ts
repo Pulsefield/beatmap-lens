@@ -195,6 +195,15 @@ export interface RenderSceneOptions {
   readonly theme?: RenderThemeInput;
 }
 
+export interface OsuLazerManiaPixelsPerSecondOptions {
+  readonly scrollSpeed: number;
+  /** The effective gameplay rectangle after lazer screen scaling and safe-area adjustments. */
+  readonly gameplayViewport: {
+    readonly widthPx: number;
+    readonly heightPx: number;
+  };
+}
+
 export interface RenderScene {
   readonly kind: "mania";
   readonly keyCount: number;

@@ -12,6 +12,7 @@ import {
   type OsuDiagnostic,
   type OsuHitObject,
   type OsuHitObjectKind,
+  type OsuLazerManiaPixelsPerSecondOptions,
   type OsuProperty,
   type OsuSection,
   type OsuSourceLine,
@@ -49,6 +50,7 @@ export interface PublicTypeContract {
   OsuDiagnostic: OsuDiagnostic;
   OsuHitObject: OsuHitObject;
   OsuHitObjectKind: OsuHitObjectKind;
+  OsuLazerManiaPixelsPerSecondOptions: OsuLazerManiaPixelsPerSecondOptions;
   OsuProperty: OsuProperty;
   OsuSection: OsuSection;
   OsuSourceLine: OsuSourceLine;

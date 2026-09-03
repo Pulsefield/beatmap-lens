@@ -119,6 +119,28 @@ const excerpt = renderSvg(
 );
 ```
 
+### osu!lazer mania visual speed
+
+`osuLazerManiaPixelsPerSecond` converts lazer's mania scroll-speed setting and effective landscape
+gameplay viewport into the baseline linear scale consumed by `renderSvg`:
+
+```ts
+import { osuLazerManiaPixelsPerSecond, renderSvg } from "beatmap-lens";
+
+const pixelsPerSecond = osuLazerManiaPixelsPerSecond({
+  scrollSpeed: 22,
+  gameplayViewport: { widthPx: 1710, heightPx: 1112 },
+}); // ≈ 1783.944 px/s
+
+const svg = renderSvg(beatmap.chart, {
+  range: { startMs: 60_000, endMs: 70_000 },
+  pixelsPerSecond,
+});
+```
+
+Pass the final landscape gameplay rectangle. Its dimensions and the returned speed use the same
+pixel coordinate space; physical DPI/PPI is not an input.
+
 `theme.metrics` is a nested, partial geometry override; unspecified metrics keep their renderer
 defaults. SVG-only metadata such as `title` belongs to the separate third argument of `renderSvg`
 or the second argument of `serializeSvg`, never to scene geometry.
@@ -230,9 +252,9 @@ language, key modes outside 4K-10K, native bindings, and WebAssembly are not com
 needs a concrete consumer or measured constraint before entering scope.
 
 One `RenderScene` deliberately remains one contiguous range and one playfield. Maximum width or
-height solving, density-aware scale selection, horizontal multi-playfield flow, pagination,
-osu!stable/lazer scroll-speed adapters, and PNG or other raster output are deferred policy/backend
-layers. They are not options or capabilities of the current renderer.
+height solving, density-aware scale selection, horizontal multi-playfield flow, pagination, full
+osu! scroll-speed parity, and PNG or other raster output are deferred policy/backend layers. They
+are not options or capabilities of the current renderer.
 
 ## Development
 

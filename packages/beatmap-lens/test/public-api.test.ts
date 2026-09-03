@@ -7,6 +7,7 @@ describe("public API", () => {
       "connectBeatmapAudio",
       "createRenderScene",
       "iterateOsz",
+      "osuLazerManiaPixelsPerSecond",
       "parseBeatmap",
       "parseOsu",
       "parseOsz",

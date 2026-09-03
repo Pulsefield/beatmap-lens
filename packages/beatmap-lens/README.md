@@ -84,6 +84,21 @@ of `renderSvg` or the second argument of `serializeSvg`.
 | `theme.metrics.noteRadiusPx` | No | `2` |
 | serializer `title` | No | Metadata artist/title/version plus the key-count label; the key-count label alone when metadata is absent |
 
+### osu!lazer mania visual speed
+
+Use `osuLazerManiaPixelsPerSecond` to match lazer's baseline note spacing for its standard desktop
+landscape playfield:
+
+```ts
+const pixelsPerSecond = osuLazerManiaPixelsPerSecond({
+  scrollSpeed: 22,
+  gameplayViewport: { widthPx: 1710, heightPx: 1112 },
+}); // ≈ 1783.944 px/s
+```
+
+Pass the final landscape gameplay rectangle. Its dimensions and the returned speed use the same
+pixel coordinate space; physical DPI/PPI is not an input.
+
 Use the scene's canonical projection for every time/scene coordinate conversion:
 
 ```ts
@@ -135,5 +150,5 @@ current package features. See the [repository](https://github.com/Pulsefield/bea
 status and architecture.
 
 One `RenderScene` intentionally covers one range and one playfield. Maximum dimension solving,
-automatic readable-scale selection, horizontal multi-playfield layout, pagination, osu! scroll-speed
-adapters, and PNG/raster output are deferred layers rather than current renderer options.
+automatic readable-scale selection, horizontal multi-playfield layout, pagination, full osu!
+scroll-speed parity, and PNG/raster output are deferred layers rather than current renderer options.
