@@ -1,7 +1,7 @@
 {
   "name": "beatmap-lens",
-  "version": "0.0.0",
-  "description": "A pre-release TypeScript toolkit for 4K-10K osu!mania beatmaps.",
+  "version": "0.1.0",
+  "description": "A TypeScript toolkit for 4K-10K osu!mania beatmaps.",
   "keywords": [
     "osu",
     "osu-mania",
