@@ -134,7 +134,7 @@ textarea:focus-visible,
 
 .workspace-mode-switch {
   display: grid;
-  grid-template-columns: repeat(2, minmax(74px, 1fr));
+  grid-template-columns: repeat(3, minmax(60px, 1fr));
   gap: 3px;
   min-inline-size: 0;
   padding: 3px;

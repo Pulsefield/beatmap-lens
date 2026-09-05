@@ -2,12 +2,17 @@
 import { ref } from "vue";
 import AnnotateWorkspace from "./AnnotateWorkspace.vue";
 import InspectWorkspace from "./InspectWorkspace.vue";
+import ReviewInbox from "./ReviewInbox.vue";
+import ReviewWorkspace from "./ReviewWorkspace.vue";
 import type { WorkspaceMode } from "./workspace-mode";
 
 const mode = ref<WorkspaceMode>("annotate");
+const connectedReview = window.location.pathname === "/review";
 </script>
 
 <template>
-  <InspectWorkspace v-if="mode === 'inspect'" @change-mode="mode = $event" />
+  <ReviewInbox v-if="connectedReview" />
+  <InspectWorkspace v-else-if="mode === 'inspect'" @change-mode="mode = $event" />
+  <ReviewWorkspace v-else-if="mode === 'review'" @change-mode="mode = $event" />
   <AnnotateWorkspace v-else @change-mode="mode = $event" />
 </template>

@@ -14,7 +14,7 @@ const emit = defineEmits<{
 <template>
   <fieldset class="workspace-mode-switch" aria-label="Inspector workspace">
     <button
-      v-for="mode in (['inspect', 'annotate'] as const)"
+      v-for="mode in (['inspect', 'annotate', 'review'] as const)"
       :key="mode"
       class="workspace-mode-button"
       :class="{ 'is-active': modelValue === mode }"
