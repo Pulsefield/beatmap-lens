@@ -254,6 +254,9 @@ def main():
             refresh_completed(root)
         print(json.dumps(status(root), ensure_ascii=False, indent=2))
         return
+    stop = root / "controller/user-stop.json"
+    if stop.exists():
+        parser.error(f"Campaign is stopped by user request ({stop}); existing tasks and outputs are preserved.")
     lock = (root / "controller/dispatcher.lock").open("a+")
     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     lock.seek(0)

@@ -151,6 +151,10 @@ persisted work, and retains failures for coordinator inspection instead of silen
 retrying changed judgments. A successful labeler job is followed by a separate
 auditor job for the same assignment.
 
+A persisted `controller/user-stop.json` blocks `run` before job setup or launch.
+`status` remains available. Existing stopped tasks, inputs, outputs, and history
+are retained; the runner does not automatically resume a user-stopped campaign.
+
 Workers use factual inspection helpers with the PyArrow-enabled Python runtime:
 
 ```sh
