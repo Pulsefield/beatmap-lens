@@ -10,11 +10,12 @@ import {
   createReviewDocumentV2,
   createTaskPacketV2,
   hashWorkflowValueV2,
+  importHandoffV2,
   registerTaskV2,
   sealAuditV2,
   sealHandoffV2,
 } from "./domain";
-import { NOW, workflowFixture } from "./test-fixtures";
+import { historicalAcceptance, NOW, workflowFixture } from "./test-fixtures";
 
 const serviceUrl = pathToFileURL(resolve("scripts/review-workspace.mjs")).href;
 const exec = promisify(execFile);
@@ -94,6 +95,61 @@ async function get(url: string, pathname: string) {
 }
 
 describe("local Review service exchange", () => {
+  it("counts explicit human assessments separately from historical uncertain acceptances", async () => {
+    const f = await fixture();
+    const claim = { ...f.claim, assessment: { presence: "unresolved" as const } };
+    const handoff = await sealHandoffV2(f.task, {
+      handoffId: "uncertain-handoff",
+      createdAt: NOW,
+      agent: f.handoff.agent,
+      proposals: [claim],
+      audit: [],
+      questions: [],
+    });
+    const imported = await importHandoffV2(f.registered, handoff, f.sourceBytes);
+    const historical = historicalAcceptance(imported.document, handoff.handoffId, claim.id);
+    await writeFile(
+      join(f.workspace, "workflow", `${f.sha}.v2.json`),
+      serializeCanonicalJson(historical),
+    );
+    const service = await start(f.workspace);
+    const inbox = await get(service.url, "inbox");
+    expect(inbox.sources[0].humanAssessmentCounts).toEqual({
+      settled: 0,
+      unresolved: 1,
+      unreviewed: 0,
+    });
+    expect(inbox.sources[0].reviews[0]).toMatchObject({
+      status: "accepted",
+      assessment: { presence: "unresolved" },
+    });
+    const feedback = await get(service.url, `feedback/${f.sha}`);
+    const clarified = await post(service.url, `human/${f.sha}/addObservations`, {
+      expectedBase: feedback.documentVersion,
+      input: {
+        claims: [{ ...claim, assessment: { presence: "present", salience: "supporting" } }],
+        humanId: "fixture-human",
+      },
+    });
+    expect(clarified.status).toBe(200);
+    expect(clarified.value.document.decisions).toEqual(historical.decisions);
+    expect(clarified.value.document.observations[0]).toEqual(historical.observations[0]);
+    expect((await get(service.url, "inbox")).sources[0].humanAssessmentCounts).toEqual({
+      settled: 1,
+      unresolved: 1,
+      unreviewed: 0,
+    });
+    expect((await get(service.url, `feedback/${f.sha}`)).directObservations[0]).toMatchObject({
+      confirmedAt: clarified.value.document.observations[1].confirmedAt,
+      summary: {
+        id: claim.id,
+        tagId: claim.tagId,
+        scope: claim.scope,
+        assessment: { presence: "present", salience: "supporting" },
+      },
+    });
+  });
+
   it("returns compact agent feedback with exact human modifications and immutable provenance", async () => {
     const f = await fixture();
     const service = await start(f.workspace);

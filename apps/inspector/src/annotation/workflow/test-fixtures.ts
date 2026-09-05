@@ -1,6 +1,6 @@
 import { inspectOsuSourceV1 } from "../source-identity";
 import { createStableNoteRefsV1 } from "../stable-note-ref";
-import type { ClaimV2, FoundationV2 } from "./contracts";
+import type { ClaimV2, FoundationV2, HumanDecisionV2, ReviewDocumentV2 } from "./contracts";
 import { FOUNDATION_CONTRACT_V2 } from "./contracts";
 import {
   approveFoundationV2,
@@ -11,6 +11,44 @@ import {
 } from "./domain";
 
 export const NOW = "2026-09-05T00:00:00.000Z";
+
+/** Reproduce records written by the previous ambiguous Accept original UI. */
+export function historicalAcceptance(
+  document: ReviewDocumentV2,
+  handoffId: string,
+  claimId: string,
+): ReviewDocumentV2 {
+  const handoff = document.handoffs.find((entry) => entry.handoff.handoffId === handoffId)?.handoff;
+  const claim = handoff?.proposals.find((claim) => claim.id === claimId);
+  if (!handoff || !claim) throw new Error("Historical fixture requires an imported claim.");
+  const decision: HumanDecisionV2 = {
+    id: "historical-acceptance",
+    handoffId,
+    claimId,
+    disposition: "accepted",
+    humanId: "fixture-human",
+    decidedAt: NOW,
+    rationale: "Human confirmed the original proposal.",
+    observationId: "historical-acceptance:observation",
+  };
+  return {
+    ...document,
+    revision: document.revision + 1,
+    reviewRevision: document.reviewRevision + 1,
+    decisions: [...document.decisions, decision],
+    observations: [
+      ...document.observations,
+      {
+        id: "historical-acceptance:observation",
+        claim,
+        foundationSha256: handoff.foundationSha256,
+        humanId: decision.humanId,
+        confirmedAt: NOW,
+        origin: { kind: "agent-proposal", handoffId, claimId, decisionId: decision.id },
+      },
+    ],
+  };
+}
 
 export async function workflowFixture() {
   const sourceBytes = new TextEncoder().encode(`osu file format v14

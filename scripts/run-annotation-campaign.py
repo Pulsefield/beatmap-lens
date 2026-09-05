@@ -183,7 +183,10 @@ def chart_acceptance(chart, feedback, handoff):
         return "awaiting-review"
     states = {r["status"] for r in reviews}
     questions = {q["id"]: q for q in handoff["questions"]}
-    human = {r["claimId"] for r in reviews if r["status"] in ("accepted", "modified")}
+    human = {r["claimId"] for r in reviews if r["status"] in ("accepted", "modified")
+             and r.get("modifiedClaim", r["summary"])["assessment"]["presence"] in ("present", "absent")}
+    uncertain_human = any(r["status"] in ("accepted", "modified") and r["claimId"] not in human
+                          for r in reviews)
     all_claims = [c["id"] for c in handoff["proposals"]]
     dispositions = {
         q["disposition"] for q in chart["questions"]
@@ -194,7 +197,7 @@ def chart_acceptance(chart, feedback, handoff):
         return "stale"
     if chart.get("coverageReview", {}).get("outcome") != "supported" or states & {"needs-revision", "rejected"} or "needs-revision" in dispositions:
         return "needs-revision"
-    if states & {"needs-expert", "deferred"} or "needs-expert" in dispositions:
+    if uncertain_human or states & {"needs-expert", "deferred"} or "needs-expert" in dispositions:
         return "needs-expert"
     if states - {"agent-reviewed", "accepted", "modified"}:
         return "awaiting-review"

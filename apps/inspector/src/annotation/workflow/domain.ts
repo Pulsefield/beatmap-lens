@@ -594,6 +594,10 @@ export async function decideClaimV2(
     throw new Error("Only a modified human decision may supply a revised claim.");
   const claim = input.modifiedClaim ?? proposal;
   assertClaimV2(claim, createStableNoteRefsV1(inspected.chart), document.foundation);
+  if (confirming && ["unresolved", "unreviewed"].includes(claim.assessment.presence))
+    throw new Error(
+      "Choose present with salience or absent before confirming a proposal, or defer this review. Unresolved and unreviewed do not decide presence.",
+    );
   equal(claim.id, proposal.id, "Modified claim identity");
   const id = input.id ?? crypto.randomUUID();
   if (document.decisions.some((decision) => decision.id === id))

@@ -482,7 +482,33 @@ export async function startReviewWorkspace(options) {
     for (const filename of files.filter((name) => /^[a-f\d]{64}\.v2\.json$/.test(name)).sort()) {
       try {
         const current = await summary(filename.slice(0, 64));
-        rows.push({ ...current.row, requests: reviewRequests(current) });
+        const assessments = new Map(
+          current.feedback.agentReviews.map((review) => [
+            json([review.handoffId, review.claimId]),
+            (review.modifiedClaim ?? review.summary).assessment,
+          ]),
+        );
+        const humanClaims = current.feedback.agentReviews
+          .flatMap((review) =>
+            review.decision?.observationId ? [review.modifiedClaim ?? review.summary] : [],
+          )
+          .concat(current.feedback.directObservations.map((observation) => observation.summary));
+        const humanAssessmentCounts = { settled: 0, unresolved: 0, unreviewed: 0 };
+        for (const claim of humanClaims) {
+          const presence = claim.assessment.presence;
+          humanAssessmentCounts[
+            presence === "present" || presence === "absent" ? "settled" : presence
+          ]++;
+        }
+        rows.push({
+          ...current.row,
+          reviews: current.row.reviews.map((review) => ({
+            ...review,
+            assessment: assessments.get(json([review.handoffId, review.claimId])),
+          })),
+          humanAssessmentCounts,
+          requests: reviewRequests(current),
+        });
         if (exportDispositions && !current.restored) await dispositions(filename.slice(0, 64));
       } catch (error) {
         if (!errors.some((entry) => entry.filename === filename && entry.error === error.message))

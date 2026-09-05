@@ -18,9 +18,68 @@ import {
   validateHandoffV2,
 } from "./domain";
 import { createExperimentalFoundationV2 } from "./experimental-campaign";
-import { NOW, workflowFixture } from "./test-fixtures";
+import { historicalAcceptance, NOW, workflowFixture } from "./test-fixtures";
 
 describe("V2 source-backed agent–human domain", () => {
+  it("requires explicit presence for new confirmations while preserving historical uncertain acceptances", async () => {
+    const f = await workflowFixture();
+    const imported = await importHandoffV2(f.registered, f.handoff, f.sourceBytes);
+    const unresolved = f.handoff.proposals[2];
+    if (!unresolved) throw new Error("Missing unresolved fixture.");
+    const input = {
+      handoffId: f.handoff.handoffId,
+      claimId: unresolved.id,
+      humanId: "human",
+      rationale: "Explicit review.",
+    };
+    await expect(
+      decideClaimV2(imported.document, { ...input, disposition: "accepted" }, f.sourceBytes),
+    ).rejects.toThrow("Choose present with salience or absent");
+    await expect(
+      decideClaimV2(
+        imported.document,
+        {
+          ...input,
+          disposition: "modified",
+          modifiedClaim: { ...unresolved, assessment: { presence: "unreviewed" } },
+        },
+        f.sourceBytes,
+      ),
+    ).rejects.toThrow("Choose present with salience or absent");
+    const deferred = await decideClaimV2(
+      imported.document,
+      { ...input, disposition: "deferred" },
+      f.sourceBytes,
+    );
+    expect(deferred.observations).toEqual([]);
+    const clarifiedClaim: ClaimV2 = {
+      ...unresolved,
+      assessment: { presence: "present", salience: "supporting" },
+    };
+    const modified = await decideClaimV2(
+      deferred,
+      { ...input, disposition: "modified", modifiedClaim: clarifiedClaim },
+      f.sourceBytes,
+    );
+    expect(modified.observations[0]?.claim).toEqual(clarifiedClaim);
+    const historical = historicalAcceptance(imported.document, f.handoff.handoffId, unresolved.id);
+    const bytes = serializeCanonicalJson(historical);
+    expect(
+      serializeCanonicalJson(await assertReviewDocumentV2(JSON.parse(bytes), f.sourceBytes)),
+    ).toBe(bytes);
+    const clarified = await addHumanObservationV2(
+      historical,
+      { claim: clarifiedClaim, humanId: "human", now: () => "2026-09-05T01:00:00.000Z" },
+      f.sourceBytes,
+    );
+    expect(clarified.decisions).toEqual(historical.decisions);
+    expect(clarified.observations[0]).toEqual(historical.observations[0]);
+    expect(clarified.observations[1]?.claim.assessment).toEqual({
+      presence: "present",
+      salience: "supporting",
+    });
+  });
+
   it("retains legacy singular correspondence bytes and pinned hashes when reopening existing snapshots", async () => {
     const f = await workflowFixture();
     const root = new FakeDirectoryHandle();

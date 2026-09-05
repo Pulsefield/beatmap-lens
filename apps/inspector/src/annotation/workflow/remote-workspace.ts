@@ -1,5 +1,5 @@
 import type { SourceIdentityV1 } from "../contracts";
-import type { AgentReviewV2, ReviewBaseV2 } from "./contracts";
+import type { AgentReviewV2, AssessmentV2, ReviewBaseV2 } from "./contracts";
 import type { StoredReviewV2, WorkflowDirectoryV2 } from "./directory";
 
 export type ReviewStoreV2 = Omit<WorkflowDirectoryV2, "registerSourceFromApprovedFoundation">;
@@ -10,6 +10,11 @@ export interface InboxSourceV2 {
   readonly source: SourceIdentityV1;
   readonly version: ReviewBaseV2;
   readonly counts: Readonly<Record<string, number>>;
+  readonly humanAssessmentCounts?: {
+    readonly settled: number;
+    readonly unresolved: number;
+    readonly unreviewed: number;
+  };
   readonly expertQueue: readonly InboxClaimV2[];
   readonly reviews: readonly InboxClaimV2[];
   readonly requests: readonly {
@@ -27,6 +32,7 @@ export type InboxClaimV2 = Pick<
 > & {
   readonly tagId: string;
   readonly scope: { readonly startMs: number; readonly endMs: number };
+  readonly assessment?: AssessmentV2;
 };
 export interface ReviewInboxV2 {
   readonly workspace: string;

@@ -30,6 +30,16 @@ const counts = computed(() => {
   return total;
 });
 const failedDeliveries = computed(() => inbox.value?.receipts.filter(receipt => receipt.status === "error") ?? []);
+const humanAssessments = computed(() => (inbox.value?.sources ?? []).reduce((total, source) => ({
+  settled: total.settled + (source.humanAssessmentCounts?.settled ?? 0),
+  unresolved: total.unresolved + (source.humanAssessmentCounts?.unresolved ?? 0),
+  unreviewed: total.unreviewed + (source.humanAssessmentCounts?.unreviewed ?? 0),
+}), { settled: 0, unresolved: 0, unreviewed: 0 }));
+
+function reviewLabel(claim: InboxClaimV2): string {
+  if (!claim.assessment || !["accepted", "modified"].includes(claim.status)) return claim.status;
+  return `${claim.status} · ${claim.assessment.presence}${claim.assessment.presence === "present" ? ` · ${claim.assessment.salience}` : ""}`;
+}
 
 async function refresh(): Promise<void> {
   if (refreshing || stopped) return;
@@ -86,13 +96,13 @@ onBeforeUnmount(() => { stopped = true; clearTimeout(timer); });
     <header class="inbox-header"><div><p class="inbox-kicker">Beatmap Lens</p><h1>Review inbox</h1><p>Agents continue in the background. Only requests for your judgment appear here.</p></div><p class="inbox-connection" role="status">{{ connectionError ? 'Connection interrupted · last inbox retained' : inbox ? `Connected · ${lastSynced}` : 'Connecting…' }}</p></header>
     <p v-if="connectionError" class="inbox-error" role="alert">{{ connectionError }}</p>
     <p v-if="loadError" class="inbox-error" role="alert">{{ loadError }}</p>
-    <div class="inbox-summary"><strong>{{ tasks.length }} pending {{ tasks.length === 1 ? 'task' : 'tasks' }}</strong><span>{{ counts['agent-reviewed'] ?? 0 }} machine-reviewed</span><span>{{ (counts.accepted ?? 0) + (counts.modified ?? 0) }} human-confirmed</span><span>{{ counts.deferred ?? 0 }} deferred</span></div>
+    <div class="inbox-summary"><strong>{{ tasks.length }} pending {{ tasks.length === 1 ? 'task' : 'tasks' }}</strong><span>{{ counts['agent-reviewed'] ?? 0 }} machine-reviewed</span><span>{{ humanAssessments.settled }} explicit human judgments</span><span v-if="humanAssessments.unresolved || humanAssessments.unreviewed">{{ humanAssessments.unresolved + humanAssessments.unreviewed }} uncertain or unreviewed human records</span><span>{{ counts.deferred ?? 0 }} deferred</span></div>
     <section v-if="inbox && !tasks.length" class="inbox-empty"><h2>No requests waiting</h2><p>New requests arrive here automatically. Machine review results remain available below.</p></section>
     <section v-for="task in tasks" :key="`${task.source.source.sha256}:${task.id}`" class="inbox-task">
       <div><p class="inbox-kicker">{{ task.title }}</p><h2>{{ task.source.source.title }} <span>[{{ task.source.source.difficulty }}]</span></h2><p class="inbox-question">{{ task.question }}</p></div>
       <div class="inbox-claims"><button v-for="claim in task.claims" :key="claim.claimId" type="button" :disabled="loading" @click="open(task.source, claim)"><span>{{ claim.tagId }}<small>{{ (claim.scope.startMs / 1000).toFixed(3) }}–{{ (claim.scope.endMs / 1000).toFixed(3) }} s · {{ claim.status }}</small></span><span>Review →</span></button></div>
     </section>
-    <details v-if="inbox?.sources.length" class="inbox-history"><summary>All agent work · {{ counts.total ?? 0 }} claims</summary><p>Awaiting audit {{ counts['awaiting-audit'] ?? 0 }} · Needs revision {{ counts['needs-revision'] ?? 0 }} · Stale {{ counts.stale ?? 0 }} · Rejected {{ counts.rejected ?? 0 }}</p><section v-for="source in inbox.sources" :key="source.source.sha256"><h2>{{ source.source.title }} · {{ source.source.difficulty }}</h2><button type="button" :disabled="loading" @click="open(source)"><span>Open chart</span><span>{{ source.source.noteCount }} notes →</span></button><button v-for="claim in source.reviews" :key="`${claim.handoffId}:${claim.claimId}`" type="button" :disabled="loading" @click="open(source, claim)"><span>{{ claim.tagId }} · {{ (claim.scope.startMs / 1000).toFixed(3) }} s</span><span>{{ claim.status }} →</span></button></section></details>
+    <details v-if="inbox?.sources.length" class="inbox-history"><summary>All agent work · {{ counts.total ?? 0 }} claims</summary><p>Awaiting audit {{ counts['awaiting-audit'] ?? 0 }} · Needs revision {{ counts['needs-revision'] ?? 0 }} · Stale {{counts.stale ?? 0 }} · Rejected {{ counts.rejected ?? 0 }}</p><section v-for="source in inbox.sources" :key="source.source.sha256"><h2>{{ source.source.title }} · {{ source.source.difficulty }}</h2><button type="button" :disabled="loading" @click="open(source)"><span>Open chart</span><span>{{ source.source.noteCount }} notes →</span></button><button v-for="claim in source.reviews" :key="`${claim.handoffId}:${claim.claimId}`" type="button" :disabled="loading" @click="open(source, claim)"><span>{{ claim.tagId }} · {{ (claim.scope.startMs / 1000).toFixed(3) }} s</span><span>{{ reviewLabel(claim) }} →</span></button></section></details>
     <details v-if="failedDeliveries.length" class="inbox-history"><summary>Delivery issues · {{ failedDeliveries.length }}</summary><p v-for="receipt in failedDeliveries" :key="receipt.id">{{ receipt.error }}</p></details>
     <footer v-if="inbox">Decisions are saved to the connected workspace and returned to the agent outbox automatically.</footer>
   </div>

@@ -5,9 +5,14 @@ import { createApp, h, nextTick, shallowRef } from "vue";
 import { FakeDirectoryHandle } from "./annotation/test-helpers";
 import type { ClaimV2, FoundationV2 } from "./annotation/workflow/contracts";
 import { WorkflowDirectoryV2 } from "./annotation/workflow/directory";
-import { sealAuditV2, sealHandoffV2 } from "./annotation/workflow/domain";
+import {
+  addHumanObservationV2,
+  reviewDocumentVersionV2,
+  sealAuditV2,
+  sealHandoffV2,
+} from "./annotation/workflow/domain";
 import type { RemoteSourceV2 } from "./annotation/workflow/remote-workspace";
-import { NOW, workflowFixture } from "./annotation/workflow/test-fixtures";
+import { historicalAcceptance, NOW, workflowFixture } from "./annotation/workflow/test-fixtures";
 import ReviewWorkspace from "./ReviewWorkspace.vue";
 
 const picker = vi.hoisted(() => vi.fn());
@@ -28,6 +33,114 @@ afterEach(() => {
 });
 
 describe("ReviewWorkspace mounted workflow", () => {
+  it("routes an unresolved inbox proposal through an explicit assessment instead of Accept original", async () => {
+    const f = await workspaceFixture(true);
+    if (!f.handoff) throw new Error("Missing handoff.");
+    const current = await f.read();
+    if (!current) throw new Error("Missing review.");
+    const imported = await f.directory.importHandoff(f.sourceBytes, current.version, f.handoff);
+    const container = document.createElement("div");
+    document.body.append(container);
+    const app = createApp(ReviewWorkspace, {
+      remoteSource: { ...imported.stored, sourceBytes: Array.from(f.sourceBytes) },
+      openClaim: { handoffId: f.handoff.handoffId, claimId: "claim-c" },
+    });
+    app.config.errorHandler = (error) => appErrors.push(error);
+    apps.push(app);
+    app.mount(container);
+    await vi.waitFor(() =>
+      expect(container.textContent).toContain("This proposal does not decide presence"),
+    );
+    expect(
+      [...container.querySelectorAll("button")].some(
+        (node) => node.textContent === "Accept original",
+      ),
+    ).toBe(false);
+    await click(container, "Decide judgment");
+    await setValue(
+      control(container, "Human decision rationale"),
+      "The scoped pattern is present, supporting.",
+      "input",
+    );
+    expect(button(container, "Save modified").disabled).toBe(true);
+    await setValue(control(container, "Assessment"), "present");
+    await setValue(control(container, "Salience"), "supporting");
+    expect(
+      [...container.querySelectorAll("button")].some(
+        (node) => node.textContent === "Accept original",
+      ),
+    ).toBe(false);
+    const requests: unknown[] = [];
+    const request = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
+      const body = JSON.parse(String(options?.body));
+      requests.push(body);
+      const saved = await f.directory.decide(f.sourceBytes, body.expectedBase, body.input);
+      return new Response(JSON.stringify(saved), { status: 200 });
+    });
+    try {
+      await click(container, "Save modified");
+      expect(requests).toHaveLength(1);
+      expect((await f.read())?.document.decisions[0]?.disposition).toBe("modified");
+      expect((await f.read())?.document.observations[0]?.claim.assessment).toEqual({
+        presence: "present",
+        salience: "supporting",
+      });
+    } finally {
+      request.mockRestore();
+    }
+  });
+
+  it("distinguishes a historical uncertain acceptance from its later direct human clarification", async () => {
+    const f = await workspaceFixture(true);
+    if (!f.handoff) throw new Error("Missing handoff.");
+    const current = await f.read();
+    if (!current) throw new Error("Missing review.");
+    const imported = await f.directory.importHandoff(f.sourceBytes, current.version, f.handoff);
+    const historical = historicalAcceptance(
+      imported.stored.document,
+      f.handoff.handoffId,
+      "claim-c",
+    );
+    const original = historical.observations[0]?.claim;
+    if (!original) throw new Error("Missing historical claim.");
+    const clarified = await addHumanObservationV2(
+      historical,
+      {
+        claim: { ...original, assessment: { presence: "present", salience: "supporting" } },
+        humanId: "fixture-human",
+        now: () => "2026-09-05T01:00:00.000Z",
+      },
+      f.sourceBytes,
+    );
+    const container = document.createElement("div");
+    document.body.append(container);
+    const app = createApp(ReviewWorkspace, {
+      remoteSource: {
+        document: clarified,
+        version: await reviewDocumentVersionV2(clarified),
+        sourceBytes: Array.from(f.sourceBytes),
+      },
+      openClaim: { handoffId: f.handoff.handoffId, claimId: "claim-c" },
+    });
+    app.config.errorHandler = (error) => appErrors.push(error);
+    apps.push(app);
+    app.mount(container);
+    await vi.waitFor(() =>
+      expect(container.textContent).toContain("This historical acceptance kept unresolved"),
+    );
+    expect(container.textContent).toContain("Later direct human judgment: present · supporting");
+    expect(container.textContent).toContain("accepted · unresolved");
+    expect(
+      [...container.querySelectorAll("button")].some((node) =>
+        ["Accept original", "Save modified", "Decide judgment"].includes(node.textContent ?? ""),
+      ),
+    ).toBe(false);
+    await click(container, "View human clarification");
+    expect(control(container, "Assessment").value).toBe("present");
+    expect(control(container, "Salience").value).toBe("supporting");
+    expect(control(container, "Assessment").disabled).toBe(true);
+  });
+
   it("preserves a human draft when an independent audit arrives through the connected inbox", async () => {
     const f = await workspaceFixture(true);
     if (!f.task || !f.handoff) throw new Error("Fixture needs a task.");

@@ -65,6 +65,15 @@ const activeFoundation = computed(() => document.value?.foundation ?? foundation
 const activeClaim = computed(() => drafts.value.find(claim => claim.id === activeClaimId.value));
 const expertQueue = computed(() => agentReviews.value.filter(review => review.status === "needs-expert"));
 const activeReview = computed(() => agentReviews.value.find(review => review.handoffId === activeHandoffId.value && review.claimId === activeClaimId.value));
+const originalProposal = computed(() => document.value?.handoffs.find(entry => entry.handoff.handoffId === activeHandoffId.value)?.handoff.proposals.find(claim => claim.id === activeClaimId.value));
+const finalDecision = computed(() => decisionsForClaim.value.at(-1)?.disposition === "deferred" ? undefined : decisionsForClaim.value.at(-1));
+const finalObservation = computed(() => document.value?.observations.find(observation => observation.id === finalDecision.value?.observationId));
+const uncertainAcceptance = computed(() => Boolean(finalObservation.value && !settled(finalObservation.value.claim)));
+const laterClarification = computed(() => {
+  const prior = finalObservation.value;
+  if (!prior || !uncertainAcceptance.value) return undefined;
+  return document.value?.observations.filter(observation => observation.origin.kind === "direct-human" && observation.confirmedAt > prior.confirmedAt && observation.claim.id === prior.claim.id && observation.claim.tagId === prior.claim.tagId && observation.claim.scope.startMs === prior.claim.scope.startMs && observation.claim.scope.endMs === prior.claim.scope.endMs && settled(observation.claim)).at(-1);
+});
 const routineCount = computed(() => agentReviews.value.filter(review => review.status === "agent-reviewed").length);
 const agentActionCount = computed(() => agentReviews.value.filter(review => ["awaiting-audit", "needs-revision", "stale"].includes(review.status)).length);
 const endMs = computed(() => source.value ? chartEndMs(source.value.chart) : 1000);
@@ -90,7 +99,7 @@ const selectionBand = computed(() => {
   const band = projectSceneRange(frame.value.scene.projection, activeClaim.value.scope);
   return band ? { ...band, x: 0, width: size.value.width } : undefined;
 });
-const canEdit = computed(() => !busy.value && !sourceLoading.value && (editorOrigin.value === "direct" || editorOrigin.value === "proposal"));
+const canEdit = computed(() => !busy.value && !sourceLoading.value && (editorOrigin.value === "direct" || (editorOrigin.value === "proposal" && !finalDecision.value)));
 const approved = computed(() => activeFoundation.value.approval.status === "human-approved");
 const decisionsForClaim = computed(() => document.value?.decisions.filter(decision => decision.handoffId === activeHandoffId.value && decision.claimId === activeClaimId.value) ?? []);
 const draftIsStale = computed(() => editorReviewRevision.value === undefined
@@ -473,7 +482,17 @@ function decide(disposition: HumanDecisionV2["disposition"]): void {
 }
 
 function latestDecision(handoffId: string, claimId: string): string {
-  return agentReviews.value.find(review => review.handoffId === handoffId && review.claimId === claimId)?.status ?? "awaiting-audit";
+  const review = agentReviews.value.find(review => review.handoffId === handoffId && review.claimId === claimId);
+  const observation = document.value?.observations.find(entry => entry.id === review?.decision?.observationId);
+  return observation && !settled(observation.claim) ? `${review?.status} · ${observation.claim.assessment.presence}` : review?.status ?? "awaiting-audit";
+}
+
+function settled(claim: ClaimV2 | undefined): boolean {
+  return claim?.assessment.presence === "present" || claim?.assessment.presence === "absent";
+}
+
+function assessmentLabel(claim: ClaimV2): string {
+  return claim.assessment.presence === "present" ? `present · ${claim.assessment.salience}` : claim.assessment.presence;
 }
 
 function communityAlignments(tag: FoundationTagV2): readonly CommunityAlignmentV2[] {
@@ -553,7 +572,7 @@ onBeforeUnmount(stashDraft);
         </div>
         </details>
       </section>
-      <section v-if="document?.observations.length" class="review-section"><h2>Human observations · {{ document.observations.length }}</h2><button v-for="observation in document.observations" :key="observation.id" type="button" class="review-list-row" @click="openObservation(observation.claim)"><span>{{ observation.claim.tagId }}<small>{{ observation.claim.scope.startMs }}–{{ observation.claim.scope.endMs }} ms</small></span><span>{{ observation.claim.assessment.presence }}</span></button></section>
+      <section v-if="document?.observations.length" class="review-section"><h2>Human observations · {{ document.observations.length }}</h2><button v-for="observation in document.observations" :key="observation.id" type="button" class="review-list-row" @click="openObservation(observation.claim)"><span>{{ observation.claim.tagId }}<small>{{ observation.claim.scope.startMs }}–{{ observation.claim.scope.endMs }} ms</small><small>{{ observation.origin.kind === 'direct-human' ? 'Direct human judgment' : 'Proposal decision' }} · {{ observation.confirmedAt }}</small></span><span>{{ assessmentLabel(observation.claim) }}</span></button></section>
       <p class="review-copy review-legacy">Existing Annotate records retain V1 positive-only semantics. Review V2 writes separate workflow files.</p>
     </aside>
     <div v-if="source && frame && !calibrationExample" class="review-preview" :class="{ 'mobile-active': mobilePanel === 'preview' }">
@@ -596,7 +615,7 @@ onBeforeUnmount(stashDraft);
         <p class="review-kicker">{{ editorOrigin === 'proposal' ? 'Agent proposal · review each claim' : editorOrigin === 'observation' ? 'Saved human observation' : 'Human section draft' }}</p>
         <template v-if="activeClaim">
           <section v-if="editorOrigin === 'proposal' && activeReview" class="review-section review-audit-result">
-            <h2>{{ activeReview.status }}</h2>
+            <h2>{{ latestDecision(activeHandoffId, activeClaim.id) }}</h2>
             <p v-if="activeReview.question">{{ activeReview.question }}</p>
             <p class="review-copy">{{ activeReview.rationale }}</p>
             <details v-if="activeReview.audits.length"><summary>Independent findings · {{ activeReview.audits.length }}</summary><p v-for="finding in activeReview.audits" :key="finding.auditId" class="review-decision"><strong>{{ finding.producerId }} · {{ finding.result.outcome }}</strong><br>{{ finding.result.rationale }}</p></details>
@@ -614,8 +633,13 @@ onBeforeUnmount(stashDraft);
           </template>
           <button v-if="editorOrigin === 'direct'" class="review-primary" type="button" :disabled="busy || sourceLoading || !stored || !approved || !humanId.trim() || draftIsStale" @click="saveSection">Save section judgments</button>
           <template v-if="editorOrigin === 'proposal'">
+            <p v-if="uncertainAcceptance" class="review-copy">This historical acceptance kept {{ finalObservation?.claim.assessment.presence }}. It did not decide whether this pattern is present.</p>
+            <p v-if="laterClarification" class="review-copy">Later direct human judgment: {{ assessmentLabel(laterClarification.claim) }} · {{ laterClarification.confirmedAt }}.<button type="button" @click="openObservation(laterClarification.claim)">View human clarification</button></p>
+            <p v-else-if="!finalDecision && !settled(originalProposal)" class="review-copy">This proposal does not decide presence. Choose present with salience or absent in the judgment editor, or defer the review.</p>
+            <template v-if="!finalDecision">
             <label>Human decision rationale<textarea v-model="decisionNote" rows="3" placeholder="Optional for confirmation, rejection or deferral. Explain a modification."></textarea></label>
-            <div class="review-actions"><button type="button" :disabled="busy || sourceLoading || !approved || !humanId.trim() || handoffStatuses[activeHandoffId] === 'stale'" @click="decide('accepted')">Accept original</button><button v-if="remoteSource && !proposalEditing" type="button" @click="proposalEditing = true">Modify judgment</button><button v-else type="button" :disabled="busy || sourceLoading || !approved || !humanId.trim() || !decisionNote.trim() || handoffStatuses[activeHandoffId] === 'stale'" @click="decide('modified')">Save modified</button><button type="button" :disabled="busy || sourceLoading || !humanId.trim()" @click="decide('rejected')">Reject proposal</button><button type="button" :disabled="busy || sourceLoading || !humanId.trim()" @click="decide('deferred')">Defer</button></div>
+            <div class="review-actions"><button v-if="settled(originalProposal)" type="button" :disabled="busy || sourceLoading || !approved || !humanId.trim() || handoffStatuses[activeHandoffId] === 'stale'" @click="decide('accepted')">Accept original</button><button v-if="remoteSource && !proposalEditing" type="button" @click="proposalEditing = true">{{ settled(originalProposal) ? 'Modify judgment' : 'Decide judgment' }}</button><button v-else type="button" :disabled="busy || sourceLoading || !approved || !humanId.trim() || !decisionNote.trim() || !settled(activeClaim) || handoffStatuses[activeHandoffId] === 'stale'" @click="decide('modified')">Save modified</button><button type="button" :disabled="busy || sourceLoading || !humanId.trim()" @click="decide('rejected')">Reject proposal</button><button type="button" :disabled="busy || sourceLoading || !humanId.trim()" @click="decide('deferred')">Defer</button></div>
+            </template>
             <p v-for="decision in decisionsForClaim" :key="decision.id" class="review-decision">{{ decision.disposition }} · {{ decision.humanId }} · {{ decision.decidedAt }}<br>{{ decision.rationale }}</p>
           </template>
         </template>
