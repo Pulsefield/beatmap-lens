@@ -83,7 +83,7 @@ export function parseOsu(source: string): ParsedOsu {
           dataLines: [],
         };
         sections.push(currentSection);
-      } else if (trimmed.startsWith("[") || trimmed.endsWith("]")) {
+      } else if (trimmed.startsWith("[")) {
         kind = "malformed";
         addLineDiagnostic({
           severity: "warning",

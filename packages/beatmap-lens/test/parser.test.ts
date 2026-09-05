@@ -48,6 +48,19 @@ describe("parseOsu", () => {
     expect(parsed.diagnostics.every((diagnostic) => diagnostic.severity === "warning")).toBe(true);
   });
 
+  it("preserves bracketed creator names and metadata values ending in a closing bracket", () => {
+    const parsed = parseOsu(
+      foundation4k
+        .replace(/Creator:.*/, "Creator:[ A v a l o n ]")
+        .replace(/Title:.*/, "Title:Track [Live]"),
+    );
+
+    expect(getLastPropertyValue(parsed, "Metadata", "Creator")).toBe("[ A v a l o n ]");
+    expect(getLastPropertyValue(parsed, "Metadata", "Title")).toBe("Track [Live]");
+    expect(parsed.diagnostics).toEqual([]);
+    expect(parsed.hitObjects).toHaveLength(4);
+  });
+
   it("matches core section names case-insensitively", () => {
     const parsed = parseOsu(`osu file format v14
 
