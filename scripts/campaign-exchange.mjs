@@ -37,6 +37,7 @@ if (command === "refresh") {
     const sha = chart.sourceSha256;
     let task;
     let reviews = [];
+    let humanObservations = [];
     if (inbox.sources.some((entry) => entry.source.sha256 === sha)) {
       const view = await request(`feedback/${sha}`);
       reviews = view.agentReviews.map(({ summary, modifiedClaim, status, decision }) => ({
@@ -44,6 +45,7 @@ if (command === "refresh") {
         status,
         decision,
       }));
+      humanObservations = view.directObservations;
     }
     try {
       task = JSON.parse(gunzipSync(await readFile(taskPath(sha))).toString());
@@ -73,6 +75,7 @@ if (command === "refresh") {
       foundationSha256: task.foundationSha256,
       base: task.base,
       existingReviews: reviews,
+      humanObservations,
     });
   }
   await save(join(job, "bindings.json"), JSON.stringify(bindings, null, 2));

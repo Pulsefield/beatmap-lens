@@ -10,6 +10,9 @@ The dispatcher must run a fresh labeler and independent auditor. Existing runs,
 results, packets and tasks are never changed. Saved feedback is used as supplied;
 the coordinator can refresh it before preparation. --reason adds an explicit
 coordinator explanation without replacing the original audit's findings.
+When human review changed the base, the default refuses preparation. Explicit
+--current-base issues a new frozen task through the configured service and retains
+the old task binding, bytes and packet lineage. It does not change Foundation/skill.
 """
 import argparse
 from datetime import datetime, timezone
@@ -19,6 +22,8 @@ import json
 from pathlib import Path
 import re
 import subprocess
+from urllib.error import HTTPError
+from urllib.request import Request, urlopen
 import uuid
 
 
@@ -72,7 +77,46 @@ def expanded_task_hash(path):
     return result.hexdigest()
 
 
-def revision_reasons(auditor_result, feedback, handoff_id, coordinator_reason):
+def request(server, path, body=None):
+    payload = None if body is None else json.dumps(body).encode()
+    req = Request(f"{server.rstrip('/')}/api/review/{path}", data=payload,
+                  headers={'Content-Type': 'application/json'})
+    try:
+        with urlopen(req, timeout=60) as response:
+            raw = response.read()
+    except HTTPError as error:
+        detail = json.loads(error.read())
+        raise ValueError(f"HTTP {error.code}: {detail['error']}") from error
+    return json.loads(raw), raw
+
+
+def current_task(config, prior):
+    sha = prior['sourceSha256']
+    task, raw = request(config['server'], f'task/{sha}', {})
+    if (task['source']['sha256'] != sha
+            or task['foundationSha256'] != prior['taskBinding']['foundationSha256']
+            or task['foundationSha256'] != config['foundationSha256']):
+        raise ValueError('Current task changed the source or frozen Foundation')
+    feedback, _ = request(config['server'], f'feedback/{sha}')
+    if feedback['sourceSha256'] != sha or feedback['reviewBase'] != task['base']:
+        raise ValueError('Human review changed again after task issuance; no revision was published')
+    if task['taskSha256'] == prior['taskBinding']['taskSha256']:
+        raise ValueError('Current-base issuance did not create a new frozen task')
+    reviews = [{'claim': entry.get('modifiedClaim', entry['summary']),
+                'status': entry['status'],
+                **({'decision': entry['decision']} if 'decision' in entry else {})}
+               for entry in feedback['agentReviews']]
+    binding = {'sourceSha256': sha,
+               **{key: task[key] for key in ['taskId', 'taskSha256', 'foundationSha256', 'base']},
+               'existingReviews': reviews, 'humanObservations': feedback['directObservations']}
+    compressed = gzip.compress(raw, mtime=0)
+    prior['currentTask'] = {'issuedFrom': f'POST /api/review/task/{sha}',
+                            'taskBinding': binding, 'feedback': feedback,
+                            'taskGzipSha256': digest(compressed), 'taskTextSha256': digest(raw)}
+    return sha, compressed, digest(raw)
+
+
+def revision_reasons(auditor_result, feedback, handoff_id, coordinator_reason, allow_empty=False):
     reasons = [dict(kind='claim', **entry) for entry in auditor_result['claims']
                if entry['outcome'] == 'needs-revision']
     reasons += [dict(kind='question', **entry) for entry in auditor_result['questions']
@@ -84,12 +128,12 @@ def revision_reasons(auditor_result, feedback, handoff_id, coordinator_reason):
                 if entry['handoffId'] == handoff_id and entry['status'] == 'rejected']
     if coordinator_reason:
         reasons.append({'kind': 'coordinator', 'rationale': coordinator_reason})
-    if not reasons:
+    if not reasons and not allow_empty:
         raise ValueError('Selected chart has no saved revision finding; provide an explicit --reason')
     return reasons
 
 
-def prepare(campaign, original_id, source_shas, reason=None):
+def prepare(campaign, original_id, source_shas, reason=None, current_base=False):
     root = Path(campaign).resolve()
     if not re.fullmatch(r'[a-f0-9]{20}', original_id):
         raise ValueError('Expected the original opaque 20-character assignment ID')
@@ -109,7 +153,10 @@ def prepare(campaign, original_id, source_shas, reason=None):
     label_result, audit_result = read(label_job / 'result.json'), read(audit_job / 'result.json')
     bindings = read(label_job / 'bindings.json')
     charts = [one(assignment['charts'], 'sourceSha256', sha) for sha in source_shas]
-    maximum = min(2400000, read(root / 'controller/config.json')['maxDurationMs'])
+    config = read(root / 'controller/config.json')
+    maximum = min(2400000, config['maxDurationMs'])
+    if current_base and (config['skill'] != label_run['skill'] or config['skill'] != audit_run['skill']):
+        raise ValueError('Current-base revision must preserve the original frozen skill')
     duration = sum(chart['durationMs'] for chart in charts)
     if not charts or duration <= 0 or duration > maximum:
         raise ValueError('Revision chart duration must be positive and at most 40 minutes')
@@ -129,8 +176,8 @@ def prepare(campaign, original_id, source_shas, reason=None):
         audit = read(audit_job / 'packets' / f'{sha}.json')
         feedback = json.loads(gzip.decompress((audit_job / 'feedback' / f'{sha}.json.gz').read_bytes()))
         binding = one(bindings, 'sourceSha256', sha)
-        if feedback['reviewBase'] != binding['base']:
-            raise ValueError('Human review changed this task base. Issue an explicit current-base task before preparing a replacement; the original frozen task must remain unchanged.')
+        if not current_base and feedback['reviewBase'] != binding['base']:
+            raise ValueError('Human review changed this task base. Use explicit --current-base to issue a new task while preserving the original frozen task.')
         for role, packet, run in [('labeler', handoff, label_run), ('auditor', audit, audit_run)]:
             if packet['agent']['role'] != role or packet['agent']['producerId'] != run['producerId']:
                 raise ValueError('Packet producer differs from original execution')
@@ -144,7 +191,8 @@ def prepare(campaign, original_id, source_shas, reason=None):
         audit_chart_result = one(audit_result['charts'], 'sourceSha256', sha)
         if audit_chart_result['claims'] != audit['claims'] or audit_chart_result['questions'] != audit['questions']:
             raise ValueError('Saved auditor result differs from sealed audit')
-        reasons = revision_reasons(audit_chart_result, feedback, handoff['handoffId'], reason)
+        reasons = revision_reasons(audit_chart_result, feedback, handoff['handoffId'], reason,
+                                   allow_empty=current_base)
         task_path = root / 'controller/tasks' / f'{original_id}-{sha}.json.gz'
         compressed = task_path.read_bytes()
         task_copies.append((sha, compressed, expanded_task_hash(task_path)))
@@ -165,6 +213,11 @@ def prepare(campaign, original_id, source_shas, reason=None):
                 or entry['audit']['handoffSha256'] != reference['handoffSha256']
                 or hashes[index * 2 + 1] != reference['auditSha256']):
             raise ValueError('Original packet content differs from its canonical review hash')
+    if current_base:
+        task_copies = [current_task(config, entry) for entry in prior]
+        for entry in prior:
+            entry['reasons'] = revision_reasons(entry['auditorResult'], entry['currentTask']['feedback'],
+                                                 entry['handoff']['handoffId'], reason)
     new_id = uuid.uuid4().hex[:20]
     inputs = root / 'controller/revision-inputs' / new_id
     inputs.mkdir(parents=True, exist_ok=False)
@@ -198,9 +251,11 @@ def main():
     parser.add_argument('--source-sha', action='append', required=True,
                         help='Full source SHA-256; repeat for multiple charts within 40 minutes')
     parser.add_argument('--reason', help='Additional coordinator rationale; saved findings remain intact')
+    parser.add_argument('--current-base', action='store_true',
+                        help='Explicitly issue new tasks at the current human review base; preserve old tasks')
     args = parser.parse_args()
     try:
-        result = prepare(args.campaign, args.assignment_id, args.source_sha, args.reason)
+        result = prepare(args.campaign, args.assignment_id, args.source_sha, args.reason, args.current_base)
     except (ValueError, KeyError, OSError, subprocess.CalledProcessError) as error:
         parser.exit(1, f'{error}\n')
     print(json.dumps(result, ensure_ascii=False, indent=2))

@@ -188,6 +188,19 @@ identifies the prior assignment; `supersedes` explicitly binds each source to it
 original handoff ID/hash and audit ID/hash. Old runs, results, packets, and tasks
 remain intact. Preparation itself does not run a worker or change the task base.
 
+If human review changed that base, the default refuses preparation. Explicitly add
+`--current-base` to issue a new frozen task through the configured service. The
+new task uses the same source, approved Foundation, and frozen skill; the original
+task bytes and binding remain unchanged. `prior-review.json` retains the old packet
+hashes and task hashes alongside an explicit `currentTask` binding, feedback, and
+new task hashes. A further human-base change during issuance stops publication.
+
+New worker bindings keep proposal decisions in `existingReviews` and direct expert
+observations separately in `humanObservations`, preserving their IDs, human identity,
+confirmation time, Foundation hash, and claim summaries. Consume those explicit
+human judgments when revising; do not reinterpret them as prior agent proposals or
+rewrite an earlier job's inputs.
+
 The running dispatcher discovers new revision assignments dynamically and starts
 a fresh labeler followed by a fresh independent auditor. If it has exited, resume
 with the existing `run` command. Workers receive `prior-review.json` and must
