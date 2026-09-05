@@ -7,6 +7,11 @@
   `docs/formulation/gameplay-state.md` sections 2, 5, 10–18 and
   `docs/formulation/notation.md` sections 8–9
 
+The subsequent corpus round was stopped for skill revision. See
+[decision 0006](0006-query-assisted-style-recognition.md) for the added Drill target
+and the expert's updated separation of roll prominence from Stream strength.
+This document preserves the original four-dimension pilot and its approval history.
+
 ## Purpose and authority
 
 The first consumer needs a small experiment that tests whether learned style

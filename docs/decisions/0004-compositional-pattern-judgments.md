@@ -4,6 +4,11 @@
 - Date: 2026-09-05
 - Scope: annotation semantics and Inspector review, not automatic pattern detection
 
+Later corpus feedback and the approved roll/Stream distinction are recorded in
+[decision 0006](0006-query-assisted-style-recognition.md). The original pilot's
+three-group-to-Stream-prominent implication below is historical, not the rule for
+new query-assisted recognition.
+
 The [experimental supervision decision](0005-experimental-style-supervision.md)
 sets the consumer-facing priority: a small useful section vocabulary, separate from
 selected community map targets. The analytical views here organize expert reasoning;

@@ -1,0 +1,1553 @@
+{
+  "format": "beatmap-lens-structural-query-fixtures-v1",
+  "description": "Exact Lens-normalized excerpts from reviewed local sources. Tests establish source facts only; semantic decisions are deliberately omitted.",
+  "cases": [
+    {
+      "id": "memoria-crossed-pairs",
+      "source": {
+        "sha256": "8f01f79e3bed9e2d28b223b610fb59f91d07807b0f4ab534a0805375178552d5",
+        "byteLength": 90213,
+        "osuFormatVersion": 14,
+        "beatmapId": 1101045,
+        "beatmapSetId": 518266,
+        "keyCount": 4,
+        "noteCount": 3130,
+        "normalizerId": "beatmap-lens-mania-v1"
+      },
+      "scope": {
+        "startMs": 259802,
+        "endMs": 260766
+      },
+      "availableRange": {
+        "startMs": 259695,
+        "endMs": 260874
+      },
+      "notes": [
+        {
+          "note_id": "note-3011",
+          "source_line": 3072,
+          "column": 2,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 259695,
+          "end_ms": 259695,
+          "x": 320,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-3012",
+          "source_line": 3073,
+          "column": 1,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 259802,
+          "end_ms": 259802,
+          "x": 192,
+          "hit_sound": 2
+        },
+        {
+          "note_id": "note-3013",
+          "source_line": 3074,
+          "column": 3,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 259802,
+          "end_ms": 259802,
+          "x": 448,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-3014",
+          "source_line": 3075,
+          "column": 0,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 259909,
+          "end_ms": 259909,
+          "x": 64,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-3015",
+          "source_line": 3076,
+          "column": 2,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 259909,
+          "end_ms": 259909,
+          "x": 320,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-3016",
+          "source_line": 3077,
+          "column": 1,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 260016,
+          "end_ms": 260016,
+          "x": 192,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-3017",
+          "source_line": 3078,
+          "column": 3,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 260016,
+          "end_ms": 260016,
+          "x": 448,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-3018",
+          "source_line": 3079,
+          "column": 0,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 260123,
+          "end_ms": 260123,
+          "x": 64,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-3019",
+          "source_line": 3080,
+          "column": 2,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 260123,
+          "end_ms": 260123,
+          "x": 320,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-3020",
+          "source_line": 3081,
+          "column": 1,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 260230,
+          "end_ms": 260230,
+          "x": 192,
+          "hit_sound": 2
+        },
+        {
+          "note_id": "note-3021",
+          "source_line": 3082,
+          "column": 3,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 260230,
+          "end_ms": 260230,
+          "x": 448,
+          "hit_sound": 8
+        },
+        {
+          "note_id": "note-3022",
+          "source_line": 3083,
+          "column": 0,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 260337,
+          "end_ms": 260337,
+          "x": 64,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-3023",
+          "source_line": 3084,
+          "column": 2,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 260337,
+          "end_ms": 260337,
+          "x": 320,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-3024",
+          "source_line": 3085,
+          "column": 1,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 260445,
+          "end_ms": 260445,
+          "x": 192,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-3025",
+          "source_line": 3086,
+          "column": 3,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 260445,
+          "end_ms": 260445,
+          "x": 448,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-3026",
+          "source_line": 3087,
+          "column": 0,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 260552,
+          "end_ms": 260552,
+          "x": 64,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-3027",
+          "source_line": 3088,
+          "column": 2,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 260552,
+          "end_ms": 260552,
+          "x": 320,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-3028",
+          "source_line": 3089,
+          "column": 1,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 260659,
+          "end_ms": 260659,
+          "x": 192,
+          "hit_sound": 2
+        },
+        {
+          "note_id": "note-3029",
+          "source_line": 3090,
+          "column": 3,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 260659,
+          "end_ms": 260659,
+          "x": 448,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-3030",
+          "source_line": 3091,
+          "column": 2,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 260766,
+          "end_ms": 260766,
+          "x": 320,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-3031",
+          "source_line": 3092,
+          "column": 0,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 260873,
+          "end_ms": 260873,
+          "x": 64,
+          "hit_sound": 0
+        }
+      ]
+    },
+    {
+      "id": "cyber-four-directional-groups",
+      "source": {
+        "sha256": "d32789577cfde27c2d055eb69106a570485bab94b3dd60de25ff8b0503584a4d",
+        "byteLength": 141890,
+        "osuFormatVersion": 14,
+        "beatmapId": 1938170,
+        "beatmapSetId": 827679,
+        "keyCount": 4,
+        "noteCount": 4953,
+        "normalizerId": "beatmap-lens-mania-v1"
+      },
+      "scope": {
+        "startMs": 81521,
+        "endMs": 82149
+      },
+      "availableRange": {
+        "startMs": 81442,
+        "endMs": 82228
+      },
+      "notes": [
+        {
+          "note_id": "note-1468",
+          "source_line": 1524,
+          "column": 0,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 81442,
+          "end_ms": 81442,
+          "x": 64,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-1469",
+          "source_line": 1525,
+          "column": 1,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 81442,
+          "end_ms": 81442,
+          "x": 192,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-1470",
+          "source_line": 1526,
+          "column": 3,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 81521,
+          "end_ms": 81521,
+          "x": 448,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-1471",
+          "source_line": 1527,
+          "column": 2,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 81560,
+          "end_ms": 81560,
+          "x": 320,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-1472",
+          "source_line": 1528,
+          "column": 1,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 81599,
+          "end_ms": 81599,
+          "x": 192,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-1473",
+          "source_line": 1529,
+          "column": 0,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 81638,
+          "end_ms": 81638,
+          "x": 64,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-1474",
+          "source_line": 1530,
+          "column": 3,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 81678,
+          "end_ms": 81678,
+          "x": 448,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-1475",
+          "source_line": 1531,
+          "column": 2,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 81717,
+          "end_ms": 81717,
+          "x": 320,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-1476",
+          "source_line": 1532,
+          "column": 1,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 81756,
+          "end_ms": 81756,
+          "x": 192,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-1477",
+          "source_line": 1533,
+          "column": 0,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 81795,
+          "end_ms": 81795,
+          "x": 64,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-1478",
+          "source_line": 1534,
+          "column": 3,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 81835,
+          "end_ms": 81835,
+          "x": 448,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-1479",
+          "source_line": 1535,
+          "column": 2,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 81874,
+          "end_ms": 81874,
+          "x": 320,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-1480",
+          "source_line": 1536,
+          "column": 1,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 81913,
+          "end_ms": 81913,
+          "x": 192,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-1481",
+          "source_line": 1537,
+          "column": 0,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 81953,
+          "end_ms": 81953,
+          "x": 64,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-1482",
+          "source_line": 1538,
+          "column": 3,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 81992,
+          "end_ms": 81992,
+          "x": 448,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-1483",
+          "source_line": 1539,
+          "column": 2,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 82031,
+          "end_ms": 82031,
+          "x": 320,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-1484",
+          "source_line": 1540,
+          "column": 1,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 82070,
+          "end_ms": 82070,
+          "x": 192,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-1485",
+          "source_line": 1541,
+          "column": 0,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 82110,
+          "end_ms": 82110,
+          "x": 64,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-1486",
+          "source_line": 1542,
+          "column": 2,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 82149,
+          "end_ms": 82149,
+          "x": 320,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-1487",
+          "source_line": 1543,
+          "column": 3,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 82149,
+          "end_ms": 82149,
+          "x": 448,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-1488",
+          "source_line": 1544,
+          "column": 1,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 82227,
+          "end_ms": 82227,
+          "x": 192,
+          "hit_sound": 0
+        }
+      ]
+    },
+    {
+      "id": "300-nuts-slow-repetition",
+      "source": {
+        "sha256": "e613eacc59db702a0f86d35b355f9c1071db6329e835241e4be2cbae6ad81742",
+        "byteLength": 62695,
+        "osuFormatVersion": 14,
+        "beatmapId": 2802207,
+        "beatmapSetId": 1353659,
+        "keyCount": 4,
+        "noteCount": 2164,
+        "normalizerId": "beatmap-lens-mania-v1"
+      },
+      "scope": {
+        "startMs": 11638,
+        "endMs": 14438
+      },
+      "availableRange": {
+        "startMs": 11238,
+        "endMs": 14839
+      },
+      "notes": [
+        {
+          "note_id": "note-0013",
+          "source_line": 70,
+          "column": 0,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 11238,
+          "end_ms": 11238,
+          "x": 64,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0014",
+          "source_line": 71,
+          "column": 3,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 11638,
+          "end_ms": 11638,
+          "x": 448,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0015",
+          "source_line": 72,
+          "column": 3,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 12038,
+          "end_ms": 12038,
+          "x": 448,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0016",
+          "source_line": 73,
+          "column": 3,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 12438,
+          "end_ms": 12438,
+          "x": 448,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0017",
+          "source_line": 74,
+          "column": 3,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 12838,
+          "end_ms": 12838,
+          "x": 448,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0018",
+          "source_line": 75,
+          "column": 3,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 13238,
+          "end_ms": 13238,
+          "x": 448,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0019",
+          "source_line": 76,
+          "column": 3,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 13638,
+          "end_ms": 13638,
+          "x": 448,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0020",
+          "source_line": 77,
+          "column": 3,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 14038,
+          "end_ms": 14038,
+          "x": 448,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0021",
+          "source_line": 78,
+          "column": 0,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 14438,
+          "end_ms": 14438,
+          "x": 64,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0022",
+          "source_line": 79,
+          "column": 3,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 14838,
+          "end_ms": 14838,
+          "x": 448,
+          "hit_sound": 0
+        }
+      ]
+    },
+    {
+      "id": "aleph-one-ms-overlap",
+      "source": {
+        "sha256": "c81f54023a888b78fb38cb39f740bedc592dd0d13df812989086f8c41c68ddd7",
+        "byteLength": 243223,
+        "osuFormatVersion": 14,
+        "beatmapId": 1102580,
+        "beatmapSetId": 518951,
+        "keyCount": 4,
+        "noteCount": 1000,
+        "normalizerId": "beatmap-lens-mania-v1"
+      },
+      "scope": {
+        "startMs": 49893,
+        "endMs": 51141
+      },
+      "availableRange": {
+        "startMs": 49664,
+        "endMs": 51254
+      },
+      "notes": [
+        {
+          "note_id": "note-0332",
+          "source_line": 6674,
+          "column": 0,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 49664,
+          "end_ms": 49664,
+          "x": 64,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0333",
+          "source_line": 6673,
+          "column": 1,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 49664,
+          "end_ms": 49664,
+          "x": 192,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0334",
+          "source_line": 6676,
+          "column": 2,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 49893,
+          "end_ms": 49893,
+          "x": 320,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0335",
+          "source_line": 6675,
+          "column": 3,
+          "kind": "long",
+          "source_kind": "hold",
+          "start_ms": 49893,
+          "end_ms": 50122,
+          "x": 448,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0336",
+          "source_line": 6678,
+          "column": 1,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 50122,
+          "end_ms": 50122,
+          "x": 192,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0337",
+          "source_line": 6677,
+          "column": 2,
+          "kind": "long",
+          "source_kind": "hold",
+          "start_ms": 50122,
+          "end_ms": 50350,
+          "x": 320,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0338",
+          "source_line": 6680,
+          "column": 0,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 50350,
+          "end_ms": 50350,
+          "x": 64,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0339",
+          "source_line": 6679,
+          "column": 1,
+          "kind": "long",
+          "source_kind": "hold",
+          "start_ms": 50350,
+          "end_ms": 50577,
+          "x": 192,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0340",
+          "source_line": 6682,
+          "column": 2,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 50577,
+          "end_ms": 50577,
+          "x": 320,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0341",
+          "source_line": 6681,
+          "column": 3,
+          "kind": "long",
+          "source_kind": "hold",
+          "start_ms": 50577,
+          "end_ms": 50804,
+          "x": 448,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0342",
+          "source_line": 6683,
+          "column": 1,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 50803,
+          "end_ms": 50803,
+          "x": 192,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0343",
+          "source_line": 6684,
+          "column": 2,
+          "kind": "long",
+          "source_kind": "hold",
+          "start_ms": 50804,
+          "end_ms": 51029,
+          "x": 320,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0344",
+          "source_line": 6685,
+          "column": 0,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 51029,
+          "end_ms": 51029,
+          "x": 64,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0345",
+          "source_line": 6686,
+          "column": 1,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 51141,
+          "end_ms": 51141,
+          "x": 192,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0346",
+          "source_line": 6687,
+          "column": 3,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 51141,
+          "end_ms": 51141,
+          "x": 448,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0347",
+          "source_line": 6689,
+          "column": 0,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 51253,
+          "end_ms": 51253,
+          "x": 64,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0348",
+          "source_line": 6688,
+          "column": 2,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 51253,
+          "end_ms": 51253,
+          "x": 320,
+          "hit_sound": 0
+        }
+      ]
+    },
+    {
+      "id": "decorated-repeated-pair",
+      "source": {
+        "sha256": "783f08f2a9947867f966587117cee4895ab96615351844da1aa0c3db2aeb9cf5",
+        "byteLength": 52699,
+        "osuFormatVersion": 14,
+        "beatmapId": 3621892,
+        "beatmapSetId": 1769310,
+        "keyCount": 4,
+        "noteCount": 1742,
+        "normalizerId": "beatmap-lens-mania-v1"
+      },
+      "scope": {
+        "startMs": 32197,
+        "endMs": 34123
+      },
+      "availableRange": {
+        "startMs": 31921,
+        "endMs": 34124
+      },
+      "notes": [
+        {
+          "note_id": "note-0158",
+          "source_line": 225,
+          "column": 0,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 31922,
+          "end_ms": 31922,
+          "x": 64,
+          "hit_sound": 2
+        },
+        {
+          "note_id": "note-0159",
+          "source_line": 226,
+          "column": 1,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 31922,
+          "end_ms": 31922,
+          "x": 192,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0160",
+          "source_line": 227,
+          "column": 3,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 31922,
+          "end_ms": 31922,
+          "x": 448,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0161",
+          "source_line": 228,
+          "column": 0,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 32197,
+          "end_ms": 32197,
+          "x": 64,
+          "hit_sound": 2
+        },
+        {
+          "note_id": "note-0162",
+          "source_line": 229,
+          "column": 1,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 32197,
+          "end_ms": 32197,
+          "x": 192,
+          "hit_sound": 4
+        },
+        {
+          "note_id": "note-0163",
+          "source_line": 230,
+          "column": 0,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 32334,
+          "end_ms": 32334,
+          "x": 64,
+          "hit_sound": 2
+        },
+        {
+          "note_id": "note-0164",
+          "source_line": 231,
+          "column": 1,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 32334,
+          "end_ms": 32334,
+          "x": 192,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0165",
+          "source_line": 232,
+          "column": 0,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 32472,
+          "end_ms": 32472,
+          "x": 64,
+          "hit_sound": 2
+        },
+        {
+          "note_id": "note-0166",
+          "source_line": 233,
+          "column": 1,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 32472,
+          "end_ms": 32472,
+          "x": 192,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0167",
+          "source_line": 234,
+          "column": 0,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 32610,
+          "end_ms": 32610,
+          "x": 64,
+          "hit_sound": 2
+        },
+        {
+          "note_id": "note-0168",
+          "source_line": 235,
+          "column": 1,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 32610,
+          "end_ms": 32610,
+          "x": 192,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0169",
+          "source_line": 236,
+          "column": 0,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 32747,
+          "end_ms": 32747,
+          "x": 64,
+          "hit_sound": 2
+        },
+        {
+          "note_id": "note-0170",
+          "source_line": 237,
+          "column": 1,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 32747,
+          "end_ms": 32747,
+          "x": 192,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0171",
+          "source_line": 238,
+          "column": 0,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 32885,
+          "end_ms": 32885,
+          "x": 64,
+          "hit_sound": 2
+        },
+        {
+          "note_id": "note-0172",
+          "source_line": 239,
+          "column": 1,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 32885,
+          "end_ms": 32885,
+          "x": 192,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0173",
+          "source_line": 240,
+          "column": 0,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 33022,
+          "end_ms": 33022,
+          "x": 64,
+          "hit_sound": 2
+        },
+        {
+          "note_id": "note-0174",
+          "source_line": 241,
+          "column": 1,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 33022,
+          "end_ms": 33022,
+          "x": 192,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0175",
+          "source_line": 242,
+          "column": 0,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 33160,
+          "end_ms": 33160,
+          "x": 64,
+          "hit_sound": 2
+        },
+        {
+          "note_id": "note-0176",
+          "source_line": 243,
+          "column": 1,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 33160,
+          "end_ms": 33160,
+          "x": 192,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0177",
+          "source_line": 244,
+          "column": 0,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 33298,
+          "end_ms": 33298,
+          "x": 64,
+          "hit_sound": 2
+        },
+        {
+          "note_id": "note-0178",
+          "source_line": 245,
+          "column": 1,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 33298,
+          "end_ms": 33298,
+          "x": 192,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0179",
+          "source_line": 246,
+          "column": 3,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 33298,
+          "end_ms": 33298,
+          "x": 448,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0180",
+          "source_line": 247,
+          "column": 0,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 33435,
+          "end_ms": 33435,
+          "x": 64,
+          "hit_sound": 2
+        },
+        {
+          "note_id": "note-0181",
+          "source_line": 248,
+          "column": 1,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 33435,
+          "end_ms": 33435,
+          "x": 192,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0182",
+          "source_line": 249,
+          "column": 0,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 33573,
+          "end_ms": 33573,
+          "x": 64,
+          "hit_sound": 2
+        },
+        {
+          "note_id": "note-0183",
+          "source_line": 250,
+          "column": 1,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 33573,
+          "end_ms": 33573,
+          "x": 192,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0184",
+          "source_line": 251,
+          "column": 0,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 33711,
+          "end_ms": 33711,
+          "x": 64,
+          "hit_sound": 2
+        },
+        {
+          "note_id": "note-0185",
+          "source_line": 252,
+          "column": 1,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 33711,
+          "end_ms": 33711,
+          "x": 192,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0186",
+          "source_line": 253,
+          "column": 3,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 33711,
+          "end_ms": 33711,
+          "x": 448,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0187",
+          "source_line": 254,
+          "column": 0,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 33848,
+          "end_ms": 33848,
+          "x": 64,
+          "hit_sound": 8
+        },
+        {
+          "note_id": "note-0188",
+          "source_line": 255,
+          "column": 1,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 33848,
+          "end_ms": 33848,
+          "x": 192,
+          "hit_sound": 2
+        },
+        {
+          "note_id": "note-0189",
+          "source_line": 256,
+          "column": 2,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 33848,
+          "end_ms": 33848,
+          "x": 320,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0190",
+          "source_line": 257,
+          "column": 3,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 33848,
+          "end_ms": 33848,
+          "x": 448,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0191",
+          "source_line": 258,
+          "column": 0,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 34123,
+          "end_ms": 34123,
+          "x": 64,
+          "hit_sound": 2
+        },
+        {
+          "note_id": "note-0192",
+          "source_line": 259,
+          "column": 2,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 34123,
+          "end_ms": 34123,
+          "x": 320,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-0193",
+          "source_line": 260,
+          "column": 3,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 34123,
+          "end_ms": 34123,
+          "x": 448,
+          "hit_sound": 0
+        }
+      ]
+    },
+    {
+      "id": "300-nuts-shared-release",
+      "source": {
+        "sha256": "e613eacc59db702a0f86d35b355f9c1071db6329e835241e4be2cbae6ad81742",
+        "byteLength": 62695,
+        "osuFormatVersion": 14,
+        "beatmapId": 2802207,
+        "beatmapSetId": 1353659,
+        "keyCount": 4,
+        "noteCount": 2164,
+        "normalizerId": "beatmap-lens-mania-v1"
+      },
+      "scope": {
+        "startMs": 186038,
+        "endMs": 188039
+      },
+      "availableRange": {
+        "startMs": 186038,
+        "endMs": 188039
+      },
+      "notes": [
+        {
+          "note_id": "note-2161",
+          "source_line": 2218,
+          "column": 2,
+          "kind": "long",
+          "source_kind": "hold",
+          "start_ms": 186038,
+          "end_ms": 188038,
+          "x": 320,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-2162",
+          "source_line": 2219,
+          "column": 1,
+          "kind": "long",
+          "source_kind": "hold",
+          "start_ms": 186438,
+          "end_ms": 188038,
+          "x": 192,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-2163",
+          "source_line": 2220,
+          "column": 3,
+          "kind": "long",
+          "source_kind": "hold",
+          "start_ms": 186838,
+          "end_ms": 188038,
+          "x": 448,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-2164",
+          "source_line": 2221,
+          "column": 0,
+          "kind": "long",
+          "source_kind": "hold",
+          "start_ms": 187238,
+          "end_ms": 188038,
+          "x": 64,
+          "hit_sound": 0
+        }
+      ]
+    },
+    {
+      "id": "memoria-repetition-under-entering-hold",
+      "source": {
+        "sha256": "8f01f79e3bed9e2d28b223b610fb59f91d07807b0f4ab534a0805375178552d5",
+        "byteLength": 90213,
+        "osuFormatVersion": 14,
+        "beatmapId": 1101045,
+        "beatmapSetId": 518266,
+        "keyCount": 4,
+        "noteCount": 3130,
+        "normalizerId": "beatmap-lens-mania-v1"
+      },
+      "scope": {
+        "startMs": 135087,
+        "endMs": 136803
+      },
+      "availableRange": {
+        "startMs": 135087,
+        "endMs": 136803
+      },
+      "notes": [
+        {
+          "note_id": "note-1430",
+          "source_line": 1491,
+          "column": 3,
+          "kind": "long",
+          "source_kind": "hold",
+          "start_ms": 133802,
+          "end_ms": 135087,
+          "x": 448,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-1439",
+          "source_line": 1500,
+          "column": 0,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 135087,
+          "end_ms": 135087,
+          "x": 64,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-1440",
+          "source_line": 1501,
+          "column": 1,
+          "kind": "long",
+          "source_kind": "hold",
+          "start_ms": 135087,
+          "end_ms": 135516,
+          "x": 192,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-1441",
+          "source_line": 1502,
+          "column": 2,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 135302,
+          "end_ms": 135302,
+          "x": 320,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-1442",
+          "source_line": 1503,
+          "column": 3,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 135409,
+          "end_ms": 135409,
+          "x": 448,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-1443",
+          "source_line": 1504,
+          "column": 0,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 135516,
+          "end_ms": 135516,
+          "x": 64,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-1444",
+          "source_line": 1505,
+          "column": 2,
+          "kind": "long",
+          "source_kind": "hold",
+          "start_ms": 135516,
+          "end_ms": 136802,
+          "x": 320,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-1445",
+          "source_line": 1506,
+          "column": 3,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 135623,
+          "end_ms": 135623,
+          "x": 448,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-1446",
+          "source_line": 1507,
+          "column": 1,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 135730,
+          "end_ms": 135730,
+          "x": 192,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-1447",
+          "source_line": 1508,
+          "column": 1,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 135945,
+          "end_ms": 135945,
+          "x": 192,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-1448",
+          "source_line": 1509,
+          "column": 0,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 136159,
+          "end_ms": 136159,
+          "x": 64,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-1449",
+          "source_line": 1510,
+          "column": 1,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 136266,
+          "end_ms": 136266,
+          "x": 192,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-1450",
+          "source_line": 1511,
+          "column": 0,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 136373,
+          "end_ms": 136373,
+          "x": 64,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-1451",
+          "source_line": 1512,
+          "column": 3,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 136480,
+          "end_ms": 136480,
+          "x": 448,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-1452",
+          "source_line": 1513,
+          "column": 1,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 136587,
+          "end_ms": 136587,
+          "x": 192,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-1453",
+          "source_line": 1514,
+          "column": 1,
+          "kind": "normal",
+          "source_kind": "normal",
+          "start_ms": 136802,
+          "end_ms": 136802,
+          "x": 192,
+          "hit_sound": 0
+        },
+        {
+          "note_id": "note-1454",
+          "source_line": 1515,
+          "column": 0,
+          "kind": "long",
+          "source_kind": "hold",
+          "start_ms": 136802,
+          "end_ms": 137230,
+          "x": 64,
+          "hit_sound": 0
+        }
+      ]
+    }
+  ]
+}

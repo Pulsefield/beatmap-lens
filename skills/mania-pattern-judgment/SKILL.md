@@ -1,14 +1,15 @@
 ---
 name: mania-pattern-judgment
-description: Inspect osu!mania arrangements, locate local pattern changes, and propose source-backed judgments using expert calibration. Use for mania pattern annotation, section review, or calibration; not for automatic difficulty ratings or generic music analysis.
+description: Recognize local osu!mania patterns from exact structural queries and expert-calibrated context. Use for section annotation, pattern review, or calibration; distinguish query evidence from style salience and human judgments.
 ---
 
 # Mania pattern judgment
 
-Judge the arrangement before choosing a tag. This skill captures the project's
-expert reasoning from the 2026-09-05 calibration review, primarily on 4K examples.
-It includes the subsequent four-dimension Foundation approval and corrections.
-It is local guidance, not a claim that every community uses these terms identically.
+Judge the arrangement before choosing a tag. This revision incorporates the
+2026-09-05 pilot and corpus reviews, primarily on 4K examples. It is local guidance,
+not a claim that every community uses these terms identically. The corpus campaign
+was stopped by the user to revise recognition and add drill. Editing this skill
+does not resume it, change its frozen worker copies, or approve a new Foundation.
 
 Keep the consumer's experimental section vocabulary separate from whole-difficulty
 community targets. For learning-oriented campaigns, use the learning boundary in
@@ -16,17 +17,19 @@ community targets. For learning-oriented campaigns, use the learning boundary in
 The analytical vocabulary below helps explain evidence; it does not require a
 supervised target or generation slider for every named pattern.
 
-Read [the judgment guide](references/judgment-guide.md) before annotating. It covers
-the distinctions that change decisions: grouped jumpdrill versus jumpstream,
-roll/burst as Stream organization, fixed-group
-long jump jack versus chordjack, short-LN articulation, staggered LN release, and
-Tech as disruption of an understandable pattern expectation.
+Read [the judgment guide](references/judgment-guide.md) before assigning semantics.
+For query construction or inexpensive weak annotation, also read
+[structural queries and routing](references/structural-queries.md). Exact facts,
+pattern identity, and section salience are separate outputs: a clear roll may
+receive supporting Stream; detecting occupied columns does not establish LN coordination.
 
 ## Working method
 
-- Read the exact difficulty and the task's frozen Foundation. Inspect the full
-  structure to discover candidates, then inspect candidate neighborhoods at a
+- Read the exact difficulty and the task's frozen Foundation. Use structural
+  queries to discover candidates, then inspect candidate neighborhoods at a
   readable scale. Community tags and votes select candidates; they do not prove labels.
+  A detector miss is unreviewed, not absent. Exhaustive discovery still requires
+  inspecting query-uncovered portions when the task requests whole-chart coverage.
 - Stay within chart, causal-history, and canonical-profile evidence. Do not infer
   audio-dependent styles, external presentation, provenance, or player-specific
   responses from a chart-only review. Semantic observations supervise section
@@ -42,13 +45,16 @@ Tech as disruption of an understandable pattern expectation.
   rhythm, and hold/release organization. Do not classify every repeated chord as
   chordjack or every fast run as speedjack. Describe what can be established when
   the campaign lacks the appropriate term.
-- Give each claim its own scope, witnesses, context, rationale, assessment, and
+- Give each semantic claim its own scope, witnesses, context, rationale, assessment, and
   independent salience. Multiple prominent judgments require independently valid
   evidence in that scope. Successive patterns do not automatically establish co-occurrence.
 - Distinguish presence, prominence, example typicality, and confidence. A weak
   example can be a certain positive. Too little evidence does not justify an
   explicit negative. Rejecting an example does not negate every pattern in its context.
-- Audit using the guide's discriminating checks. Ask the expert a concrete question
+- Reuse deterministic query evidence for simple facts; do not send every row-count
+  check through a large-model labeler and a second large-model auditor. Query-to-tag
+  rules need their own held-out precision and coverage check before batch use.
+- Audit contextual inference using the guide's discriminating checks. Ask the expert a concrete question
   when a necessary semantic choice remains open. Do not invent speed/tolerance
   thresholds or silently settle an open definition to make an answer decidable.
 
@@ -69,6 +75,12 @@ change the hash or meaning of an already pinned Foundation.
 Without a frozen task, an unsealed source-backed analysis is useful. Label it as
 such and leave task/Foundation pins unset; do not fabricate a formal handoff.
 
-If the guide conflicts with an older task's Foundation, record the mismatch and
-request the appropriate new task or semantic decision. Preserve the old proposal
-and the expert's correction separately; do not rewrite the proposal to appear correct.
+Consume an explicit human assessment at its exact scope without asking again.
+Use the human decision's rationale, not an older proposal's retained unresolved
+explanation. A later explicit clarification can settle an earlier uncertain acceptance.
+Do not infer a new tag or salience merely from a descriptive pattern name in feedback.
+
+If this revision conflicts with an older task's Foundation, preserve both versions
+and flag the mismatch. Newly proposed mappings stay experimental until calibrated;
+old packets keep their hashes and meanings. Preserve the original proposal and
+expert correction separately, including when a replacement task is eventually issued.
