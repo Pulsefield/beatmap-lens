@@ -58,7 +58,7 @@ async function poll(): Promise<void> {
   if (!stopped) timer = setTimeout(poll, 1200);
 }
 
-async function open(source: InboxSourceV2, claim: InboxClaimV2): Promise<void> {
+async function open(source: InboxSourceV2, claim?: InboxClaimV2): Promise<void> {
   const request = ++selection;
   loading.value = true;
   loadError.value = "";
@@ -68,7 +68,7 @@ async function open(source: InboxSourceV2, claim: InboxClaimV2): Promise<void> {
       if (request !== selection) return;
       activeSource.value = loaded;
     }
-    openClaim.value = { handoffId: claim.handoffId, claimId: claim.claimId };
+    openClaim.value = claim ? { handoffId: claim.handoffId, claimId: claim.claimId } : undefined;
     showingInbox.value = false;
   } catch (error) {
     loadError.value = error instanceof Error ? error.message : String(error);
@@ -92,7 +92,7 @@ onBeforeUnmount(() => { stopped = true; clearTimeout(timer); });
       <div><p class="inbox-kicker">{{ task.title }}</p><h2>{{ task.source.source.title }} <span>[{{ task.source.source.difficulty }}]</span></h2><p class="inbox-question">{{ task.question }}</p></div>
       <div class="inbox-claims"><button v-for="claim in task.claims" :key="claim.claimId" type="button" :disabled="loading" @click="open(task.source, claim)"><span>{{ claim.tagId }}<small>{{ (claim.scope.startMs / 1000).toFixed(3) }}–{{ (claim.scope.endMs / 1000).toFixed(3) }} s · {{ claim.status }}</small></span><span>Review →</span></button></div>
     </section>
-    <details v-if="inbox?.sources.length" class="inbox-history"><summary>All agent work · {{ counts.total ?? 0 }} claims</summary><p>Awaiting audit {{ counts['awaiting-audit'] ?? 0 }} · Needs revision {{ counts['needs-revision'] ?? 0 }} · Stale {{ counts.stale ?? 0 }} · Rejected {{ counts.rejected ?? 0 }}</p><section v-for="source in inbox.sources" :key="source.source.sha256"><h2>{{ source.source.title }} · {{ source.source.difficulty }}</h2><button v-for="claim in source.reviews" :key="`${claim.handoffId}:${claim.claimId}`" type="button" :disabled="loading" @click="open(source, claim)"><span>{{ claim.tagId }} · {{ (claim.scope.startMs / 1000).toFixed(3) }} s</span><span>{{ claim.status }} →</span></button></section></details>
+    <details v-if="inbox?.sources.length" class="inbox-history"><summary>All agent work · {{ counts.total ?? 0 }} claims</summary><p>Awaiting audit {{ counts['awaiting-audit'] ?? 0 }} · Needs revision {{ counts['needs-revision'] ?? 0 }} · Stale {{ counts.stale ?? 0 }} · Rejected {{ counts.rejected ?? 0 }}</p><section v-for="source in inbox.sources" :key="source.source.sha256"><h2>{{ source.source.title }} · {{ source.source.difficulty }}</h2><button type="button" :disabled="loading" @click="open(source)"><span>Open chart</span><span>{{ source.source.noteCount }} notes →</span></button><button v-for="claim in source.reviews" :key="`${claim.handoffId}:${claim.claimId}`" type="button" :disabled="loading" @click="open(source, claim)"><span>{{ claim.tagId }} · {{ (claim.scope.startMs / 1000).toFixed(3) }} s</span><span>{{ claim.status }} →</span></button></section></details>
     <details v-if="failedDeliveries.length" class="inbox-history"><summary>Delivery issues · {{ failedDeliveries.length }}</summary><p v-for="receipt in failedDeliveries" :key="receipt.id">{{ receipt.error }}</p></details>
     <footer v-if="inbox">Decisions are saved to the connected workspace and returned to the agent outbox automatically.</footer>
   </div>
