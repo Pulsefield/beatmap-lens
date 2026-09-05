@@ -10,6 +10,7 @@
   },
   "scripts": {
     "annotation:workflow": "node scripts/annotation-workflow.mjs",
+    "review:workspace": "node scripts/review-workspace.mjs",
     "benchmark": "vitest bench --run",
     "build": "pnpm --recursive --if-present build",
     "catalog:map-local": "node scripts/build-pattern-category-map.mjs",
