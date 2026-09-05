@@ -111,11 +111,19 @@ export interface TaskPacketV2 {
   readonly taskSha256: string;
 }
 
+export interface SkillProvenanceV2 {
+  readonly name: string;
+  readonly version: string;
+  /** Content hash of the frozen skill bundle, including its manifest and referenced guides. */
+  readonly sha256: string;
+}
+
 export interface AgentProvenanceV2 {
   readonly producerId: string;
   readonly role: "labeler" | "auditor";
   readonly toolVersion?: string;
   readonly model?: string;
+  readonly skill?: SkillProvenanceV2;
 }
 
 export interface HandoffV2 {

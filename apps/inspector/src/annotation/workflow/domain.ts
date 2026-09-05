@@ -267,13 +267,14 @@ export async function validateHandoffV2(input: unknown, task: TaskPacketV2): Pro
   const agent = record(
     handoff.agent,
     ["producerId", "role"],
-    ["toolVersion", "model"],
+    ["toolVersion", "model", "skill"],
     "handoff.agent",
   );
   nonempty(agent.producerId, "handoff.agent.producerId");
   oneOf(agent.role, ["labeler", "auditor"], "handoff.agent.role");
   for (const key of ["toolVersion", "model"])
     if (key in agent) nonempty(agent[key], `agent.${key}`);
+  if ("skill" in agent) assertSkillProvenance(agent.skill, "handoff.agent.skill");
   const proposals = array(handoff.proposals, "handoff.proposals");
   for (const claim of proposals) assertClaimV2(claim, task.structure.notes, task.foundation);
   uniqueIds(proposals, "proposals");
@@ -408,7 +409,7 @@ export async function validateAuditV2(
   const agent = record(
     audit.agent,
     ["producerId", "role"],
-    ["toolVersion", "model"],
+    ["toolVersion", "model", "skill"],
     "audit.agent",
   );
   equal(agent.role, "auditor", "audit.agent.role");
@@ -418,6 +419,7 @@ export async function validateAuditV2(
   }
   for (const key of ["toolVersion", "model"])
     if (key in agent) nonempty(agent[key], `audit.agent.${key}`);
+  if ("skill" in agent) assertSkillProvenance(agent.skill, "audit.agent.skill");
   const claims = array(audit.claims, "audit.claims");
   for (const entry of claims) {
     const result = object(entry, "audit claim");
@@ -761,6 +763,7 @@ export async function readDispositionsV2(document: ReviewDocumentV2) {
     handoffs: await Promise.all(
       document.handoffs.map(async (entry) => ({
         handoffId: entry.handoff.handoffId,
+        agent: entry.handoff.agent,
         taskId: entry.handoff.taskId,
         taskSha256: entry.handoff.taskSha256,
         foundationSha256: entry.handoff.foundationSha256,
@@ -1282,6 +1285,15 @@ function record(
 function array(value: unknown, path: string): readonly unknown[] {
   if (!Array.isArray(value)) throw new TypeError(`${path} must be an array.`);
   return value;
+}
+
+function assertSkillProvenance(input: unknown, path: string): void {
+  const skill = record(input, ["name", "version", "sha256"], [], path);
+  nonempty(skill.name, `${path}.name`);
+  nonempty(skill.version, `${path}.version`);
+  if (typeof skill.sha256 !== "string" || !/^[a-f\d]{64}$/.test(skill.sha256)) {
+    throw new Error(`${path}.sha256 must be a SHA-256 digest.`);
+  }
 }
 
 function nonempty(value: unknown, path: string): asserts value is string {
