@@ -17,6 +17,8 @@ const { positionals, values } = parseArgs({
     server: { type: "string" },
     source: { type: "string" },
     "source-sha": { type: "string" },
+    "foundation-source-sha": { type: "string" },
+    "foundation-sha": { type: "string" },
     out: { type: "string" },
     "start-ms": { type: "string" },
     "end-ms": { type: "string" },
@@ -29,6 +31,7 @@ if (values.help || !command) {
   process.stdout.write(`Beatmap Lens annotation exchange (V2)
 
   inbox --server URL [--out FILE]
+  register-source --server URL --source CHART.osu --foundation-source-sha SHA --foundation-sha SHA --out TASK.json
   fetch-task --server URL --source-sha SHA [--fresh] --out TASK.json
   submit --server URL --input SEALED_PACKET_OR_REVIEW_REQUEST.json [--out RECEIPT.json]
   dispositions --server URL --source-sha SHA [--out FILE]
@@ -52,7 +55,7 @@ machine review never creates a human-confirmed observation.
 }
 
 if (
-  ["inbox", "fetch-task", "submit"].includes(command) ||
+  ["inbox", "register-source", "fetch-task", "submit"].includes(command) ||
   (command === "dispositions" && values.server)
 ) {
   try {
@@ -228,7 +231,14 @@ async function networkExchange() {
   let path;
   let submission;
   if (command === "inbox") path = "/api/review/inbox";
-  else if (command === "fetch-task" || command === "dispositions") {
+  else if (command === "register-source") {
+    required("out");
+    const foundationSourceSha256 = required("foundation-source-sha");
+    const foundationSha256 = required("foundation-sha");
+    const sourceBytes = Array.from(await readFile(required("source")));
+    path = "/api/review/source";
+    submission = { sourceBytes, foundationSourceSha256, foundationSha256 };
+  } else if (command === "fetch-task" || command === "dispositions") {
     const source = encodeURIComponent(required("source-sha"));
     path = `/api/review/${command === "fetch-task" ? "task" : "dispositions"}/${source}`;
     if (command === "fetch-task") required("out");

@@ -261,6 +261,7 @@ See the [agent–human workflow](docs/agent-workflow.md),
 [compositional section model proposal](docs/decisions/0004-compositional-pattern-judgments.md).
 The selected four-dimension pilot and its separate community-observation proposal
 are described in [experimental style supervision](docs/decisions/0005-experimental-style-supervision.md).
+To start a small local corpus batch, use the [annotation runbook](docs/corpus-annotation.md).
 
 ## Scope
 

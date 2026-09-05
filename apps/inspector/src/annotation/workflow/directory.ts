@@ -11,6 +11,7 @@ import {
   createTaskPacketV2,
   type DecideClaimInputV2,
   decideClaimV2,
+  hashWorkflowValueV2,
   importAuditV2,
   importHandoffV2,
   type OperationOptionsV2,
@@ -75,6 +76,44 @@ export class WorkflowDirectoryV2 {
       }
       const document = await createReviewDocumentV2(source, foundation, options);
       return this.#write(document, null, sourceBytes);
+    });
+  }
+
+  /** Reuse approval already recorded in this workspace; this is source registration, not approval. */
+  async registerSourceFromApprovedFoundation(
+    sourceBytes: Uint8Array,
+    reference: { readonly sourceSha256: string; readonly foundationSha256: string },
+    options: { readonly taskId?: string; readonly now?: () => string } = {},
+  ): Promise<{ readonly stored: StoredReviewV2; readonly task: TaskPacketV2 }> {
+    return this.#exclusive(async () => {
+      const trusted = await this.read(reference.sourceSha256);
+      if (!trusted) throw new Error("The Foundation source is not registered in this workspace.");
+      const foundation = trusted.document.foundation;
+      if ((await hashWorkflowValueV2(foundation)) !== reference.foundationSha256) {
+        throw new Error("The referenced canonical Foundation hash differs.");
+      }
+      if (foundation.approval.status !== "human-approved") {
+        throw new Error("The referenced canonical Foundation needs human approval.");
+      }
+      const { source } = await inspectOsuSourceV1(sourceBytes);
+      const existing = await this.read(source.sha256, sourceBytes);
+      if (existing) {
+        if (
+          (await hashWorkflowValueV2(existing.document.foundation)) !== reference.foundationSha256
+        ) {
+          throw new Error(
+            "The existing source has a different Foundation; its history cannot be switched.",
+          );
+        }
+        const task = existing.document.tasks.at(-1);
+        if (!task) throw new Error("The existing source needs an explicit first task export.");
+        return { stored: existing, task };
+      }
+      const initial = await createReviewDocumentV2(source, foundation, options);
+      const task = await createTaskPacketV2(initial, sourceBytes, options);
+      const document = await registerTaskV2(initial, task, sourceBytes, options);
+      const stored = await this.#write(document, null, sourceBytes);
+      return { stored, task };
     });
   }
 

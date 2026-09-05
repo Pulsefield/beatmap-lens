@@ -368,6 +368,21 @@ export async function startReviewWorkspace(options) {
       if (!request.headers["content-type"]?.startsWith("application/json"))
         throw httpError(400, "Expected application/json.");
       const body = JSON.parse(await readBody(request));
+      if (action === "source" && !sha) {
+        exactKeys(body, ["sourceBytes", "foundationSourceSha256", "foundationSha256"]);
+        if (
+          !Array.isArray(body.sourceBytes) ||
+          !body.sourceBytes.every((value) => Number.isInteger(value) && value >= 0 && value <= 255)
+        )
+          throw httpError(400, "sourceBytes must contain exact byte values.");
+        const result = await directory.registerSourceFromApprovedFoundation(
+          Uint8Array.from(body.sourceBytes),
+          { sourceSha256: body.foundationSourceSha256, foundationSha256: body.foundationSha256 },
+        );
+        sources.delete(result.task.source.sha256);
+        await dispositions(result.task.source.sha256);
+        return send(response, 200, result.task);
+      }
       if (action === "task") {
         exactKeys(body, "taskId" in body ? ["taskId"] : []);
         if ("taskId" in body) nonempty(body.taskId, "taskId");

@@ -3,6 +3,7 @@ import { get as httpGet } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import { serializeCanonicalJson } from "../canonical-json";
 import {
@@ -16,6 +17,7 @@ import {
 import { NOW, workflowFixture } from "./test-fixtures";
 
 const serviceUrl = pathToFileURL(resolve("scripts/review-workspace.mjs")).href;
+const exec = promisify(execFile);
 const { startReviewWorkspace } = await import(/* @vite-ignore */ serviceUrl);
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {
@@ -92,6 +94,58 @@ async function get(url: string, pathname: string) {
 }
 
 describe("local Review service exchange", () => {
+  it("registers a local source through the real CLI using the original canonical Foundation approval", async () => {
+    const f = await fixture();
+    const service = await start(f.workspace);
+    const sourcePath = join(f.workspace, "another.osu");
+    const outputPath = join(f.workspace, "registered-task.json");
+    const newBytes = new TextEncoder().encode(
+      new TextDecoder().decode(f.sourceBytes).replace("Version: Mixed", "Version: Another"),
+    );
+    await writeFile(sourcePath, newBytes);
+    const script = resolve("scripts/annotation-workflow.mjs");
+    const args = [
+      script,
+      "register-source",
+      "--server",
+      service.url,
+      "--source",
+      sourcePath,
+      "--foundation-source-sha",
+      f.sha,
+      "--foundation-sha",
+      f.task.foundationSha256,
+      "--out",
+      outputPath,
+    ];
+    await exec(process.execPath, args);
+    const task = JSON.parse(await readFile(outputPath, "utf8"));
+    expect(task.contract).toBe("beatmap-lens-agent-task");
+    expect(task.sourceBytes).toEqual(Array.from(newBytes));
+    expect(task.foundation).toEqual(f.task.foundation);
+    expect(task.foundationSha256).toBe(f.task.foundationSha256);
+    const stored = await get(service.url, `source/${task.source.sha256}`);
+    expect(stored.document.tasks).toEqual([task]);
+    expect(stored.document.decisions).toEqual([]);
+    expect(stored.document.observations).toEqual([]);
+    expect(stored.document.reviewRevision).toBe(1);
+    expect((await get(service.url, "inbox")).sources).toHaveLength(2);
+    await exec(process.execPath, args);
+    expect(JSON.parse(await readFile(outputPath, "utf8"))).toEqual(task);
+    expect(await get(service.url, `source/${task.source.sha256}`)).toEqual(stored);
+    const rejected = await post(service.url, "source", {
+      sourceBytes: Array.from(newBytes),
+      foundationSourceSha256: f.sha,
+      foundationSha256: "0".repeat(64),
+    });
+    expect(rejected.status).toBe(400);
+    expect(rejected.value.error).toContain("Foundation hash differs");
+    expect(await get(service.url, `source/${task.source.sha256}`)).toEqual(stored);
+    const evidence = join(f.workspace, "registered-evidence");
+    await exec(process.execPath, [script, "evidence", "--task", outputPath, "--out", evidence]);
+    expect(await readFile(join(evidence, "source.osu"))).toEqual(Buffer.from(newBytes));
+  }, 10_000);
+
   it("accepts independent concurrent deliveries, persists partial human decisions, and survives restart", async () => {
     const f = await fixture();
     const service = await start(f.workspace);
@@ -272,3 +326,5 @@ describe("local Review service exchange", () => {
     expect(latest.document.observations).toEqual([]);
   }, 10_000);
 });
+
+import { execFile } from "node:child_process";

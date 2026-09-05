@@ -334,7 +334,9 @@ actually saved and read back through the outbox. A small honest spot-check reque
 can select supported claims for this human interaction; Foundation approval or
 machine agreement alone does not complete it.
 
-Corpus scheduling, selective V2 releases, semantic re-review after Foundation
-changes, and research split/exposure policy are later milestones. The V2 review
+For a small manually bounded corpus batch, follow the
+[corpus annotation runbook](corpus-annotation.md). Corpus scheduling, selective
+V2 releases, semantic re-review after Foundation changes, and research split/exposure
+policy are later milestones. The V2 review
 workspace does not claim exhaustive difficulty coverage or research-release
 eligibility from a completed review interaction.

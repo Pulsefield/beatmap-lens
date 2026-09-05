@@ -2,7 +2,7 @@ import type { SourceIdentityV1 } from "../contracts";
 import type { AgentReviewV2, ReviewBaseV2 } from "./contracts";
 import type { StoredReviewV2, WorkflowDirectoryV2 } from "./directory";
 
-export type ReviewStoreV2 = Pick<WorkflowDirectoryV2, keyof WorkflowDirectoryV2>;
+export type ReviewStoreV2 = Omit<WorkflowDirectoryV2, "registerSourceFromApprovedFoundation">;
 export interface RemoteSourceV2 extends StoredReviewV2 {
   readonly sourceBytes: readonly number[];
 }
