@@ -40,7 +40,10 @@ export async function startReviewWorkspace(options) {
   const directory = new WorkflowDirectoryV2(new LocalDirectoryHandle(workspace));
   const receipts = new Map();
   const requests = new Map();
+  // Full documents include large frozen source/Foundation snapshots; inbox summaries never do.
   const sources = new Map();
+  const summaries = new Map();
+  let fullSourceReads = 0;
   const errors = [];
   let pending = Promise.resolve();
   const exclusive = (operation) => {
@@ -51,7 +54,7 @@ export async function startReviewWorkspace(options) {
   const json = (value) => serializeCanonicalJson(value);
   const digest = (value) => createHash("sha256").update(value).digest("hex");
 
-  async function source(sha) {
+  async function sourceStamp(sha) {
     if (!/^[a-f\d]{64}$/.test(sha)) throw httpError(400, "Invalid source SHA-256.");
     const filename = join(workspace, "workflow", `${sha}.v2.json`);
     const info = await stat(filename).catch((error) => {
@@ -59,9 +62,19 @@ export async function startReviewWorkspace(options) {
         throw httpError(404, "Source is not registered in this workspace.");
       throw error;
     });
-    const stamp = `${info.mtimeMs}:${info.size}`;
-    if (sources.get(sha)?.stamp === stamp) return sources.get(sha);
+    return `${info.mtimeMs}:${info.size}`;
+  }
+
+  async function source(sha) {
+    const stamp = await sourceStamp(sha);
+    const cached = sources.get(sha);
+    if (cached?.stamp === stamp) {
+      sources.delete(sha);
+      sources.set(sha, cached);
+      return cached;
+    }
     const stored = await directory.read(sha);
+    fullSourceReads++;
     const task = stored.document.tasks.at(-1);
     if (!task)
       throw httpError(400, "This source has no registered task containing its exact bytes.");
@@ -70,23 +83,105 @@ export async function startReviewWorkspace(options) {
       stored,
       sourceBytes: Uint8Array.from(task.sourceBytes),
       task,
-      reviews: await domain.readAgentReviewsV2(stored.document),
     };
+    const { document, version } = stored;
+    const agentReviews = await domain.readAgentReviewsV2(document);
+    const reviews = agentReviews.map(
+      ({ handoffId, claimId, claim, status, rationale, question, expertReason }) => ({
+        handoffId,
+        claimId,
+        tagId: claim.tagId,
+        scope: claim.scope,
+        status,
+        rationale,
+        ...(question ? { question } : {}),
+        ...(expertReason ? { expertReason } : {}),
+      }),
+    );
+    const counts = { total: reviews.length };
+    for (const row of reviews) counts[row.status] = (counts[row.status] ?? 0) + 1;
+    const currentSummary = {
+      stamp,
+      row: {
+        source: document.source,
+        version,
+        updatedAt: document.updatedAt,
+        latestTaskId: task.taskId,
+        counts,
+        expertQueue: reviews.filter((row) => row.status === "needs-expert"),
+        reviews,
+      },
+      decidedClaims: new Set(
+        document.decisions.map((decision) => json([decision.handoffId, decision.claimId])),
+      ),
+      handoffs: new Map(
+        document.handoffs.map((entry) => [
+          entry.handoff.handoffId,
+          {
+            sha256: entry.handoffSha256,
+            claimIds: new Set(entry.handoff.proposals.map((claim) => claim.id)),
+          },
+        ]),
+      ),
+    };
+    currentSummary.feedback = await createFeedback(value, agentReviews, currentSummary);
+    summaries.set(sha, currentSummary);
+    await saveSummary(sha, currentSummary);
+    sources.delete(sha);
     sources.set(sha, value);
+    while (sources.size > 1) sources.delete(sources.keys().next().value);
     return value;
   }
 
-  function reviewRequests(document) {
+  async function summary(sha) {
+    const stamp = await sourceStamp(sha);
+    if (summaries.get(sha)?.stamp !== stamp) {
+      const saved = await readFile(
+        join(exchange, "outbox", `${sha}.feedback-cache.json`),
+        "utf8",
+      ).catch((error) => {
+        if (error.code === "ENOENT") return undefined;
+        throw error;
+      });
+      const cached = saved ? JSON.parse(saved) : undefined;
+      if (cached?.stamp === stamp && cached.row.source.sha256 === sha) {
+        summaries.set(sha, {
+          ...cached,
+          restored: true,
+          decidedClaims: new Set(cached.decidedClaims),
+          handoffs: new Map(
+            cached.handoffs.map(([id, value]) => [
+              id,
+              { ...value, claimIds: new Set(value.claimIds) },
+            ]),
+          ),
+        });
+      } else await source(sha);
+    }
+    return summaries.get(sha);
+  }
+
+  async function saveSummary(sha, current) {
+    await atomicWrite(
+      join(exchange, "outbox", `${sha}.feedback-cache.json`),
+      json({
+        ...current,
+        decidedClaims: [...current.decidedClaims],
+        handoffs: [...current.handoffs].map(([id, value]) => [
+          id,
+          { ...value, claimIds: [...value.claimIds] },
+        ]),
+      }),
+    );
+  }
+
+  function reviewRequests(current) {
     return [...requests.values()]
-      .filter((request) => request.sourceSha256 === document.source.sha256)
+      .filter((request) => request.sourceSha256 === current.row.source.sha256)
       .map((request) => ({
         ...request,
         pendingClaimIds: request.claimIds.filter(
-          (claimId) =>
-            !document.decisions.some(
-              (decision) =>
-                decision.handoffId === request.handoffId && decision.claimId === claimId,
-            ),
+          (claimId) => !current.decidedClaims.has(json([request.handoffId, claimId])),
         ),
       }));
   }
@@ -96,10 +191,102 @@ export async function startReviewWorkspace(options) {
     const value = {
       ...(await domain.readDispositionsV2(stored.document)),
       documentVersion: stored.version,
-      reviewRequests: reviewRequests(stored.document),
+      reviewRequests: reviewRequests(summaries.get(sha)),
     };
     await atomicWrite(join(exchange, "outbox", `${sha}.dispositions.json`), json(value));
     return value;
+  }
+
+  async function feedback(sha) {
+    const current = await summary(sha);
+    return { ...current.feedback, reviewRequests: reviewRequests(current) };
+  }
+
+  async function createFeedback({ stored, task }, reviews, current) {
+    const { document, version } = stored;
+    const observations = new Map(document.observations.map((entry) => [entry.id, entry]));
+    const baseStatuses = new Map(reviews.map((row) => [row.handoffId, row.baseStatus]));
+    return {
+      contract: "beatmap-lens-agent-feedback",
+      version: 2,
+      sourceSha256: document.source.sha256,
+      documentVersion: version,
+      reviewBase: await domain.baseForTaskV2(document),
+      taskBinding: taskBinding(task),
+      counts: current.row.counts,
+      agentReviews: reviews.map((row) => ({
+        handoffId: row.handoffId,
+        claimId: row.claimId,
+        status: row.status,
+        baseStatus: row.baseStatus,
+        summary: claimSummary(row.claim),
+        audits: row.audits.map(({ auditId, result }) => ({ auditId, result })),
+        ...(row.decision ? { decision: row.decision } : {}),
+        ...(row.decision?.disposition === "modified"
+          ? { modifiedClaim: observations.get(row.decision.observationId).claim }
+          : {}),
+        ...(row.expertReason ? { expertReason: row.expertReason } : {}),
+        ...(row.question ? { question: row.question } : {}),
+      })),
+      handoffs: await Promise.all(
+        document.handoffs.map(async ({ handoff, handoffSha256, baseStatus }) => ({
+          handoffId: handoff.handoffId,
+          handoffSha256,
+          ...taskBinding(handoff),
+          agent: handoff.agent,
+          baseStatus:
+            baseStatuses.get(handoff.handoffId) ??
+            (await domain.handoffBaseStatusV2(document, handoff.handoffId)),
+          importedBaseStatus: baseStatus,
+          embeddedAudit: handoff.audit,
+          questions: handoff.questions,
+        })),
+      ),
+      audits: (document.audits ?? []).map(({ audit, auditSha256, baseStatus }) => ({
+        auditId: audit.auditId,
+        auditSha256,
+        handoffId: audit.handoffId,
+        handoffSha256: audit.handoffSha256,
+        ...taskBinding(audit),
+        agent: audit.agent,
+        importedBaseStatus: baseStatus,
+        questions: audit.questions,
+      })),
+      directObservations: document.observations
+        .filter((entry) => entry.origin.kind === "direct-human")
+        .map(({ claim, ...entry }) => ({ ...entry, summary: claimSummary(claim) })),
+    };
+  }
+
+  function taskBinding(packet) {
+    return {
+      taskId: packet.taskId,
+      taskSha256: packet.taskSha256,
+      foundationSha256: packet.foundationSha256,
+      base: packet.base,
+    };
+  }
+
+  function claimSummary(claim) {
+    const { evidence, transition, ...fields } = claim;
+    const summarizeEvidence = ({ rationale, noteRefs, contextNoteRefs }) => ({
+      rationale,
+      witnessCount: noteRefs.length,
+      contextNoteCount: contextNoteRefs.length,
+    });
+    return {
+      ...fields,
+      ...summarizeEvidence(evidence),
+      ...(transition
+        ? {
+            transition: {
+              range: transition.range,
+              description: transition.description,
+              ...summarizeEvidence(transition.evidence),
+            },
+          }
+        : {}),
+    };
   }
 
   async function saveReceipt(receipt) {
@@ -130,19 +317,16 @@ export async function startReviewWorkspace(options) {
     if (!["labeler", "auditor", "curator"].includes(input.requestedBy.role)) {
       throw new Error("Unsupported review requester role.");
     }
-    const { stored } = await source(input.sourceSha256);
-    const original = stored.document.handoffs.find(
-      (entry) => entry.handoff.handoffId === input.handoffId,
-    );
+    const original = (await summary(input.sourceSha256)).handoffs.get(input.handoffId);
     if (!original) return null;
-    if (original.handoffSha256 !== input.handoffSha256) {
+    if (original.sha256 !== input.handoffSha256) {
       throw new Error("Review request targets different immutable handoff content.");
     }
     if (
       !Array.isArray(input.claimIds) ||
       !input.claimIds.length ||
       new Set(input.claimIds).size !== input.claimIds.length ||
-      input.claimIds.some((id) => !original.handoff.proposals.some((claim) => claim.id === id))
+      input.claimIds.some((id) => !original.claimIds.has(id))
     )
       throw new Error("Review request must name existing unique claims in the original handoff.");
     return input;
@@ -181,7 +365,6 @@ export async function startReviewWorkspace(options) {
       if (kind !== "review-request" && packet.contract !== packetContracts[kind]) {
         throw new Error("Submission kind and sealed packet contract disagree.");
       }
-      const current = await source(packet.sourceSha256);
       if (kind === "review-request") {
         const request = await validateRequest(packet);
         if (!request)
@@ -209,9 +392,7 @@ export async function startReviewWorkspace(options) {
       }
       if (
         kind === "audit" &&
-        !current.stored.document.handoffs.some(
-          (entry) => entry.handoff.handoffId === packet.handoffId,
-        )
+        !(await summary(packet.sourceSha256)).handoffs.has(packet.handoffId)
       ) {
         return saveReceipt({
           ...receipt,
@@ -219,6 +400,7 @@ export async function startReviewWorkspace(options) {
           error: "Waiting for the original handoff.",
         });
       }
+      const current = await source(packet.sourceSha256);
       const result = await directory[kind === "handoff" ? "importHandoff" : "importAudit"](
         current.sourceBytes,
         current.stored.version,
@@ -291,7 +473,7 @@ export async function startReviewWorkspace(options) {
     for (const item of incoming) await processPacket(item.envelope, item.id, item.receivedAt);
   }
 
-  async function inbox() {
+  async function inbox(exportDispositions = false) {
     const rows = [];
     const files = await readdir(join(workspace, "workflow")).catch((error) => {
       if (error.code === "ENOENT") return [];
@@ -299,32 +481,9 @@ export async function startReviewWorkspace(options) {
     });
     for (const filename of files.filter((name) => /^[a-f\d]{64}\.v2\.json$/.test(name)).sort()) {
       try {
-        const current = await source(filename.slice(0, 64));
-        const { document, version } = current.stored;
-        const reviews = current.reviews.map(
-          ({ handoffId, claimId, claim, status, rationale, question, expertReason }) => ({
-            handoffId,
-            claimId,
-            tagId: claim.tagId,
-            scope: claim.scope,
-            status,
-            rationale,
-            ...(question ? { question } : {}),
-            ...(expertReason ? { expertReason } : {}),
-          }),
-        );
-        const counts = { total: reviews.length };
-        for (const row of reviews) counts[row.status] = (counts[row.status] ?? 0) + 1;
-        rows.push({
-          source: document.source,
-          version,
-          updatedAt: document.updatedAt,
-          latestTaskId: current.task.taskId,
-          counts,
-          expertQueue: reviews.filter((row) => row.status === "needs-expert"),
-          reviews,
-          requests: reviewRequests(document),
-        });
+        const current = await summary(filename.slice(0, 64));
+        rows.push({ ...current.row, requests: reviewRequests(current) });
+        if (exportDispositions && !current.restored) await dispositions(filename.slice(0, 64));
       } catch (error) {
         if (!errors.some((entry) => entry.filename === filename && entry.error === error.message))
           errors.push({ filename, error: error.message });
@@ -363,6 +522,7 @@ export async function startReviewWorkspace(options) {
       }
       if (action === "task") return send(response, 200, (await source(sha)).task);
       if (action === "dispositions") return send(response, 200, await dispositions(sha));
+      if (action === "feedback") return send(response, 200, await feedback(sha));
     }
     if (request.method === "POST") {
       if (!request.headers["content-type"]?.startsWith("application/json"))
@@ -506,8 +666,11 @@ export async function startReviewWorkspace(options) {
     server.once("error", reject);
     server.listen(options.port ?? 4176, "127.0.0.1", resolveListen);
   });
-  await exclusive(processInbox);
-  for (const row of (await inbox()).sources) await dispositions(row.source.sha256);
+  await exclusive(async () => {
+    await processInbox();
+    // Keep startup hydration serialized with already connected browser polling.
+    await inbox(true);
+  });
   let scanning = false;
   const timer = setInterval(() => {
     if (scanning) return;
@@ -521,6 +684,7 @@ export async function startReviewWorkspace(options) {
   timer.unref();
   return {
     url: `http://127.0.0.1:${server.address().port}`,
+    cacheInfo: () => ({ fullSources: sources.size, summaries: summaries.size, fullSourceReads }),
     processInbox: () => exclusive(processInbox),
     close: async () => {
       clearInterval(timer);

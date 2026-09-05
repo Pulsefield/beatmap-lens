@@ -1,4 +1,4 @@
-import { serializeCanonicalJson } from "../canonical-json";
+import { serializeCanonicalJson, sha256Hex } from "../canonical-json";
 import type { DatasetDirectoryHandle, DatasetFileHandle } from "../dataset-directory";
 import { inspectOsuSourceV1 } from "../source-identity";
 import type { FoundationV2, ReviewBaseV2, ReviewDocumentV2, TaskPacketV2 } from "./contracts";
@@ -6,7 +6,6 @@ import {
   type AddObservationsInputV2,
   addHumanObservationsV2,
   approveFoundationV2,
-  assertReviewDocumentV2,
   createReviewDocumentV2,
   createTaskPacketV2,
   type DecideClaimInputV2,
@@ -19,6 +18,7 @@ import {
   replaceProposedFoundationV2,
   reviewDocumentVersionV2,
   sameBase,
+  validateReviewDocumentV2,
 } from "./domain";
 
 export interface StoredReviewV2 {
@@ -51,13 +51,13 @@ export class WorkflowDirectoryV2 {
     if (!directory) return null;
     const file = await optionalFile(directory, filename);
     if (!file) return null;
-    const text = await (await file.getFile()).text();
-    const document = await assertReviewDocumentV2(JSON.parse(text), sourceBytes);
+    const { input, sha256 } = await readCanonicalContent(file);
+    await validateReviewDocumentV2(input, sourceBytes);
+    // The read owns this fresh graph; keep sharing between immutable source/Foundation blobs.
+    const document = input as ReviewDocumentV2;
     if (document.source.sha256 !== sourceSha256)
       throw new Error("V2 filename and source identity disagree.");
-    if (serializeCanonicalJson(document) !== text)
-      throw new Error("V2 review document is not canonical JSON.");
-    return { document, version: await reviewDocumentVersionV2(document) };
+    return { document, version: { revision: document.revision, sha256 } };
   }
 
   async initialize(
@@ -253,7 +253,7 @@ export class WorkflowDirectoryV2 {
     expectedBase: ReviewBaseV2 | null,
     sourceBytes: Uint8Array,
   ): Promise<StoredReviewV2> {
-    await assertReviewDocumentV2(document, sourceBytes);
+    await validateReviewDocumentV2(document, sourceBytes);
     const current = await this.read(document.source.sha256, sourceBytes);
     if (
       expectedBase === null
@@ -265,6 +265,13 @@ export class WorkflowDirectoryV2 {
     const file = await directory.getFileHandle(reviewFilename(document.source.sha256), {
       create: true,
     });
+    if (file.writeCanonicalJson) {
+      const version = await reviewDocumentVersionV2(document);
+      await file.writeCanonicalJson(document, version.sha256);
+      if ((await readCanonicalContent(file)).sha256 !== version.sha256)
+        throw new Error("V2 review read-back differs from the bytes written.");
+      return { document, version };
+    }
     const content = serializeCanonicalJson(document);
     const writable = await file.createWritable();
     await writable.write(content);
@@ -279,6 +286,22 @@ export class WorkflowDirectoryV2 {
     this.#pending = next.catch(() => undefined);
     return next;
   }
+}
+
+async function readCanonicalContent(
+  file: DatasetFileHandle,
+): Promise<{ input: unknown; sha256: string }> {
+  if (file.readCanonicalJson) {
+    const { value, canonicalSha256 } = await file.readCanonicalJson();
+    if ((await hashWorkflowValueV2(value)) !== canonicalSha256)
+      throw new Error("V2 review document is not canonical JSON or its stored hash differs.");
+    return { input: value, sha256: canonicalSha256 };
+  }
+  const text = await (await file.getFile()).text();
+  const input: unknown = JSON.parse(text);
+  if (serializeCanonicalJson(input) !== text)
+    throw new Error("V2 review document is not canonical JSON.");
+  return { input, sha256: await sha256Hex(text) };
 }
 
 function reviewFilename(sourceSha256: string): string {

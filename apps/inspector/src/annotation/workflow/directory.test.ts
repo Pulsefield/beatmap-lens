@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { serializeCanonicalJson, sha256Hex } from "../canonical-json";
 import { inspectOsuSourceV1 } from "../source-identity";
 import { FakeDirectoryHandle, FakeFileHandle } from "../test-helpers";
 import { WorkflowConflictError, WorkflowDirectoryV2 } from "./directory";
@@ -6,6 +7,31 @@ import { hashWorkflowValueV2, sealHandoffV2 } from "./domain";
 import { workflowFixture } from "./test-fixtures";
 
 describe("V2 canonical workflow commands", () => {
+  it("derives the version from exact canonical bytes while retaining semantic validation", async () => {
+    const f = await workflowFixture();
+    const root = new FakeDirectoryHandle();
+    const files = await root.getDirectoryHandle("workflow", { create: true });
+    const file = await files.getFileHandle(`${f.inspected.source.sha256}.v2.json`, {
+      create: true,
+    });
+    const text = serializeCanonicalJson(f.registered);
+    file.setText(text);
+    const directory = new WorkflowDirectoryV2(root);
+    expect(await directory.read(f.inspected.source.sha256)).toEqual({
+      document: f.registered,
+      version: { revision: f.registered.revision, sha256: await sha256Hex(text) },
+    });
+    file.setText(JSON.stringify(f.registered));
+    await expect(directory.read(f.inspected.source.sha256)).rejects.toThrow("not canonical JSON");
+    file.setText(
+      serializeCanonicalJson({
+        ...f.registered,
+        tasks: [{ ...f.task, taskSha256: "0".repeat(64) }],
+      }),
+    );
+    await expect(directory.read(f.inspected.source.sha256)).rejects.toThrow("task.taskSha256");
+  });
+
   it("registers a new source with the same trusted approval and an empty history in one write", async () => {
     const f = await workflowFixture();
     const directory = new WorkflowDirectoryV2(new FakeDirectoryHandle());

@@ -28,8 +28,7 @@ export async function sha256Hex(
   digest: Sha256DigestFunction = (algorithm, data) =>
     globalThis.crypto.subtle.digest(algorithm, data),
 ): Promise<string> {
-  const source = typeof value === "string" ? encoder.encode(value) : value;
-  const bytes = new Uint8Array(source);
+  const bytes = typeof value === "string" ? encoder.encode(value) : new Uint8Array(value);
   const result = await digest("SHA-256", bytes);
   return [...new Uint8Array(result)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
@@ -161,7 +160,11 @@ function normalizeJson(value: unknown): unknown {
     return value;
   }
 
-  if (Array.isArray(value)) return value.map(normalizeJson);
+  if (Array.isArray(value)) {
+    // Exact source bytes are large numeric arrays; serialization never mutates them.
+    if (value.every((entry) => typeof entry === "number" && Number.isFinite(entry))) return value;
+    return value.map(normalizeJson);
+  }
 
   if (typeof value === "object") {
     return Object.fromEntries(

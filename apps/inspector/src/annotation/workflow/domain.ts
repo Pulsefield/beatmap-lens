@@ -1002,6 +1002,15 @@ export async function assertReviewDocumentV2(
   input: unknown,
   sourceBytes?: Uint8Array,
 ): Promise<ReviewDocumentV2> {
+  await validateReviewDocumentV2(input, sourceBytes);
+  return clone(input as ReviewDocumentV2);
+}
+
+/** Validate a fresh directory-owned graph without duplicating immutable source snapshots. */
+export async function validateReviewDocumentV2(
+  input: unknown,
+  sourceBytes?: Uint8Array,
+): Promise<void> {
   const value = record(
     input,
     [
@@ -1153,7 +1162,6 @@ export async function assertReviewDocumentV2(
     if (decision.disposition === "accepted")
       same(observation?.claim, proposal, "Accepted observation changed the original claim.");
   }
-  return clone(document);
 }
 
 export function sameBase(left: ReviewBaseV2, right: ReviewBaseV2): boolean {

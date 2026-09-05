@@ -47,6 +47,9 @@ export interface DatasetFileHandle {
   readonly name: string;
   createWritable(): Promise<WritableFileLike>;
   getFile(): Promise<FileLike>;
+  /** Local compact storage can preserve shared immutable blobs; callers must validate this hash. */
+  readCanonicalJson?(): Promise<{ value: unknown; canonicalSha256: string }>;
+  writeCanonicalJson?(value: unknown, canonicalSha256: string): Promise<void>;
 }
 
 export type DatasetHandle = DatasetDirectoryHandle | DatasetFileHandle;

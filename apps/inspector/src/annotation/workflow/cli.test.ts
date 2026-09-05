@@ -1,9 +1,9 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer, type RequestListener, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import { serializeCanonicalJson } from "../canonical-json";
@@ -12,7 +12,9 @@ import {
   decideClaimV2,
   importAuditV2,
   importHandoffV2,
+  readAgentReviewsV2,
   readDispositionsV2,
+  readExpertQueueV2,
   sealAuditV2,
 } from "./domain";
 import { workflowFixture } from "./test-fixtures";
@@ -20,6 +22,10 @@ import { workflowFixture } from "./test-fixtures";
 const exec = promisify(execFile);
 const script = fileURLToPath(
   new URL("../../../../../scripts/annotation-workflow.mjs", import.meta.url),
+);
+const adapterUrl = pathToFileURL(join(script, "../workflow-local-directory.mjs")).href;
+const { compactReviewWorkspace, readCanonicalWorkflowFile } = await import(
+  /* @vite-ignore */ adapterUrl
 );
 const directories: string[] = [];
 const servers: Server[] = [];
@@ -370,6 +376,29 @@ describe("external annotation exchange CLI", () => {
     expect(JSON.parse(result.stdout)).toEqual(await readDispositionsV2(document));
     expect(await readFile(canonicalPath, "utf8")).toBe(canonical);
     expect(await json(join(dir, "handoff.json"))).toEqual(f.handoff);
+
+    await mkdir(join(dir, "workflow"));
+    const compactPath = join(dir, "workflow", `${f.inspected.source.sha256}.v2.json`);
+    await writeFile(compactPath, canonical);
+    await compactReviewWorkspace(dir);
+    const compactBytes = await readFile(compactPath, "utf8");
+    expect(JSON.parse(compactBytes).storage).toBe("beatmap-lens-local-compact-v1");
+    expect(await readCanonicalWorkflowFile(compactPath)).toBe(canonical);
+    for (const command of ["dispositions", "review-status", "expert-queue"]) {
+      const result = JSON.parse(
+        (await exec(process.execPath, [script, command, "--file", compactPath])).stdout,
+      );
+      if (command === "dispositions") expect(result).toEqual(await readDispositionsV2(document));
+      else {
+        expect(result.reviews).toEqual(
+          command === "review-status"
+            ? await readAgentReviewsV2(document)
+            : await readExpertQueueV2(document),
+        );
+      }
+    }
+    expect(await readFile(compactPath, "utf8")).toBe(compactBytes);
+    expect(await readCanonicalWorkflowFile(compactPath)).toBe(canonical);
   });
 });
 

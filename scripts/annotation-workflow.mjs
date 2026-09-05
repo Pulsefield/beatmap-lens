@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
+import { readCanonicalWorkflowFile } from "./workflow-local-directory.mjs";
 
 const repoRoot = fileURLToPath(new URL("../", import.meta.url));
 const require = createRequire(new URL("../apps/inspector/package.json", import.meta.url));
@@ -182,7 +183,10 @@ if (
       );
     } else if (command === "review-status" || command === "expert-queue") {
       const bytes = values.source ? new Uint8Array(await readFile(values.source)) : undefined;
-      const document = await domain.assertReviewDocumentV2(await readJson(required("file")), bytes);
+      const document = await domain.assertReviewDocumentV2(
+        JSON.parse(await readCanonicalWorkflowFile(required("file"))),
+        bytes,
+      );
       const reviews =
         command === "expert-queue"
           ? await domain.readExpertQueueV2(document)
@@ -202,7 +206,7 @@ if (
       if (values.out) await output(values.out, text);
       else process.stdout.write(text);
     } else if (command === "dispositions") {
-      const input = await readJson(required("file"));
+      const input = JSON.parse(await readCanonicalWorkflowFile(required("file")));
       let result;
       if (input.contract === "beatmap-lens-human-dispositions" && input.version === 2) {
         // This is an Inspector-produced view, not a canonical import or source-verified document.

@@ -6,6 +6,7 @@ import { BufferedSceneController, projectSceneRange } from "./annotation/buffere
 import { serializeCanonicalJson } from "./annotation/canonical-json";
 import type { StableNoteRefV1, TimeRangeV1 } from "./annotation/contracts";
 import { pickDatasetDirectory } from "./annotation/file-system-access";
+import { ManiaNoteTimeIndex } from "./annotation/note-time-index";
 import { chartEndMs } from "./annotation/range";
 import { type InspectedOsuSourceV1, inspectOsuSourceV1 } from "./annotation/source-identity";
 import { createStableNoteRefV1, stableNoteRefKey } from "./annotation/stable-note-ref";
@@ -72,11 +73,16 @@ const controller = computed(() => source.value ? new BufferedSceneController(sou
 }) : undefined);
 const frame = computed(() => controller.value?.frame(playhead.value));
 const selectedNotes = computed(() => new Set((activeClaim.value?.evidence.noteRefs ?? []).concat(activeClaim.value?.evidence.contextNoteRefs ?? []).map(stableNoteRefKey)));
-const selectedNoteIds = computed(() => new Set(source.value?.chart.notes.filter(note => selectedNotes.value.has(stableNoteRefKey(createStableNoteRefV1(note)))).map(note => note.id) ?? []));
-const candidateNotes = computed(() => source.value?.chart.notes.filter(note => {
+const noteIndex = computed(() => new ManiaNoteTimeIndex(source.value?.chart.notes ?? []));
+const noteIdsByReference = computed(() => new Map(source.value?.chart.notes.map(note => [stableNoteRefKey(createStableNoteRefV1(note)), note.id]) ?? []));
+const selectedNoteIds = computed(() => new Set([...selectedNotes.value].flatMap(key => {
+  const id = noteIdsByReference.value.get(key);
+  return id === undefined ? [] : [id];
+})));
+const candidateNotes = computed(() => {
   const range = activeClaim.value?.reviewContext ?? frame.value?.viewportRange;
-  return range && note.startMs < range.endMs && (note.kind === "long" ? note.endMs > range.startMs : note.startMs >= range.startMs);
-}) ?? []);
+  return range ? noteIndex.value.notesInRange(range) : [];
+});
 const candidateIds = computed(() => new Set(candidateNotes.value.map(note => note.id)));
 const visibleNotes = computed(() => candidateNotes.value.slice(notePage.value * 80, (notePage.value + 1) * 80));
 const selectionBand = computed(() => {

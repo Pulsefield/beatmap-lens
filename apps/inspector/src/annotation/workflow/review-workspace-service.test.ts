@@ -94,6 +94,184 @@ async function get(url: string, pathname: string) {
 }
 
 describe("local Review service exchange", () => {
+  it("returns compact agent feedback with exact human modifications and immutable provenance", async () => {
+    const f = await fixture();
+    const service = await start(f.workspace);
+    const handoff = await sealHandoffV2(f.task, {
+      handoffId: "feedback-handoff",
+      createdAt: NOW,
+      agent: {
+        ...f.handoff.agent,
+        skill: { name: "fixture-judgment", version: "1", sha256: "a".repeat(64) },
+      },
+      proposals: f.handoff.proposals,
+      audit: f.handoff.audit,
+      questions: [{ id: "scope-question", claimIds: [f.claim.id], text: "Check the entry hold." }],
+    });
+    const audit = await sealAuditV2(f.task, handoff, {
+      auditId: "feedback-audit",
+      createdAt: NOW,
+      agent: {
+        ...f.audit.agent,
+        skill: { name: "fixture-judgment", version: "2", sha256: "b".repeat(64) },
+      },
+      claims: f.audit.claims,
+      questions: [
+        {
+          questionId: "scope-question",
+          disposition: "resolved",
+          rationale: "The exact entering hold is present.",
+        },
+      ],
+    });
+    expect((await post(service.url, "submit", { kind: "handoff", packet: handoff })).status).toBe(
+      200,
+    );
+    expect((await post(service.url, "submit", { kind: "audit", packet: audit })).status).toBe(200);
+    const initial = await get(service.url, `feedback/${f.sha}`);
+    expect(initial.taskBinding).toEqual({
+      taskId: f.task.taskId,
+      taskSha256: f.task.taskSha256,
+      foundationSha256: f.task.foundationSha256,
+      base: f.task.base,
+    });
+    expect(initial.reviewBase).toEqual(f.task.base);
+    expect(initial.counts).toEqual({ total: 2, "agent-reviewed": 2 });
+    expect(initial.handoffs[0]).toMatchObject({
+      handoffId: handoff.handoffId,
+      handoffSha256: await hashWorkflowValueV2(handoff),
+      agent: handoff.agent,
+      questions: handoff.questions,
+    });
+    expect(initial.audits[0]).toMatchObject({
+      auditId: audit.auditId,
+      auditSha256: await hashWorkflowValueV2(audit),
+      agent: audit.agent,
+      questions: audit.questions,
+    });
+    expect(initial.agentReviews[0].summary).toMatchObject({
+      scope: f.claim.scope,
+      reviewContext: f.claim.reviewContext,
+      assessment: f.claim.assessment,
+      rationale: f.claim.evidence.rationale,
+      witnessCount: f.claim.evidence.noteRefs.length,
+      boundaryUncertainty: f.claim.boundaryUncertainty,
+      transition: { description: f.claim.transition?.description, witnessCount: 2 },
+    });
+    expect(initial.agentReviews[0].audits).toEqual([
+      { auditId: audit.auditId, result: audit.claims[0] },
+    ]);
+    expect(JSON.stringify(initial)).not.toMatch(
+      /"(?:sourceBytes|foundation|structure|noteRefs|contextNoteRefs)":/,
+    );
+    const modifiedClaim = {
+      ...f.claim,
+      assessment: { presence: "present", salience: "supporting" },
+      evidence: {
+        ...f.claim.evidence,
+        noteRefs: [f.refs[0], f.refs[4]],
+        rationale: "Human correction retains the entering hold and later discontiguous witness.",
+      },
+    };
+    const modified = await post(service.url, `human/${f.sha}/decide`, {
+      expectedBase: initial.documentVersion,
+      input: {
+        handoffId: handoff.handoffId,
+        claimId: f.claim.id,
+        disposition: "modified",
+        humanId: "local-expert",
+        rationale: "Use supporting salience for these specific witnesses.",
+        modifiedClaim,
+      },
+    });
+    expect(modified.status).toBe(200);
+    const feedback = await get(service.url, `feedback/${f.sha}`);
+    expect(feedback.documentVersion).toEqual(modified.value.version);
+    expect(feedback.reviewBase.revision).toBe(initial.reviewBase.revision + 1);
+    expect(feedback.taskBinding).toEqual(initial.taskBinding);
+    expect(feedback.agentReviews[0].summary).toEqual(initial.agentReviews[0].summary);
+    expect(feedback.agentReviews[0].decision).toEqual(modified.value.document.decisions[0]);
+    expect(feedback.agentReviews[0].modifiedClaim).toEqual(modifiedClaim);
+    expect(feedback.agentReviews[1]).not.toHaveProperty("modifiedClaim");
+    expect(feedback.counts).toEqual({ total: 2, modified: 1, "agent-reviewed": 1 });
+    const withoutModified = structuredClone(feedback);
+    delete withoutModified.agentReviews[0].modifiedClaim;
+    expect(JSON.stringify(withoutModified)).not.toMatch(
+      /"(?:sourceBytes|foundation|structure|noteRefs|contextNoteRefs)":/,
+    );
+    expect((await get(service.url, `dispositions/${f.sha}`)).agentReviews[0].claim).toEqual(
+      f.claim,
+    );
+    expect((await get(service.url, `source/${f.sha}`)).version).toEqual(modified.value.version);
+    await service.close();
+    const restarted = await start(f.workspace);
+    expect(restarted.cacheInfo().fullSourceReads).toBe(0);
+    expect(await get(restarted.url, `feedback/${f.sha}`)).toEqual(feedback);
+    expect(restarted.cacheInfo().fullSourceReads).toBe(0);
+  }, 10_000);
+
+  it("bounds full-source retention while unchanged inbox polls use compact summaries", async () => {
+    const f = await fixture();
+    const service = await start(f.workspace);
+    await post(service.url, "submit", { kind: "handoff", packet: f.handoff });
+    await post(service.url, "submit", { kind: "audit", packet: f.audit });
+    await post(service.url, "submit", { kind: "review-request", packet: f.request });
+    const original = await get(service.url, `source/${f.sha}`);
+    for (let index = 0; index < 5; index++) {
+      const sourceBytes = Array.from(
+        new TextEncoder().encode(
+          new TextDecoder()
+            .decode(f.sourceBytes)
+            .replace("Version: Mixed", `Version: Batch ${index}`),
+        ),
+      );
+      const registered = await post(service.url, "source", {
+        sourceBytes,
+        foundationSourceSha256: f.sha,
+        foundationSha256: f.task.foundationSha256,
+      });
+      expect(registered.status).toBe(200);
+    }
+    const warmed = service.cacheInfo();
+    expect(warmed).toMatchObject({ fullSources: 1, summaries: 6 });
+    for (let poll = 0; poll < 3; poll++) {
+      const inbox = await get(service.url, "inbox");
+      expect(inbox.sources).toHaveLength(6);
+      const initial = inbox.sources.find(
+        (row: { source: { sha256: string } }) => row.source.sha256 === f.sha,
+      );
+      expect(initial.counts).toEqual({ total: 2, "agent-reviewed": 2 });
+      expect(initial.requests[0].pendingClaimIds).toEqual(f.request.claimIds);
+      const feedback = await get(service.url, `feedback/${f.sha}`);
+      expect(feedback.counts).toEqual(initial.counts);
+    }
+    expect(service.cacheInfo()).toEqual(warmed);
+    expect(await get(service.url, `source/${f.sha}`)).toEqual(original);
+    expect(service.cacheInfo()).toEqual({ ...warmed, fullSourceReads: warmed.fullSourceReads + 1 });
+    const decided = await post(service.url, `human/${f.sha}/decide`, {
+      expectedBase: original.version,
+      input: {
+        handoffId: f.handoff.handoffId,
+        claimId: f.claim.id,
+        disposition: "accepted",
+        humanId: "local-expert",
+        rationale: "Check the summary after reopening an evicted source.",
+      },
+    });
+    expect(decided.status).toBe(200);
+    const updated = await get(service.url, "inbox");
+    const initial = updated.sources.find(
+      (row: { source: { sha256: string } }) => row.source.sha256 === f.sha,
+    );
+    expect(initial.version).toEqual(decided.value.version);
+    expect(initial.counts).toEqual({ total: 2, accepted: 1, "agent-reviewed": 1 });
+    expect(initial.requests[0].pendingClaimIds).toEqual(["streams-claim"]);
+    const refreshed = service.cacheInfo();
+    await get(service.url, "inbox");
+    expect(service.cacheInfo()).toEqual(refreshed);
+    expect(refreshed.fullSources).toBe(1);
+  }, 10_000);
+
   it("registers a local source through the real CLI using the original canonical Foundation approval", async () => {
     const f = await fixture();
     const service = await start(f.workspace);
