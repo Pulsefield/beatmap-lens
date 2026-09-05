@@ -248,8 +248,19 @@ fixtures/
   beatmaps/           redistributable parser and render fixtures
 ```
 
-The current Inspector is a static development surface. Its name describes the product boundary,
-not completion of the audio review workflow.
+The Inspector has static **Inspect**, legacy **Annotate**, and V2 **Review** workspaces.
+Review opens an exact difficulty, preserves independent claim assessments and evidence,
+and exchanges frozen tasks, agent proposals, independent audits, and explicit human decisions.
+The local service provides a fixed human inbox at `http://127.0.0.1:4176/review`;
+agents submit work and consume feedback while the expert reviews. V1 annotation records
+keep their original meanings. The four-dimension Foundation has expert approval;
+new templates and semantic revisions remain proposed until separately reviewed.
+
+See the [agent–human workflow](docs/agent-workflow.md),
+[expert pattern judgment skill](skills/mania-pattern-judgment/SKILL.md), and
+[compositional section model proposal](docs/decisions/0004-compositional-pattern-judgments.md).
+The selected four-dimension pilot and its separate community-observation proposal
+are described in [experimental style supervision](docs/decisions/0005-experimental-style-supervision.md).
 
 ## Scope
 

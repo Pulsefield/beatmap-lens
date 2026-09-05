@@ -1,0 +1,4 @@
+interface:
+  display_name: "Mania Pattern Judgment"
+  short_description: "Judge mania patterns using expert-calibrated structure"
+  default_prompt: "Use $mania-pattern-judgment to inspect this difficulty, locate pattern changes, and propose evidence-backed judgments."
