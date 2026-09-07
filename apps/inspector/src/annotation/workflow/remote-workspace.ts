@@ -10,6 +10,7 @@ export interface CommunityTagMetadata {
 }
 export interface RemoteSourceV2 extends StoredReviewV2 {
   readonly sourceBytes: readonly number[];
+  readonly audio?: { readonly url: string; readonly filename: string } | null;
   readonly communityTags?: CommunityTagMetadata | null;
 }
 export interface InboxSourceV2 {

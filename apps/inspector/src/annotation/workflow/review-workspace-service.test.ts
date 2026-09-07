@@ -1,5 +1,5 @@
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
-import { get as httpGet } from "node:http";
+import { mkdir, mkdtemp, open, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { Agent, get as httpGet, request as httpRequest, type IncomingMessage } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -67,8 +67,8 @@ async function fixture() {
   return { ...f, workspace, handoff, audit, request, sha: f.inspected.source.sha256 };
 }
 
-async function start(workspace: string, dataset?: string) {
-  const service = await startReviewWorkspace({ workspace, dataset, port: 0, pollIntervalMs: 25 });
+async function start(workspace: string, dataset?: string, port = 0) {
+  const service = await startReviewWorkspace({ workspace, dataset, port, pollIntervalMs: 25 });
   let closed = false;
   const close = async () => {
     if (closed) return;
@@ -95,6 +95,240 @@ async function get(url: string, pathname: string) {
 }
 
 describe("local Review service exchange", () => {
+  it("drains queued human decisions, closes old keep-alive streams, and restarts on the same port", async () => {
+    const f = await fixture();
+    const dataset = join(f.workspace, "dataset");
+    await mkdir(join(dataset, "0/456"), { recursive: true });
+    const audio = await open(join(dataset, "0/456/song.mp3"), "w");
+    await audio.truncate(16 * 1024 * 1024);
+    await audio.close();
+    const service = await start(f.workspace, dataset);
+    await post(service.url, "submit", { kind: "handoff", packet: f.handoff });
+    await post(service.url, "submit", { kind: "audit", packet: f.audit });
+    const audioTask = await post(service.url, "source", {
+      sourceBytes: Array.from(
+        new TextEncoder().encode(
+          new TextDecoder()
+            .decode(f.sourceBytes)
+            .replace("Mode: 3", "Mode: 3\nAudioFilename: song.mp3"),
+        ),
+      ),
+      foundationSourceSha256: f.sha,
+      foundationSha256: f.task.foundationSha256,
+    });
+    const current = await get(service.url, `source/${f.sha}`);
+    const paused = await new Promise<IncomingMessage>((resolveResponse, reject) => {
+      httpGet(`${service.url}/api/review/audio/${audioTask.value.source.sha256}`, (response) => {
+        response.pause();
+        response.on("error", () => {});
+        resolveResponse(response);
+      }).on("error", reject);
+    });
+    const agent = new Agent({ keepAlive: true, maxSockets: 2 });
+    cleanups.push(async () => agent.destroy());
+    function admittedPost(path: string, body: unknown) {
+      const text = JSON.stringify(body);
+      let resolveResponse!: (value: { status: number | undefined; value: unknown }) => void;
+      let rejectResponse!: (error: Error) => void;
+      const completed = new Promise<{ status: number | undefined; value: unknown }>(
+        (resolve, reject) => {
+          resolveResponse = resolve;
+          rejectResponse = reject;
+        },
+      );
+      const request = httpRequest(
+        `${service.url}/api/review/${path}`,
+        {
+          method: "POST",
+          agent,
+          headers: {
+            "Content-Type": "application/json",
+            "Content-Length": Buffer.byteLength(text),
+            Expect: "100-continue",
+          },
+        },
+        (response) => {
+          const chunks: Buffer[] = [];
+          response.on("data", (chunk) => chunks.push(chunk));
+          response.on("end", () =>
+            resolveResponse({
+              status: response.statusCode,
+              value: JSON.parse(Buffer.concat(chunks).toString()),
+            }),
+          );
+          response.on("error", rejectResponse);
+        },
+      );
+      request.on("error", rejectResponse);
+      const admitted = new Promise<void>((resolve) => request.once("continue", resolve));
+      request.flushHeaders();
+      return { request, text, admitted, completed };
+    }
+    // Keep the writer awaiting the first request body while the human command enters its queue.
+    const gate = admittedPost("submit", { kind: "audit", packet: f.audit });
+    await gate.admitted;
+    const decision = admittedPost(`human/${f.sha}/decide`, {
+      expectedBase: current.version,
+      input: {
+        handoffId: f.handoff.handoffId,
+        claimId: f.claim.id,
+        disposition: "accepted",
+        humanId: "shutdown-expert",
+        rationale: "This accepted decision must survive shutdown.",
+      },
+    });
+    await decision.admitted;
+    decision.request.end(decision.text);
+    let closed = false;
+    const closing = service.close().then(() => {
+      closed = true;
+    });
+    gate.request.end(gate.text);
+    try {
+      expect((await gate.completed).status).toBe(200);
+      expect((await decision.completed).status).toBe(200);
+      await expect.poll(() => closed, { timeout: 1_000 }).toBe(true);
+    } finally {
+      paused.destroy();
+      await closing;
+    }
+    const restarted = await start(f.workspace, dataset, Number(new URL(service.url).port));
+    const response = await new Promise<IncomingMessage>((resolveResponse, reject) => {
+      httpGet(`${restarted.url}/api/review/feedback/${f.sha}`, { agent }, resolveResponse).on(
+        "error",
+        reject,
+      );
+    });
+    expect(response.statusCode).toBe(200);
+    const chunks: Buffer[] = [];
+    for await (const chunk of response) chunks.push(chunk);
+    const feedback = JSON.parse(Buffer.concat(chunks).toString());
+    expect(feedback.agentReviews[0].decision).toMatchObject({
+      disposition: "accepted",
+      humanId: "shutdown-expert",
+      rationale: "This accepted decision must survive shutdown.",
+    });
+    expect((await get(restarted.url, `source/${f.sha}`)).document.decisions).toHaveLength(1);
+  }, 10_000);
+
+  it("streams registered beatmap audio with seeking and HEAD without blocking review or changing records", async () => {
+    const f = await fixture();
+    const dataset = join(f.workspace, "dataset");
+    const service = await start(f.workspace, dataset);
+    expect((await get(service.url, `source/${f.sha}`)).audio).toBeNull();
+    expect((await fetch(`${service.url}/api/review/audio/${f.sha}`)).status).toBe(404);
+    const registered = await post(service.url, "source", {
+      sourceBytes: Array.from(
+        new TextEncoder().encode(
+          new TextDecoder()
+            .decode(f.sourceBytes)
+            .replace(
+              "Mode: 3",
+              "Mode: 3\nAudioFilename: unused.ogg\nAudioFilename: music\\song.mp3",
+            ),
+        ),
+      ),
+      foundationSourceSha256: f.sha,
+      foundationSha256: f.task.foundationSha256,
+    });
+    expect(registered.status).toBe(200);
+    const sha = registered.value.source.sha256;
+    const audioPath = join(dataset, "0/456/music/song.mp3");
+    await mkdir(join(dataset, "0/456/music"), { recursive: true });
+    const prefix = Buffer.from("0123456789abcdef");
+    await writeFile(audioPath, prefix);
+    const audioFile = await open(audioPath, "r+");
+    const size = 16 * 1024 * 1024;
+    await audioFile.truncate(size);
+    await audioFile.close();
+    const canonicalPath = join(f.workspace, "workflow", `${sha}.v2.json`);
+    const original = await readFile(canonicalPath, "utf8");
+    const feedback = await get(service.url, `feedback/${sha}`);
+    const source = await get(service.url, `source/${sha}`);
+    expect(source.audio).toEqual({ url: `/api/review/audio/${sha}`, filename: "music\\song.mp3" });
+    expect(source.document).not.toHaveProperty("audio");
+    const url = `${service.url}${source.audio.url}`;
+    const range = await fetch(url, { headers: { Range: "bytes=2-7" } });
+    expect(range.status).toBe(206);
+    expect(range.headers.get("content-type")).toBe("audio/mpeg");
+    expect(range.headers.get("accept-ranges")).toBe("bytes");
+    expect(range.headers.get("content-range")).toBe(`bytes 2-7/${size}`);
+    expect(range.headers.get("content-length")).toBe("6");
+    expect(Buffer.from(await range.arrayBuffer())).toEqual(prefix.subarray(2, 8));
+    const suffix = await fetch(url, { headers: { Range: "bytes=-3" } });
+    expect(suffix.status).toBe(206);
+    expect(suffix.headers.get("content-range")).toBe(`bytes ${size - 3}-${size - 1}/${size}`);
+    expect(Buffer.from(await suffix.arrayBuffer())).toEqual(Buffer.alloc(3));
+    const head = await fetch(url, { method: "HEAD", headers: { Range: "bytes=2-7" } });
+    expect(head.status).toBe(200);
+    expect(head.headers.get("content-length")).toBe(String(size));
+    expect(await head.text()).toBe("");
+    const unsatisfiable = await fetch(url, { headers: { Range: `bytes=${size}-` } });
+    expect(unsatisfiable.status).toBe(416);
+    expect(unsatisfiable.headers.get("content-range")).toBe(`bytes */${size}`);
+    await unsatisfiable.arrayBuffer();
+    const paused = await new Promise<IncomingMessage>((resolveResponse, reject) => {
+      httpGet(url, (response) => {
+        response.pause();
+        resolveResponse(response);
+      }).on("error", reject);
+    });
+    try {
+      expect(paused.statusCode).toBe(200);
+      const concurrent = await fetch(`${service.url}/api/review/feedback/${sha}`, {
+        signal: AbortSignal.timeout(2_000),
+      });
+      expect(await concurrent.json()).toEqual(feedback);
+    } finally {
+      paused.destroy();
+    }
+    expect(await get(service.url, `task/${sha}`)).toEqual(registered.value);
+    expect(await readFile(canonicalPath, "utf8")).toBe(original);
+    await rm(audioPath);
+    expect((await get(service.url, `source/${sha}`)).audio).toBeNull();
+    expect((await fetch(url)).status).toBe(404);
+  }, 10_000);
+
+  it("keeps audio paths inside the registered set, including symlink targets", async () => {
+    const f = await fixture();
+    const dataset = join(f.workspace, "dataset");
+    await mkdir(join(dataset, "0/456"), { recursive: true });
+    const outside = join(f.workspace, "outside.mp3");
+    await writeFile(outside, "Outside the registered set");
+    await writeFile(join(dataset, "0/outside.mp3"), "Sibling of the registered set");
+    await symlink(outside, join(dataset, "0/456/escape.mp3"));
+    await symlink(f.workspace, join(dataset, "0/457"));
+    await mkdir(join(dataset, "0/458"));
+    await writeFile(join(dataset, "0/458/outside.mp3"), "Another beatmapset's audio");
+    await symlink(join(dataset, "0/458"), join(dataset, "0/459"));
+    const service = await start(f.workspace, dataset);
+    for (const [filename, setId] of [
+      ["../outside.mp3", 456],
+      ["..\\outside.mp3", 456],
+      [outside, 456],
+      ["escape.mp3", 456],
+      ["outside.mp3", 457],
+      ["outside.mp3", 459],
+    ] as const) {
+      const registered = await post(service.url, "source", {
+        sourceBytes: Array.from(
+          new TextEncoder().encode(
+            new TextDecoder()
+              .decode(f.sourceBytes)
+              .replace("Mode: 3", `Mode: 3\nAudioFilename: ${filename}`)
+              .replace("BeatmapSetID: 456", `BeatmapSetID: ${setId}`),
+          ),
+        ),
+        foundationSourceSha256: f.sha,
+        foundationSha256: f.task.foundationSha256,
+      });
+      expect(registered.status).toBe(200);
+      const sha = registered.value.source.sha256;
+      expect((await get(service.url, `source/${sha}`)).audio).toBeNull();
+      expect((await fetch(`${service.url}/api/review/audio/${sha}`)).status).toBe(404);
+    }
+  }, 10_000);
+
   it("adds difficulty-specific community votes only to the human source response", async () => {
     const f = await fixture();
     const dataset = join(f.workspace, "dataset");

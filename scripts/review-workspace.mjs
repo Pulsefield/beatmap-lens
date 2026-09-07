@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 import { extname, join, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
+import { resolveReviewAudio, streamReviewAudio } from "./review-audio.mjs";
 import { createCommunityTagReader } from "./review-community-tags.mjs";
 import { atomicWrite, LocalDirectoryHandle } from "./workflow-local-directory.mjs";
 
@@ -18,9 +19,8 @@ const packetContracts = {
 /** One local writer owns both HTTP commands and filesystem exchange delivery. */
 export async function startReviewWorkspace(options) {
   const workspace = resolve(options.workspace);
-  const communityTags = createCommunityTagReader(
-    resolve(options.dataset ?? join(repo, "../Pulsefield-model/dataset")),
-  );
+  const dataset = resolve(options.dataset ?? join(repo, "../Pulsefield-model/dataset"));
+  const communityTags = createCommunityTagReader(dataset);
   const exchange = join(workspace, "exchange");
   const staticRoot = resolve(options.staticRoot ?? join(repo, "apps/inspector/dist"));
   for (const name of ["inbox", "outbox", "receipts", "requests"]) {
@@ -40,6 +40,9 @@ export async function startReviewWorkspace(options) {
   );
   const { serializeCanonicalJson } = await vite.ssrLoadModule(
     "/apps/inspector/src/annotation/canonical-json.ts",
+  );
+  const { parseOsu, getLastPropertyValue } = await vite.ssrLoadModule(
+    "/packages/beatmap-lens/src/parser.ts",
   );
   const directory = new WorkflowDirectoryV2(new LocalDirectoryHandle(workspace));
   const receipts = new Map();
@@ -135,6 +138,16 @@ export async function startReviewWorkspace(options) {
     sources.set(sha, value);
     while (sources.size > 1) sources.delete(sources.keys().next().value);
     return value;
+  }
+
+  function sourceAudio(current) {
+    current.audioFilename ??=
+      getLastPropertyValue(
+        parseOsu(new TextDecoder().decode(current.sourceBytes)),
+        "General",
+        "AudioFilename",
+      )?.trim() ?? "";
+    return resolveReviewAudio(dataset, current.stored.document.source, current.audioFilename);
   }
 
   async function summary(sha) {
@@ -541,14 +554,22 @@ export async function startReviewWorkspace(options) {
     const parts = url.pathname.split("/").filter(Boolean);
     const action = parts[2];
     const sha = parts[3];
+    if (action === "audio" && (request.method === "GET" || request.method === "HEAD")) {
+      const current = await source(sha);
+      const audio = await sourceAudio(current);
+      if (!audio) throw httpError(404, "Beatmap audio is not available in this dataset.");
+      return streamReviewAudio(request, response, audio);
+    }
     if (request.method === "GET") {
       if (action === "inbox") return send(response, 200, await inbox());
       if (action === "source") {
         const current = await source(sha);
+        const audio = await sourceAudio(current);
         return send(response, 200, {
           ...current.stored,
           sourceBytes: Array.from(current.sourceBytes),
           communityTags: await communityTags(current.stored.document.source),
+          audio: audio ? { url: `/api/review/audio/${sha}`, filename: audio.filename } : null,
         });
       }
       if (action === "task") return send(response, 200, (await source(sha)).task);
@@ -641,9 +662,17 @@ export async function startReviewWorkspace(options) {
     response.end(json(value));
   }
 
+  let port;
+  let closing = false;
+  let closePromise;
   const server = createHttpServer((request, response) => {
+    if (closing) {
+      response.setHeader("Connection", "close");
+      send(response, 503, { error: "Review service is shutting down. Retry after restart." });
+      request.resume();
+      return;
+    }
     exclusive(async () => {
-      const port = server.address().port;
       if (![`127.0.0.1:${port}`, `localhost:${port}`].includes(request.headers.host)) {
         throw httpError(403, "Only the local Review service host is allowed.");
       }
@@ -697,6 +726,7 @@ export async function startReviewWorkspace(options) {
     server.once("error", reject);
     server.listen(options.port ?? 4176, "127.0.0.1", resolveListen);
   });
+  port = server.address().port;
   await exclusive(async () => {
     await processInbox();
     // Keep startup hydration serialized with already connected browser polling.
@@ -714,16 +744,24 @@ export async function startReviewWorkspace(options) {
   }, options.pollIntervalMs ?? 1000);
   timer.unref();
   return {
-    url: `http://127.0.0.1:${server.address().port}`,
+    url: `http://127.0.0.1:${port}`,
     cacheInfo: () => ({ fullSources: sources.size, summaries: summaries.size, fullSourceReads }),
     processInbox: () => exclusive(processInbox),
-    close: async () => {
+    close: () => {
+      if (closePromise) return closePromise;
+      closing = true;
       clearInterval(timer);
-      await pending;
-      await new Promise((resolveClose, reject) =>
+      const stopped = new Promise((resolveClose, reject) =>
         server.close((error) => (error ? reject(error) : resolveClose())),
       );
-      await vite.close();
+      closePromise = (async () => {
+        // Already admitted commands must finish saving before streams/sockets are destroyed.
+        await pending;
+        server.closeAllConnections();
+        await stopped;
+        await vite.close();
+      })();
+      return closePromise;
     },
   };
 }

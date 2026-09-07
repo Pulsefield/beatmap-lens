@@ -2,14 +2,17 @@
 import { parseBeatmap, renderSvgPages } from "beatmap-lens";
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from "vue";
 import AnnotationTimeline from "./AnnotationTimeline.vue";
-import { BufferedSceneController, projectSceneRange } from "./annotation/buffered-scene";
+import { AUDIO_OFFSET_PREFERENCE_KEY, AudioPlaybackController, type AudioPlaybackStatus, MUSIC_PREFERENCE_KEY } from "./annotation/audio-playback";
+import { BufferedSceneController, judgmentLineRatio, projectSceneRange } from "./annotation/buffered-scene";
 import { serializeCanonicalJson } from "./annotation/canonical-json";
 import type { StableNoteRefV1, TimeRangeV1 } from "./annotation/contracts";
 import { pickDatasetDirectory } from "./annotation/file-system-access";
 import { ManiaNoteTimeIndex } from "./annotation/note-time-index";
 import { chartEndMs } from "./annotation/range";
+import { IndexedDbSessionStore, type SessionPreferences } from "./annotation/session-store";
 import { type InspectedOsuSourceV1, inspectOsuSourceV1 } from "./annotation/source-identity";
 import { createStableNoteRefV1, stableNoteRefKey } from "./annotation/stable-note-ref";
+import { fitTimelineViewRange, timelineZoomAnchorMs, zoomTimelineViewRangeAtTime } from "./annotation/timeline-view-range";
 import type { AgentReviewV2, ClaimV2, CommunityAlignmentV2, FoundationTagV2, FoundationV2, HumanDecisionV2, ReviewBaseV2, TaskPacketV2 } from "./annotation/workflow/contracts";
 import { type StoredReviewV2, WorkflowDirectoryV2 } from "./annotation/workflow/directory";
 import { assertTaskPacketV2, handoffBaseStatusV2, readAgentReviewsV2, readDispositionsV2, sameBase } from "./annotation/workflow/domain";
@@ -20,7 +23,7 @@ import WorkflowClaimEditor from "./WorkflowClaimEditor.vue";
 import WorkspaceModeSwitch from "./WorkspaceModeSwitch.vue";
 import type { WorkspaceMode } from "./workspace-mode";
 
-const props = defineProps<{ remoteSource?: RemoteSourceV2; openClaim?: { handoffId: string; claimId: string } }>();
+const props = withDefaults(defineProps<{ active?: boolean; remoteSource?: RemoteSourceV2; openClaim?: { handoffId: string; claimId: string } }>(), { active: true });
 const emit = defineEmits<{ "change-mode": [mode: WorkspaceMode]; "back-to-inbox": []; saved: [] }>();
 const source = shallowRef<InspectedOsuSourceV1>();
 const sourceBytes = shallowRef<Uint8Array>();
@@ -112,6 +115,157 @@ const calibrationPages = computed(() => {
   const chart = parseBeatmap(new TextDecoder().decode(Uint8Array.from(example.sourceBytes))).chart;
   return renderSvgPages(chart, { range: example.claim.reviewContext, page: { size: { widthPx: 1200, heightPx: 900 }, columns: "auto" }, panel: { playfield: { laneWidthPx: 48 }, maxNoteRows: 32 }, scale: { type: "row-aware" } });
 });
+
+const sessions = new IndexedDbSessionStore();
+const playing = ref(false);
+const looping = ref(false);
+const playbackReady = ref(false);
+const musicEnabled = ref(false);
+const audioOffsetMs = ref(0);
+const audioStatus = shallowRef<AudioPlaybackStatus>({ kind: "idle" });
+let playback: AudioPlaybackController | undefined;
+let preferenceWrite = Promise.resolve();
+const preferencesReady = sessions.getPreferences().then(preferences => {
+  if (!preferences) return;
+  speed.value = preferences.visualSpeed;
+  musicEnabled.value = preferences.musicEnabled;
+  audioOffsetMs.value = preferences.audioOffsetMs ?? 0;
+}).catch(cause => { error.value = `Could not load Inspector preferences: ${String(cause)}`; });
+const transportDisabled = computed(() => !playbackReady.value || busy.value || sourceLoading.value || props.active === false || Boolean(calibrationExample.value));
+const audioDescription = computed(() => {
+  const current = audioStatus.value;
+  if ("message" in current) return current.message;
+  if (current.kind === "loading") return "Loading music…";
+  if (current.kind === "ready") return musicEnabled.value ? "Music on · media clock" : "Audio ready · Music off";
+  return "No audio available · silent playback";
+});
+
+watch(source, async (current, _previous, onCleanup) => {
+  let disposed = false;
+  let clock: AudioPlaybackController | undefined;
+  playbackReady.value = false;
+  onCleanup(() => {
+    disposed = true;
+    clock?.dispose();
+    playback = undefined;
+    playing.value = false;
+    looping.value = false;
+  });
+  if (!current) return;
+  await preferencesReady;
+  if (disposed) return;
+  clock = new AudioPlaybackController({ preferenceStore: {
+    getItem: key => key === MUSIC_PREFERENCE_KEY ? (musicEnabled.value ? "on" : "off") : key === AUDIO_OFFSET_PREFERENCE_KEY ? String(audioOffsetMs.value) : null,
+    setItem: () => {},
+  } });
+  playback = clock;
+  clock.seek(playhead.value);
+  clock.subscribe(state => {
+    if (disposed || source.value !== current) return;
+    playhead.value = Math.min(state.currentTimeMs, endMs.value);
+    playing.value = state.playing;
+    looping.value = state.looping;
+    if (state.currentTimeMs >= endMs.value && state.playing) {
+      clock?.pause();
+      clock?.seek(endMs.value);
+    }
+  });
+  clock.subscribeAudio(state => {
+    if (disposed || source.value !== current) return;
+    musicEnabled.value = state.musicEnabled;
+    audioOffsetMs.value = state.audioOffsetMs;
+    audioStatus.value = state.status;
+  });
+  playbackReady.value = true;
+  const remote = props.remoteSource;
+  if (remote?.document.source.sha256 === current.source.sha256 && remote.audio) await clock.loadAudioUrl(remote.audio.url);
+}, { flush: "post" });
+watch(() => [props.active, sourceLoading.value, calibrationId.value], () => {
+  if (props.active === false || sourceLoading.value || calibrationId.value) playback?.pause();
+});
+watch(() => [activeClaim.value?.id, activeClaim.value?.scope.startMs, activeClaim.value?.scope.endMs], () => playback?.pause());
+
+function savePreferences(patch: Partial<SessionPreferences>): void {
+  preferenceWrite = preferenceWrite.then(async () => {
+    const previous = await sessions.getPreferences();
+    await sessions.setPreferences({ annotatorId: "", visualSpeed: speed.value, musicEnabled: musicEnabled.value, audioOffsetMs: audioOffsetMs.value, ...previous, ...patch });
+  }).catch(cause => { error.value = `Could not save Inspector preferences: ${String(cause)}`; });
+}
+
+function seekPlayhead(timeMs: number): void {
+  if (!Number.isFinite(timeMs)) return;
+  const time = Math.max(0, Math.min(endMs.value, timeMs));
+  playhead.value = time;
+  playback?.seek(time);
+}
+
+async function togglePlayback(): Promise<void> {
+  if (transportDisabled.value || !playback) return;
+  if (playing.value) playback.pause();
+  else {
+    if (playhead.value >= endMs.value) playback.seek(0);
+    await playback.play();
+  }
+}
+
+async function playSelection(loop = false): Promise<void> {
+  if (transportDisabled.value || !playback || !activeClaim.value) return;
+  if (loop && looping.value) playback.pause();
+  else if (loop) await playback.loopSelection(activeClaim.value.scope);
+  else await playback.playSelection(activeClaim.value.scope);
+}
+
+async function toggleMusic(): Promise<void> {
+  if (!playback) return;
+  const enabled = !musicEnabled.value;
+  const changing = playback.setMusicEnabled(enabled);
+  savePreferences({ musicEnabled: enabled });
+  await changing;
+}
+
+function setAudioOffset(value: number): void {
+  if (!Number.isFinite(value)) return;
+  playback?.setAudioOffsetMs(value);
+  savePreferences({ audioOffsetMs: value });
+}
+
+function setVisualSpeed(event: Event): void {
+  const value = (event.target as HTMLInputElement).valueAsNumber;
+  if (!Number.isFinite(value)) return;
+  speed.value = Math.max(30, Math.min(2000, value));
+  savePreferences({ visualSpeed: speed.value });
+}
+
+function panMainViewport(range: TimeRangeV1): void {
+  seekPlayhead(range.startMs <= 0 ? 0 : range.endMs >= endMs.value ? endMs.value : range.startMs + (range.endMs - range.startMs) * (1 - judgmentLineRatio));
+}
+
+function zoomTimeline(direction: -1 | 1): void {
+  timelineRange.value = zoomTimelineViewRangeAtTime({ anchorMs: timelineZoomAnchorMs(timelineRange.value, playhead.value), chartEndMs: endMs.value, viewRange: timelineRange.value, zoomDelta: direction * 0.5 });
+}
+
+function timelineControlKeydown(event: KeyboardEvent): void {
+  if (event.key === "+" || event.key === "=") zoomTimeline(1);
+  else if (event.key === "-") zoomTimeline(-1);
+  else if (event.key === "0") timelineRange.value = fitTimelineViewRange(endMs.value);
+  else return;
+  event.preventDefault();
+}
+
+function playbackKeydown(event: KeyboardEvent): void {
+  if (event.defaultPrevented || event.repeat || event.metaKey || event.ctrlKey || event.altKey || transportDisabled.value || selectionAnchor.value !== undefined) return;
+  const target = event.target;
+  if (target instanceof Element && target.closest("input, textarea, select, [contenteditable=true]")) return;
+  if (event.key === " ") {
+    if (target instanceof Element && target.closest("button, a")) return;
+    event.preventDefault();
+    if (event.shiftKey) void playSelection();
+    else void togglePlayback();
+  } else if (event.key.toLowerCase() === "l") {
+    event.preventDefault();
+    void playSelection(true);
+  }
+}
 
 function draftKey(kind = editorOrigin.value === "proposal" ? `proposal:${activeHandoffId.value}:${activeClaimId.value}` : "direct"): string {
   return `beatmap-lens-review-draft:${source.value?.source.sha256}:${stored.value?.document.documentId ?? "unbound"}:${activeFoundation.value.foundationId}:${activeFoundation.value.revision}:${kind}`;
@@ -362,11 +516,13 @@ function newSection(): void {
 }
 
 function updateClaim(claim: ClaimV2): void {
+  playback?.pause();
   drafts.value = drafts.value.map(current => current.id === claim.id ? claim : current);
 }
 
 function focus(range: TimeRangeV1): void {
-  playhead.value = Math.max(0, Math.min(endMs.value, range.startMs));
+  playback?.pause();
+  seekPlayhead(range.startMs);
   mobilePanel.value = "preview";
 }
 
@@ -416,6 +572,7 @@ function selectScopeNotes(): void {
 }
 
 function beginRange(anchorMs: number, kind = "select"): void {
+  playback?.pause();
   selectionAnchor.value = anchorMs;
   gestureClaim.value = activeClaim.value;
   gestureEdge.value = kind;
@@ -512,11 +669,11 @@ function reload(): void {
   });
 }
 
-onBeforeUnmount(stashDraft);
+onBeforeUnmount(() => { stashDraft(); playback?.dispose(); });
 </script>
 
 <template>
-  <main class="review-workspace" :class="{ 'has-source': source }">
+  <main class="review-workspace" :class="{ 'has-source': source }" @keydown="playbackKeydown">
     <nav class="review-mobile-switch" aria-label="Review view">
       <button v-for="panel in ['source', 'preview', 'details']" :key="panel" type="button" :aria-pressed="mobilePanel === panel" @click="mobilePanel = panel">{{ panel }}</button>
     </nav>
@@ -590,11 +747,16 @@ onBeforeUnmount(stashDraft);
       <p class="review-copy review-legacy">Existing Annotate records retain V1 positive-only semantics. Review V2 writes separate workflow files.</p>
     </aside>
     <div v-if="source && frame && !calibrationExample" class="review-preview" :class="{ 'mobile-active': mobilePanel === 'preview' }">
-      <FallingNoteViewport :annotation-bands="[]" :candidate-note-ids="candidateIds" :chart-artist="source.source.artist" :chart-difficulty="source.source.difficulty" :chart-end-ms="endMs" :chart-title="source.source.title" :frame="frame" :frame-p95-ms="0" :key-count="source.chart.keyCount" :locked="busy" :playhead-ms="playhead" :selected-note-ids="selectedNoteIds" v-bind="selectionBand ? { selectionBand } : {}" :size="size" :visual-speed="speed" @resize="size = $event" @seek="playhead = $event" @viewport-navigate="playhead = $event" @note-toggle="toggleNote" @range-start="beginRange($event.anchorMs)" @range-preview="dragRange($event.focusMs)" @range-commit="dragRange($event.focusMs); selectionAnchor = undefined; gestureClaim = undefined" @range-cancel="cancelRange" />
+      <FallingNoteViewport :annotation-bands="[]" :candidate-note-ids="candidateIds" :chart-artist="source.source.artist" :chart-difficulty="source.source.difficulty" :chart-end-ms="endMs" :chart-title="source.source.title" :frame="frame" :frame-p95-ms="0" :key-count="source.chart.keyCount" :locked="busy" :playhead-ms="playhead" :selected-note-ids="selectedNoteIds" v-bind="selectionBand ? { selectionBand } : {}" :size="size" :visual-speed="speed" @resize="size = $event" @seek="seekPlayhead" @viewport-navigate="seekPlayhead" @note-toggle="toggleNote" @range-start="beginRange($event.anchorMs)" @range-preview="dragRange($event.focusMs)" @range-commit="dragRange($event.focusMs); selectionAnchor = undefined; gestureClaim = undefined" @range-cancel="cancelRange" />
+      <section class="review-mobile-transport" aria-label="Preview playback">
+        <button type="button" :disabled="transportDisabled" :aria-label="playing ? 'Pause preview' : 'Play preview'" @click="togglePlayback">{{ playing ? 'Pause' : 'Play' }}</button>
+        <button type="button" :disabled="transportDisabled || !activeClaim" :aria-pressed="looping" @click="playSelection(true)">Loop</button>
+        <button type="button" :disabled="transportDisabled" :aria-pressed="musicEnabled" @click="toggleMusic">Music {{ musicEnabled ? 'on' : 'off' }}</button>
+      </section>
     </div>
     <div v-else-if="!calibrationExample" class="review-empty"><h2>One source. Independent judgments.</h2><p>Open a difficulty to inspect its full structure, or open a task to review agent evidence.</p></div>
     <div v-if="source && frame && !calibrationExample" class="review-timeline" :class="{ 'mobile-active': mobilePanel === 'preview' }">
-      <AnnotationTimeline :chart="source.chart" :chart-end-ms="endMs" :main-viewport-range="frame.viewportRange" :playhead-ms="playhead" :saved-annotations="[]" v-bind="activeClaim ? { selection: activeClaim.scope } : {}" :view-range="timelineRange" :disabled="busy || sourceLoading" @seek="playhead = $event" @viewport-pan="playhead = $event.startMs" @view-range-change="timelineRange = $event" @range-start="beginRange($event.anchorMs, $event.kind)" @range-preview="dragRange($event.focusMs)" @range-commit="dragRange($event.focusMs); selectionAnchor = undefined; gestureClaim = undefined" @range-cancel="cancelRange" />
+      <AnnotationTimeline :chart="source.chart" :chart-end-ms="endMs" :main-viewport-range="frame.viewportRange" :playhead-ms="playhead" :saved-annotations="[]" v-bind="activeClaim ? { selection: activeClaim.scope } : {}" :view-range="timelineRange" :disabled="busy || sourceLoading" @seek="seekPlayhead" @viewport-pan="panMainViewport" @view-range-change="timelineRange = $event" @range-start="beginRange($event.anchorMs, $event.kind)" @range-preview="dragRange($event.focusMs)" @range-commit="dragRange($event.focusMs); selectionAnchor = undefined; gestureClaim = undefined" @range-cancel="cancelRange" />
     </div>
     <section v-if="calibrationExample" class="review-calibration" :class="{ 'mobile-active': mobilePanel === 'preview' }">
       <button type="button" @click="calibrationId = ''">Return to difficulty review</button>
@@ -607,7 +769,36 @@ onBeforeUnmount(stashDraft);
       <div class="review-status" role="status">{{ busy || sourceLoading ? 'Working…' : status }}</div>
       <p v-if="error" class="review-error" role="alert">{{ error }}</p>
       <template v-if="source">
-        <div class="review-controls"><label>Source time · ms<input v-model.number="playhead" type="number" min="0" :max="endMs"></label><label>Visual speed<input v-model.number="speed" type="number" min="30" max="2000" step="30"></label></div>
+        <section class="review-transport" aria-label="Playback controls">
+          <div class="review-actions">
+            <button type="button" class="review-primary" :disabled="transportDisabled" @click="togglePlayback">{{ playing ? 'Pause' : 'Play' }} <kbd>Space</kbd></button>
+            <button type="button" :disabled="transportDisabled || !activeClaim" @click="playSelection()">Selection <kbd>⇧Space</kbd></button>
+            <button type="button" :disabled="transportDisabled || !activeClaim" :aria-pressed="looping" @click="playSelection(true)">Loop <kbd>L</kbd></button>
+            <button type="button" :disabled="transportDisabled" :aria-pressed="musicEnabled" @click="toggleMusic">Music {{ musicEnabled ? 'on' : 'off' }}</button>
+          </div>
+          <p class="review-copy">{{ audioDescription }}</p>
+          <details>
+            <summary>Playback settings &amp; zoom</summary>
+            <div class="review-playback-settings">
+              <div class="review-controls">
+                <label>Source time · ms<input :value="Math.round(playhead)" type="number" min="0" :max="endMs" @input="seekPlayhead(($event.target as HTMLInputElement).valueAsNumber)"></label>
+                <label>Visual speed<input :value="speed" type="number" min="30" max="2000" step="30" @change="setVisualSpeed"></label>
+              </div>
+              <label>Global audio offset · ms<input :value="audioOffsetMs" type="number" step="10" :disabled="transportDisabled" @change="setAudioOffset(($event.target as HTMLInputElement).valueAsNumber)"></label>
+              <div class="review-offset-actions">
+                <button type="button" :disabled="transportDisabled" @click="setAudioOffset(audioOffsetMs - 10)">−10 ms</button>
+                <button type="button" :disabled="transportDisabled" @click="setAudioOffset(audioOffsetMs + 10)">+10 ms</button>
+                <button type="button" :disabled="transportDisabled || audioOffsetMs === 0" @click="setAudioOffset(0)">Reset</button>
+              </div>
+              <p class="review-copy">Shared with Inspector. Positive values play audio earlier.</p>
+              <section class="review-zoom" aria-label="Timeline lens">
+                <button type="button" aria-label="Zoom timeline in" @click="zoomTimeline(1)" @keydown="timelineControlKeydown">Zoom in</button>
+                <button type="button" aria-label="Zoom timeline out" @click="zoomTimeline(-1)" @keydown="timelineControlKeydown">Zoom out</button>
+                <button type="button" aria-label="Fit timeline" @click="timelineRange = fitTimelineViewRange(endMs)" @keydown="timelineControlKeydown">Fit</button>
+              </section>
+            </div>
+          </details>
+        </section>
         <div class="review-actions"><button type="button" :disabled="busy || sourceLoading" @click="newSection">New section at playhead</button><button type="button" :disabled="busy || sourceLoading" @click="restoreSection">Restore section draft</button></div>
         <p v-if="draftIsStale && editorOrigin === 'direct'" class="review-copy">This draft was based on an earlier saved human review. Compare it with the saved observations before continuing.<button type="button" @click="editorBase = stored?.version; editorReviewRevision = document?.reviewRevision; stashDraft()">I reviewed this draft against the current revision</button></p>
         <details class="review-section"><summary>Foundation · {{ activeFoundation.tags.length }} concepts · {{ activeFoundation.calibrationExamples.length }} examples</summary>
@@ -678,6 +869,7 @@ p { margin: 0; line-height: 1.6; }
 .review-community-tags dt { overflow-wrap: anywhere; }
 .review-community-snapshot { font-size: 11px; color: var(--ink-secondary); }
 dd { margin: 0; text-align: right; font-family: var(--font-data); overflow-wrap: anywhere; }
+.review-preview { position: relative; }
 .review-preview, .review-timeline { min-width: 0; height: 100dvh; overflow: hidden; }
 .review-timeline { border-left: 1px solid var(--line); }
 .review-preview > svg { height: 100%; }
@@ -699,6 +891,13 @@ summary { min-height: 40px; cursor: pointer; }
 .review-definition { padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 12px; }
 .review-definition p { margin-top: 6px; }
 .review-definition pre { max-height: 240px; overflow: auto; font-size: 10px; }
+.review-transport { position: sticky; top: -24px; z-index: 5; display: grid; gap: 12px; padding-block: 12px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.review-transport button, .review-mobile-transport button { min-height: 40px; }
+.review-transport button[aria-pressed=true], .review-mobile-transport button[aria-pressed=true] { color: var(--signal); background: var(--surface-quiet); }
+.review-transport kbd { float: right; font: 10px var(--font-data); opacity: .65; line-height: 20px; }
+.review-playback-settings { display: grid; gap: 12px; }
+.review-offset-actions, .review-zoom { display: flex; gap: 8px; }
+.review-mobile-transport { display: none; }
 .review-controls, .review-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .review-status { padding-bottom: 12px; border-bottom: 1px solid var(--line); font-size: 12px; color: var(--ink-secondary); }
 .review-status::before { content: ''; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: var(--signal); }
@@ -719,6 +918,9 @@ summary { min-height: 40px; cursor: pointer; }
 @media (max-width: 1160px) and (min-width: 921px) { .review-workspace { grid-template-columns: 220px minmax(0, 1fr) 56px 340px; } }
 @media (max-width: 920px) {
   .review-workspace { grid-template-columns: minmax(0, 1fr) 48px; }
+  .review-mobile-transport { position: absolute; bottom: max(12px, env(safe-area-inset-bottom)); left: 8px; right: 8px; z-index: 10; display: flex; justify-content: center; gap: 6px; }
+  .review-mobile-transport button { padding-inline: 9px; font-size: 12px; }
+  .review-transport { top: -1px; }
   .review-mobile-switch { position: fixed; top: 8px; left: 8px; z-index: 30; display: flex; gap: 4px; }
   .review-rail, .review-preview, .review-timeline { display: none; }
   .review-rail.mobile-active { display: flex; grid-column: 1 / 3; padding-top: 64px; }

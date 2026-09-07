@@ -1,5 +1,5 @@
 import { parseOsu } from "beatmap-lens";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   AUDIO_OFFSET_PREFERENCE_KEY,
   AudioPlaybackController,
@@ -45,6 +45,85 @@ describe("resolveBeatmapAudioFile", () => {
 });
 
 describe("AudioPlaybackController", () => {
+  it("streams remote audio with the existing offset and fallback clock", async () => {
+    const media = new FakeAudio();
+    const scheduler = new TestFrameScheduler();
+    const preferenceStore = new MemoryPreferenceStore();
+    preferenceStore.setItem(MUSIC_PREFERENCE_KEY, "on");
+    preferenceStore.setItem(AUDIO_OFFSET_PREFERENCE_KEY, "125");
+    const createMedia = vi.fn(() => media as unknown as HTMLAudioElement);
+    const createObjectUrl = vi.fn();
+    const revokeObjectUrl = vi.fn();
+    const controller = new AudioPlaybackController({
+      scheduler,
+      preferenceStore,
+      createMedia,
+      createObjectUrl,
+      revokeObjectUrl,
+    });
+
+    await controller.loadAudioUrl("/api/review/audio/source-sha");
+    expect(createMedia).toHaveBeenCalledWith("/api/review/audio/source-sha");
+    expect(createObjectUrl).not.toHaveBeenCalled();
+    controller.seek(1_000);
+    await controller.play();
+    expect(media.currentTime).toBe(1.125);
+    media.currentTime = 1.25;
+    scheduler.advance(16);
+    expect(controller.currentTimeMs).toBe(1_125);
+
+    media.failPlayback(new Error("Network interrupted"));
+    expect(controller.audioStatus).toEqual({ kind: "rejected", message: "Network interrupted" });
+    scheduler.advance(100);
+    expect(controller.currentTimeMs).toBe(1_225);
+    controller.dispose();
+    expect(media.paused).toBe(true);
+    expect(revokeObjectUrl).not.toHaveBeenCalled();
+  });
+
+  it("keeps remote session changes safe from old file loads and pending playback", async () => {
+    const scheduler = new TestFrameScheduler();
+    const first = new FakeAudio({ deferPlay: true });
+    const second = new FakeAudio();
+    const createMedia = vi
+      .fn()
+      .mockReturnValueOnce(first as unknown as HTMLAudioElement)
+      .mockReturnValueOnce(second as unknown as HTMLAudioElement);
+    const createObjectUrl = vi.fn(() => "blob:obsolete");
+    const revokeObjectUrl = vi.fn();
+    const controller = new AudioPlaybackController({
+      scheduler,
+      preferenceStore: new MemoryPreferenceStore(),
+      createMedia,
+      createObjectUrl,
+      revokeObjectUrl,
+    });
+    const pending = deferredFile();
+    const oldLoad = controller.loadBeatmapAudio(context(directory({ "song.ogg": pending.handle })));
+    await controller.loadAudioUrl("/api/review/audio/first");
+    pending.resolve(audioFile("old.ogg"));
+    await oldLoad;
+    expect(createObjectUrl).not.toHaveBeenCalled();
+    expect(createMedia).toHaveBeenCalledTimes(1);
+
+    await controller.setMusicEnabled(true);
+    const oldPlay = controller.play();
+    controller.clearSession();
+    await controller.loadAudioUrl("/api/review/audio/second");
+    controller.seek(700);
+    first.rejectPlay(new Error("Stale request failed"));
+    await oldPlay;
+    first.failPlayback(new Error("Old media error"));
+    expect(controller.audioStatus).toEqual({ kind: "ready" });
+    expect(controller.currentTimeMs).toBe(700);
+    expect(controller.playing).toBe(false);
+
+    controller.dispose();
+    await controller.loadAudioUrl("/api/review/audio/after-dispose");
+    expect(createMedia).toHaveBeenCalledTimes(2);
+    expect(revokeObjectUrl).not.toHaveBeenCalled();
+  });
+
   it("starts with Music off and remembers the latest preference", async () => {
     const preferenceStore = new MemoryPreferenceStore();
     const controller = controllerWith({ preferenceStore });

@@ -2,6 +2,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp, h, nextTick, shallowRef } from "vue";
+import { AudioPlaybackController } from "./annotation/audio-playback";
+import type { SessionPreferences } from "./annotation/session-store";
 import { FakeDirectoryHandle } from "./annotation/test-helpers";
 import type { ClaimV2, FoundationV2 } from "./annotation/workflow/contracts";
 import { WorkflowDirectoryV2 } from "./annotation/workflow/directory";
@@ -17,11 +19,23 @@ import ReviewWorkspace from "./ReviewWorkspace.vue";
 
 const picker = vi.hoisted(() => vi.fn());
 vi.mock("./annotation/file-system-access", () => ({ pickDatasetDirectory: picker }));
+const preferences = vi.hoisted(() => ({ value: undefined as SessionPreferences | undefined }));
+vi.mock("./annotation/session-store", () => ({
+  IndexedDbSessionStore: class {
+    async getPreferences() {
+      return preferences.value;
+    }
+    async setPreferences(value: SessionPreferences) {
+      preferences.value = value;
+    }
+  },
+}));
 const apps: ReturnType<typeof createApp>[] = [];
 const appErrors: unknown[] = [];
 
 beforeEach(() => {
   localStorage.clear();
+  preferences.value = undefined;
 });
 
 afterEach(() => {
@@ -29,10 +43,228 @@ afterEach(() => {
   document.body.replaceChildren();
   localStorage.clear();
   picker.mockReset();
+  vi.unstubAllGlobals();
   expect(appErrors.splice(0)).toEqual([]);
 });
 
 describe("ReviewWorkspace mounted workflow", () => {
+  it("uses Inspector audio preferences, saves offset changes, and loads the source audio URL", async () => {
+    preferences.value = {
+      annotatorId: "inspector-user",
+      visualSpeed: 360,
+      musicEnabled: true,
+      audioOffsetMs: 45,
+    };
+    const loadAudio = vi
+      .spyOn(AudioPlaybackController.prototype, "loadAudioUrl")
+      .mockResolvedValue();
+    const f = await workspaceFixture();
+    const current = await f.read();
+    if (!current) throw new Error("Missing review.");
+    const container = document.createElement("div");
+    document.body.append(container);
+    const app = createApp(ReviewWorkspace, {
+      remoteSource: {
+        ...current,
+        sourceBytes: Array.from(f.sourceBytes),
+        audio: { url: "/api/review/audio/fixture", filename: "song.mp3" },
+      },
+    });
+    app.config.errorHandler = (error) => appErrors.push(error);
+    apps.push(app);
+    app.mount(container);
+    await vi.waitFor(() => expect(loadAudio).toHaveBeenCalledWith("/api/review/audio/fixture"));
+    expect(control(container, "Global audio offset").value).toBe("45");
+    expect(control(container, "Visual speed").value).toBe("360");
+    expect(
+      container.querySelector('.review-transport button[aria-pressed="true"]')?.textContent,
+    ).toBe("Music on");
+    await click(container, "+10 ms");
+    await click(container, "Music on");
+    await setValue(control(container, "Visual speed"), "480");
+    await vi.waitFor(() =>
+      expect(preferences.value).toEqual({
+        annotatorId: "inspector-user",
+        visualSpeed: 480,
+        musicEnabled: false,
+        audioOffsetMs: 55,
+      }),
+    );
+    let finishEnable: (() => void) | undefined;
+    const enabling = new Promise<void>((resolve) => {
+      finishEnable = resolve;
+    });
+    const setMusic = AudioPlaybackController.prototype.setMusicEnabled;
+    vi.spyOn(AudioPlaybackController.prototype, "setMusicEnabled").mockImplementation(
+      async function (this: AudioPlaybackController, enabled) {
+        await setMusic.call(this, enabled);
+        if (enabled) await enabling;
+      },
+    );
+    await click(container, "Music off");
+    await click(container, "Music on");
+    finishEnable?.();
+    await vi.waitFor(() => expect(preferences.value?.musicEnabled).toBe(false));
+    expect((await f.read())?.document).toEqual(current.document);
+  });
+
+  it("opens the next review at its marked section and starts music there", async () => {
+    const media: ReviewTestAudio[] = [];
+    vi.stubGlobal(
+      "Audio",
+      class extends ReviewTestAudio {
+        constructor() {
+          super();
+          media.push(this);
+        }
+      },
+    );
+    preferences.value = {
+      annotatorId: "inspector-user",
+      visualSpeed: 240,
+      musicEnabled: true,
+      audioOffsetMs: 45,
+    };
+    const f = await workspaceFixture();
+    const initial = await f.read();
+    if (!initial) throw new Error("Missing review.");
+    const remote = shallowRef<RemoteSourceV2>({
+      ...initial,
+      sourceBytes: Array.from(f.sourceBytes),
+      audio: { url: "/api/review/audio/first", filename: "first.mp3" },
+    });
+    const openClaim = shallowRef<{ handoffId: string; claimId: string }>();
+    const container = document.createElement("div");
+    document.body.append(container);
+    const app = createApp({
+      render: () =>
+        h(ReviewWorkspace, {
+          remoteSource: remote.value,
+          ...(openClaim.value ? { openClaim: openClaim.value } : {}),
+        }),
+    });
+    app.config.errorHandler = (error) => appErrors.push(error);
+    apps.push(app);
+    app.mount(container);
+    await vi.waitFor(() => expect(media).toHaveLength(1));
+    await setValue(control(container, "Source time"), "1400", "input");
+    expect(media[0]?.currentTime).toBe(1.445);
+    const bytes = new TextEncoder().encode(
+      new TextDecoder()
+        .decode(f.sourceBytes)
+        .replace("Title: Workflow fixture", "Title: Next difficulty"),
+    );
+    const next = await f.directory.initialize(bytes, {
+      ...initial.document.foundation,
+      approval: { status: "proposed" },
+    });
+    const approved = await f.directory.approveFoundation(bytes, next.version, "fixture-human");
+    const exported = await f.directory.exportTask(bytes, approved.version);
+    const handoff = await sealHandoffV2(exported.task, {
+      handoffId: "next-handoff",
+      createdAt: NOW,
+      agent: { producerId: "fixture-labeler", role: "labeler" },
+      proposals: [{ ...f.claim, reviewContext: { startMs: 800, endMs: 1801 } }],
+      audit: [],
+      questions: [],
+    });
+    const imported = await f.directory.importHandoff(bytes, exported.stored.version, handoff);
+    openClaim.value = { handoffId: handoff.handoffId, claimId: f.claim.id };
+    remote.value = {
+      ...imported.stored,
+      sourceBytes: Array.from(bytes),
+      audio: { url: "/api/review/audio/next", filename: "next.mp3" },
+    };
+    await vi.waitFor(() => expect(media).toHaveLength(2));
+    expect(control(container, "Source time").value).toBe("800");
+    expect(media[1]?.currentTime).toBe(0.845);
+    expect(media[0]?.paused).toBe(true);
+    expect(
+      button(container.querySelector(".review-transport") as Element, "Play Space").disabled,
+    ).toBe(false);
+    await click(container.querySelector(".review-transport") as Element, "Play Space");
+    expect(media[1]?.currentTime).toBe(0.845);
+  });
+
+  it("plays the exact claim once, loops it, and pauses when returning to the inbox", async () => {
+    const f = await workspaceFixture(true);
+    const initial = await f.read();
+    if (!initial || !f.handoff) throw new Error("Missing review.");
+    const imported = await f.directory.importHandoff(f.sourceBytes, initial.version, f.handoff);
+    const active = shallowRef(true);
+    const container = document.createElement("div");
+    document.body.append(container);
+    const app = createApp({
+      render: () =>
+        h(ReviewWorkspace, {
+          active: active.value,
+          remoteSource: { ...imported.stored, sourceBytes: Array.from(f.sourceBytes) },
+          openClaim: { handoffId: "synthetic-handoff", claimId: "claim-a" },
+        }),
+    });
+    app.config.errorHandler = (error) => appErrors.push(error);
+    apps.push(app);
+    app.mount(container);
+    await vi.waitFor(() =>
+      expect(
+        container.querySelector<HTMLButtonElement>(".review-transport .review-primary")?.disabled,
+      ).toBe(false),
+    );
+    const transport = container.querySelector(".review-transport") as HTMLElement;
+    await click(transport, "Selection ⇧Space");
+    expect(Number(control(container, "Source time").value)).toBeGreaterThanOrEqual(1000);
+    await vi.waitFor(
+      () => expect(transport.querySelector(".review-primary")?.textContent).toBe("Play Space"),
+      { timeout: 1800 },
+    );
+    expect(control(container, "Source time").value).toBe("1800");
+    await click(transport, "Loop L");
+    expect(button(transport, "Loop L").getAttribute("aria-pressed")).toBe("true");
+    expect(Number(control(container, "Source time").value)).toBeLessThan(1800);
+    active.value = false;
+    await nextTick();
+    expect(button(transport, "Play Space").disabled).toBe(true);
+    expect(button(transport, "Loop L").getAttribute("aria-pressed")).toBe("false");
+    active.value = true;
+    await nextTick();
+    const viewport = container.querySelector(".falling-note-viewport") as Element;
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true }));
+    await nextTick();
+    expect(transport.querySelector(".review-primary")?.textContent).toBe("Pause Space");
+    await setValue(control(container, "Source time"), "400", "input");
+    await click(transport, "Pause Space");
+    expect(Number(control(container, "Source time").value)).toBeLessThan(500);
+    control(container, "Source time").dispatchEvent(
+      new KeyboardEvent("keydown", { key: " ", bubbles: true }),
+    );
+    await nextTick();
+    expect(transport.querySelector(".review-primary")?.textContent).toBe("Play Space");
+    expect((await f.read())?.document).toEqual(imported.stored.document);
+  });
+
+  it("zooms the timeline around the playhead and restores its full extent without moving the claim", async () => {
+    const f = await workspaceFixture();
+    const { container } = await openWorkspace(f);
+    const description = () =>
+      container.querySelector("#annotation-timeline-description")?.textContent;
+    const initial = description();
+    const range = rangeValues(container);
+    const playhead = control(container, "Source time").value;
+    await click(container, "Zoom in");
+    expect(description()).not.toBe(initial);
+    await click(container, "Zoom out");
+    expect(description()).toBe(initial);
+    button(container, "Zoom in").dispatchEvent(
+      new KeyboardEvent("keydown", { key: "+", bubbles: true }),
+    );
+    await nextTick();
+    expect(description()).not.toBe(initial);
+    await click(container, "Fit");
+    expect(description()).toBe(initial);
+    expect(rangeValues(container)).toEqual(range);
+    expect(control(container, "Source time").value).toBe(playhead);
+  });
+
   it("routes an unresolved inbox proposal through an explicit assessment instead of Accept original", async () => {
     const f = await workspaceFixture(true);
     if (!f.handoff) throw new Error("Missing handoff.");
@@ -513,6 +745,20 @@ describe("ReviewWorkspace mounted workflow", () => {
     expect(container.querySelector(".review-handoff")?.textContent).toContain("Task base: stale");
   });
 });
+
+class ReviewTestAudio extends EventTarget {
+  currentTime = 0;
+  duration = 10;
+  paused = true;
+  async play() {
+    this.paused = false;
+    this.dispatchEvent(new Event("play"));
+  }
+  pause() {
+    this.paused = true;
+    this.dispatchEvent(new Event("pause"));
+  }
+}
 
 async function workspaceFixture(withTask = false, mixedCorrespondences = false) {
   const f = await workflowFixture();

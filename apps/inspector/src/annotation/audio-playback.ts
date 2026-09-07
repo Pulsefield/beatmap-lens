@@ -161,6 +161,7 @@ export class AudioPlaybackController implements PlaybackClock {
   }
 
   async loadBeatmapAudio(context: BeatmapAudioFileContext): Promise<void> {
+    if (this.#disposed) return;
     const intentId = this.#nextIntent();
     const loadId = ++this.#loadId;
     this.#releaseMedia({ intentId, preservePlayback: true });
@@ -223,6 +224,30 @@ export class AudioPlaybackController implements PlaybackClock {
     }
 
     this.#objectUrl = objectUrl;
+    await this.#attachMedia(media);
+  }
+
+  async loadAudioUrl(url: string): Promise<void> {
+    if (this.#disposed) return;
+    const intentId = this.#nextIntent();
+    this.#loadId++;
+    this.#releaseMedia({ intentId, preservePlayback: true });
+    this.#setStatus({ kind: "loading" });
+
+    let media: HTMLAudioElement;
+    try {
+      media = this.#createMedia(url);
+    } catch (error) {
+      this.#setStatus({
+        kind: "unsupported",
+        message: errorMessage(error, "The browser cannot load this audio URL."),
+      });
+      return;
+    }
+    await this.#attachMedia(media);
+  }
+
+  async #attachMedia(media: HTMLAudioElement): Promise<void> {
     this.#mediaClock = new MediaPlaybackClock(
       media,
       this.#scheduler,

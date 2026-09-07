@@ -107,8 +107,8 @@ onBeforeUnmount(() => { stopped = true; clearTimeout(timer); });
     <footer v-if="inbox">Decisions are saved to the connected workspace and returned to the agent outbox automatically.</footer>
   </div>
   <div v-if="activeSource" v-show="!showingInbox" class="inbox-active">
-    <button type="button" class="inbox-arrivals" @click="showingInbox = true">Inbox · {{ tasks.length }} pending{{ connectionError ? ' · offline' : '' }}</button>
-    <ReviewWorkspace :remote-source="activeSource" v-bind="openClaim ? { openClaim } : {}" @back-to-inbox="showingInbox = true" @saved="refresh" />
+    <button type="button" class="inbox-arrivals" @click="showingInbox = true">Inbox · {{ tasks.length }}<span class="inbox-pending-label"> pending</span>{{ connectionError ? ' · offline' : '' }}</button>
+    <ReviewWorkspace :active="!showingInbox" :remote-source="activeSource" v-bind="openClaim ? { openClaim } : {}" @back-to-inbox="showingInbox = true" @saved="refresh" />
   </div>
 </template>
 
@@ -140,5 +140,5 @@ summary { cursor: pointer; min-height: 40px; font-size: 14px; }
 footer { padding-top: 28px; }
 .inbox-error { color: var(--danger); margin-top: 16px; }
 .inbox-arrivals { position: fixed; z-index: 40; width: auto; top: 8px; left: 280px; padding: 8px 12px; min-height: 40px; font-size: 12px; }
-@media (max-width: 920px) { .inbox-page { padding: 28px 20px; } .inbox-header, .inbox-task { display: block; } .inbox-connection, .inbox-claims { margin-top: 20px; } .inbox-arrivals { left: auto; right: 8px; } }
+@media (max-width: 920px) { .inbox-page { padding: 28px 20px; } .inbox-header, .inbox-task { display: block; } .inbox-connection, .inbox-claims { margin-top: 20px; } .inbox-arrivals { left: auto; right: 8px; } .inbox-pending-label { display: none; } }
 </style>
