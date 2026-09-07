@@ -403,6 +403,47 @@ proposals and independent audits, while unchanged human decisions need no second
 confirmation. Continue other charts while focused expert cases wait. A small honest
 spot-check request can sample supported work without inventing semantic doubt.
 
+### Human sampling and corrections
+
+On the fixed `/review` page, **Sample machine-reviewed sections** draws a bounded
+random sample filtered by label and strength (absent, supporting, prominent). The
+unit is a section claim, not a map. Identical source/scope/target/strength judgments
+from repeated submissions appear once per batch; their original handoff identities
+remain intact. Different assessments remain distinct judgments. Redrawing replaces
+that batch and may include earlier unreviewed samples. Only
+current, settled `agent-reviewed` claims without pending expert requests qualify.
+The browser retains the batch's exact source/handoff/claim IDs and filters across
+reloads. Drawing uses compact inbox summaries; the full chart loads only when a
+sample is opened. Open and **Next sample** reuse the usual review workspace,
+section focus, music, zoom, and decision controls.
+
+When the expert disagrees, prefer **Modify judgment** with the corrected presence,
+salience or scope and a short discriminating reason. **Reject proposal** records a
+rejection without inventing a negative replacement. Both leave the original machine
+proposal intact. Saving publishes the normal decision/observation and agent outbox
+feedback; there is no second sampling-specific annotation store.
+
+The next agent pass consumes that feedback in this order:
+
+1. Read the exact expert observation and rationale from current `feedback` /
+   `dispositions`, preserving its source, scope, target, identity and Foundation.
+   A settled expert correction is authoritative at that scope and needs no model
+   audit or second human confirmation.
+2. Separate a local example correction from a reusable distinction. Use the
+   distinction to find candidate mistakes across the five targets; do not turn a
+   descriptive pattern name into extra expert labels or automatically change all
+   superficially similar sections.
+3. Reinspect affected machine claims with the expert evidence and the task's pinned
+   skill. Submit new immutable proposals and an independent audit through the
+   revision path above, recording actual skill/version provenance. A stale sampled
+   claim waits for that reread; the sampling UI does not silently rebase it.
+4. Hand back only a concrete unresolved boundary. Retain the exact expert example
+   separately from machine inferences, and version any resulting guide refinement.
+
+Outbox delivery means the feedback is available to agents, not that a later agent
+has already generalized it. Refresh campaign status after feedback/revisions; an
+earlier acceptance snapshot is not proof that newer expert feedback was consumed.
+
 ## Compact workspace storage and backup
 
 `workflow/<SOURCE_SHA>.v2.json` may be a compact local storage envelope. Shared

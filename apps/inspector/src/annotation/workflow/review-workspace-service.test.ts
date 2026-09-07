@@ -161,6 +161,13 @@ describe("local Review service exchange", () => {
     expect((await post(service.url, "submit", { kind: "audit", packet: audit })).status).toBe(200);
     const feedback = await get(service.url, `feedback/${f.sha}`);
     expect(feedback.counts).toEqual({ total: 2, superseded: 1, "agent-reviewed": 1 });
+    expect((await get(service.url, "inbox")).sources[0].reviews).toContainEqual(
+      expect.objectContaining({
+        claimId: "settled-claim",
+        status: "agent-reviewed",
+        assessment: { presence: "absent" },
+      }),
+    );
     expect(feedback.agentReviews[0].supersededBy).toEqual({
       handoffId: replacement.handoffId,
       claimId: "settled-claim",
@@ -598,6 +605,23 @@ describe("local Review service exchange", () => {
     });
     expect(initial.reviewBase).toEqual(f.task.base);
     expect(initial.counts).toEqual({ total: 2, "agent-reviewed": 2 });
+    const initialInbox = await get(service.url, "inbox");
+    expect(initialInbox.sources[0].reviews).toEqual(
+      handoff.proposals.map((claim) =>
+        expect.objectContaining({
+          claimId: claim.id,
+          status: "agent-reviewed",
+          tagId: claim.tagId,
+          scope: claim.scope,
+          assessment: claim.assessment,
+        }),
+      ),
+    );
+    expect(initialInbox.sources[0].humanAssessmentCounts).toEqual({
+      settled: 0,
+      unresolved: 0,
+      unreviewed: 0,
+    });
     expect(initial.handoffs[0]).toMatchObject({
       handoffId: handoff.handoffId,
       handoffSha256: await hashWorkflowValueV2(handoff),
@@ -655,6 +679,20 @@ describe("local Review service exchange", () => {
     expect(feedback.agentReviews[0].modifiedClaim).toEqual(modifiedClaim);
     expect(feedback.agentReviews[1]).not.toHaveProperty("modifiedClaim");
     expect(feedback.counts).toEqual({ total: 2, modified: 1, "agent-reviewed": 1 });
+    const inbox = await get(service.url, "inbox");
+    expect(inbox.sources[0].reviews[0]).toMatchObject({
+      status: "modified",
+      assessment: modifiedClaim.assessment,
+    });
+    expect(inbox.sources[0].reviews[1]).toEqual(initialInbox.sources[0].reviews[1]);
+    expect(inbox.sources[0].humanAssessmentCounts).toEqual({
+      settled: 1,
+      unresolved: 0,
+      unreviewed: 0,
+    });
+    expect(JSON.stringify(inbox)).not.toMatch(
+      /"(?:sourceBytes|foundation|structure|noteRefs|contextNoteRefs)":/,
+    );
     const withoutModified = structuredClone(feedback);
     delete withoutModified.agentReviews[0].modifiedClaim;
     expect(JSON.stringify(withoutModified)).not.toMatch(
@@ -668,6 +706,7 @@ describe("local Review service exchange", () => {
     const restarted = await start(f.workspace);
     expect(restarted.cacheInfo().fullSourceReads).toBe(0);
     expect(await get(restarted.url, `feedback/${f.sha}`)).toEqual(feedback);
+    expect(await get(restarted.url, "inbox")).toEqual(inbox);
     expect(restarted.cacheInfo().fullSourceReads).toBe(0);
   }, 10_000);
 
