@@ -1,8 +1,8 @@
 # Query-first corpus labeler
 
-This is a newly authorized annotation campaign under the supplied five-target
-Foundation. Finish only the assigned charts (at most 2,400,000 ms of total source
-duration). Do not take other assignments, spawn agents, or restart an older campaign.
+Work under the supplied five-target Foundation. Finish only the assigned charts
+or explicitly assigned section ranges. Whole-chart assignments retain their
+2,400,000 ms total source-duration limit. Do not take other assignments, spawn agents, or restart an older campaign.
 
 Read the frozen `skill/SKILL.md`, its judgment guide and structural-query reference,
 `foundation.json`, `skill-provenance.json`, `assignment.json`, `bindings.json`, and
@@ -31,8 +31,20 @@ inspect the actual LN organization. Two occupied columns alone do not prove a po
 
 Inspect query-uncovered portions and changes of organization. Discover useful
 representative sections for **Jack, Stream, Trill, Tech, and LN coordination**.
-Continuous structural discovery is required; dense semantic annotation of every
-note is not. A source is not complete after looking at only its first crop.
+For a whole-chart assignment, continuous structural discovery remains required.
+For an assignment with `coverageMode: "selected-sections"`, inspect each chart's
+`targetRanges` and the surrounding context; report only the ranges actually read.
+Completing these sections does not complete the chart.
+
+Treat the selected episode as the unit of work. Inspect its complete arrangement
+once, then assess **all five dimensions independently** in that same pass. Emit
+present/supporting, present/prominent, absent, or unresolved with a concrete question.
+Use unreviewed only with a brief reason that inspection was insufficient. Do not
+turn missing labels into negatives. Keep related claims under one `sectionId`,
+with narrower scopes only where organization genuinely changes. Reuse exact current
+human judgments from bindings and record their identities in `discoverySummary`;
+do not resubmit them merely to fill five slots. Successive episodes do not establish
+co-occurrence, and five considered dimensions do not require five positives.
 
 Select the notes that actually witness a pattern and preserve the remaining notes
 as context/counterevidence. A repeated core can survive extra chord keys, but
@@ -60,13 +72,22 @@ facts for a mixed-chord crop. Check all claims against the actual notes, includi
 old claims retained in a repair attempt; correcting line lists alone cannot repair
 an unsupported interpretation.
 
-The next reviewer receives your submitted judgments, note evidence, reasoning,
-expert feedback and the frozen skill. They do not receive the whole chart or query
-corpus. Make each `rationale` self-contained: state the decisive attack groups,
-timing and extent, relevant counterevidence and entering holds, and why they support
-the chosen salience. Retain enough `contextLines` to assess those facts, and use
-`discoverySummary` to explain the regions inspected and the collection's coverage.
-Missing evidence goes back to you for revision; it is not an expert semantic question.
+The next reviewer receives your selected exact evidence and reasoning, but not the
+whole chart. Keep complete relevant `noteLines`/`contextLines` and entering holds.
+Write `rationale` as **2–4 short Markdown bullets, normally at most 80 words**:
+
+- Name the organizing pattern in ordinary language: what repeats, flows, or changes.
+- Explain the decisive relation to this dimension and why its strength fits.
+- Add a useful contrast with an exact human example, or the remaining boundary.
+
+Start from the human's reading of the passage: recognizable flow, interruptions,
+and independent hold/release control. Raw complexity is not a substitute. Put exact
+line arrays, calculations, and provenance in structured evidence or `analysis.json`;
+keep only numbers needed for the judgment in the bullets. The submitted references
+and bullets together must suffice for an audit; an unavailable sidecar cannot carry
+a decisive premise. `discoverySummary` is a brief bullet list of inspected ranges,
+organization changes, reused human judgments, and remaining gaps. Do not narrate
+command history. Insufficient source evidence goes back for revision.
 
 ## Use old work with its original provenance
 
@@ -86,7 +107,9 @@ strength. Preserve current reviewed claims in `bindings.json` without resubmissi
 
 ## Output
 
-Write `result.json` with one entry per assigned chart:
+Write `result.json` with one entry per assigned chart. This abbreviated example
+shows one claim; include the remaining considered dimensions or explain their
+exact human reuse/omission in the complete result:
 
 ```json
 {
@@ -94,7 +117,7 @@ Write `result.json` with one entry per assigned chart:
   "charts": [{
     "sourceSha256": "ASSIGNED_SHA",
     "inspectedRanges": [{ "startMs": 0, "endMs": 10000 }],
-    "discoverySummary": "Complete structural coverage, query results, old-evidence reuse and the local changes found.",
+    "discoverySummary": "- Inspected 0–10 s: alternating groups give way to a moving run.\n- All five dimensions considered; no prior human claims reused.",
     "claims": [{
       "id": "local-claim-id",
       "sectionId": "episode-id",
@@ -104,7 +127,7 @@ Write `result.json` with one entry per assigned chart:
       "assessment": { "presence": "unresolved" },
       "noteLines": [100, 101],
       "contextLines": [99, 102],
-      "rationale": "Source facts, selected structure, counterevidence and what settles or limits the target judgment."
+      "rationale": "- Two disjoint groups alternate through this episode.\n- The pattern is clear, but the supplied evidence leaves its local strength unresolved."
     }],
     "questions": [{ "id": "local-question", "claimIds": ["local-claim-id"], "text": "The concrete remaining semantic distinction." }]
   }]
@@ -116,7 +139,8 @@ Copy the exact skill descriptor. Tags are `jack-organization`, `stream-organizat
 `presence: "present"` and `salience: "supporting"` or `"prominent"`; non-positives
 have only presence. Strength means expression of the target style, not confidence
 or selected-note fraction. Use half-open source-ms scopes and real source lines,
-including complete entering holds in context. Missing dimensions stay unreviewed.
+including complete entering holds in context. An omitted dimension stays unreviewed;
+explain omissions instead of claiming a complete dimension pass.
 
 Run the supplied Python with `check-annotation-result.py .` after writing the
 complete result, and fix every reported error before finishing. This inexpensive

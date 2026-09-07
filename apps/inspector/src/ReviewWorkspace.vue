@@ -834,7 +834,7 @@ onBeforeUnmount(() => { stashDraft(); playback?.dispose(); });
             <p>{{ activeClaim.assessment.presence }}{{ activeClaim.assessment.presence === 'present' ? ` · ${activeClaim.assessment.salience}` : '' }}</p>
             <p class="review-kicker">{{ (activeClaim.scope.startMs / 1000).toFixed(3) }}–{{ (activeClaim.scope.endMs / 1000).toFixed(3) }} s</p>
             <div class="review-actions"><button type="button" @click="focus(activeClaim.scope)">View claim range</button><button type="button" @click="focus(activeClaim.reviewContext)">View context</button></div>
-            <p>{{ activeClaim.evidence.rationale }}</p>
+            <p class="review-rationale">{{ activeClaim.evidence.rationale }}</p>
           </section>
           <template v-else>
             <WorkflowClaimEditor :model-value="activeClaim" :tags="activeFoundation.tags" :disabled="!canEdit" @update:model-value="updateClaim" @focus="focus" />
@@ -866,6 +866,7 @@ h1 { margin: 0; font-size: 23px; letter-spacing: -.022em; }
 h2 { margin: 0; font-size: 14px; line-height: 1.5; }
 p { margin: 0; line-height: 1.6; }
 .review-kicker { font: 11px var(--font-data); color: var(--ink-secondary); }
+.review-rationale, .review-copy, .review-decision { white-space: pre-line; }
 .review-copy { font-size: 12px; color: var(--ink-secondary); line-height: 1.65; }
 .review-facts { display: grid; grid-template-columns: auto 1fr; gap: 8px; margin: 0; padding: 12px 0; border-block: 1px solid var(--line); font-size: 11px; }
 .review-community { display: grid; gap: 8px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }

@@ -15,7 +15,7 @@
     "build": "pnpm --recursive --if-present build",
     "catalog:map-local": "node scripts/build-pattern-category-map.mjs",
     "changeset": "changeset",
-    "check": "pnpm check:source && pnpm typecheck && pnpm test && pnpm build && pnpm check:package && pnpm test:corpus-validator && pnpm test:pattern-category-map",
+    "check": "pnpm check:source && pnpm check:skill && pnpm typecheck && pnpm test && pnpm build && pnpm check:package && pnpm test:corpus-validator && pnpm test:pattern-category-map",
     "check:package": "pnpm --filter beatmap-lens pack --dry-run",
     "check:source": "biome ci .",
     "dev": "pnpm --filter @pulsefield/beatmap-lens-inspector dev",
@@ -28,7 +28,8 @@
     "typecheck": "pnpm --recursive --if-present typecheck",
     "prevalidate:corpus": "pnpm --filter beatmap-lens build",
     "validate:corpus": "node scripts/validate-corpus.mjs",
-    "version-packages": "changeset version"
+    "version-packages": "changeset version",
+    "check:skill": "python3 skills/mania-pattern-judgment/scripts/check_budget.py"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.6",

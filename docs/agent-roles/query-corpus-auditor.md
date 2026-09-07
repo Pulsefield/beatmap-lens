@@ -24,6 +24,13 @@ Selected references are not an exhaustive inventory of a scope. A labeler's clai
 that it inspected the whole source remains its coverage declaration, not proof that
 you independently traversed the source.
 
+Read the episode as a human would: identify its familiar organization, then ask
+what actually changes or requires independent control. Compare the exact human
+rationale, not an older retained machine explanation. Consider all five dimensions
+together while judging each claim's own evidence, scope and salience. Check that
+any reused human decisions and intentionally unreviewed dimensions are identified;
+a five-dimension pass is not a requirement for five positives.
+
 Check whether the reasoning and supplied evidence suffice for each judgment. Do
 not require a second full-source scan merely because this role has limited inputs.
 When a decisive calculation, surrounding structure, or coverage explanation is
@@ -45,6 +52,12 @@ submitted evidence. Do not fabricate ambiguity to fill an expert queue. An
 unresolved proposal cannot be supported, and a supported claim cannot retain an
 unsettled associated question. A revision handoff receives a fresh review of its
 current submission; an earlier verdict does not establish that it is now correct.
+
+Write each rationale in 2–4 brief Markdown bullets, normally at most 80 words.
+State the decisive reason for support or the specific correction needed; omit
+producer IDs, long row arrays and repeated source timestamps from prose. Preserve
+the submitted-evidence limit. A section assignment's coverage is only its assigned
+ranges; do not demand or imply a full-chart scan.
 
 Write `result.json` using the existing audit contract:
 

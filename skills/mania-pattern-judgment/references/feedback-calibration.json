@@ -1,0 +1,374 @@
+{
+  "authority": "Scoped canonical human decisions; descriptive mentions of other styles do not create additional assessments.",
+  "source": ".local/corpus-500-v2/workspace/workflow/*.v2.json",
+  "snapshotDate": "2026-09-07",
+  "observationsInspected": 104,
+  "selection": "Fourteen later decisions with substantive human rationale, plus the GHOST VIP prominent salience correction. The 42 historical records remain in expert-review-20260907.json. Generic confirmations and other slash-only explanations are omitted.",
+  "provenance": "Stored Foundation pins are copied verbatim from current observations. Historical ledger pins remain unchanged. snapshotObservationSha256 hashes sorted-key compact UTF-8 JSON of the current complete observation, without ASCII escaping.",
+  "decisions": [
+    {
+      "sourceSha256": "122e1251a8c1bb923592859630fe58ff6270f048c43e01e494f90d4138185d8a",
+      "scope": {
+        "endMs": 101921,
+        "startMs": 99539
+      },
+      "reviewContext": {
+        "endMs": 102200,
+        "startMs": 99000
+      },
+      "tagId": "tech",
+      "assessment": {
+        "presence": "absent"
+      },
+      "decisionId": "5d37372d-7a30-41b6-8729-8512f5c1585b",
+      "disposition": "modified",
+      "observationId": "5d37372d-7a30-41b6-8729-8512f5c1585b:observation",
+      "storedFoundationSha256": "15fa68913bdb2bf395a189df7ab433f6d5b126fc35c46c1dbc8e607ce2182e97",
+      "documentCanonicalSha256": "634f8e0b40446e6436c97a884bc979baaf4580e2b5c23cb0c962ab8404af2f10",
+      "snapshotObservationSha256": "1fef24e774a519c76e3d212a0b56e694fd6919462d9f5e3237aa77119b80634b",
+      "confirmedAt": "2026-09-07T06:43:16.089Z",
+      "humanRationale": "The main demand here is jack",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "2d8a463c6b0e84b09dc6e940acccbb674eb40eda4965eee298c59ef30c18d4ed",
+      "scope": {
+        "endMs": 98456,
+        "startMs": 97433
+      },
+      "reviewContext": {
+        "endMs": 98956,
+        "startMs": 96933
+      },
+      "tagId": "tech",
+      "assessment": {
+        "presence": "absent"
+      },
+      "decisionId": "e1bcab60-a0ab-4fd9-ad7f-7db8b2279c1f",
+      "disposition": "modified",
+      "observationId": "e1bcab60-a0ab-4fd9-ad7f-7db8b2279c1f:observation",
+      "storedFoundationSha256": "15fa68913bdb2bf395a189df7ab433f6d5b126fc35c46c1dbc8e607ce2182e97",
+      "documentCanonicalSha256": "59317c18da282555250fcf857f120560dd12a3f0781a058c361898558492d831",
+      "snapshotObservationSha256": "610dcfd1161dec11d670daff3f815108308bda35e178f0351aec69a6d1c10125",
+      "confirmedAt": "2026-09-07T06:45:13.310Z",
+      "humanRationale": "The density and selection length does not support tech. it supports LN coordination.",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "4c2270fd876ada884641d440f2edc53d72be7adbddcd604b735cb6fdee52b01a",
+      "scope": {
+        "endMs": 63311,
+        "startMs": 62151
+      },
+      "reviewContext": {
+        "endMs": 63911,
+        "startMs": 61551
+      },
+      "tagId": "tech",
+      "assessment": {
+        "presence": "absent"
+      },
+      "decisionId": "1f3b9bbd-d6f6-461f-914b-b42876c18d87",
+      "disposition": "modified",
+      "observationId": "1f3b9bbd-d6f6-461f-914b-b42876c18d87:observation",
+      "storedFoundationSha256": "15fa68913bdb2bf395a189df7ab433f6d5b126fc35c46c1dbc8e607ce2182e97",
+      "documentCanonicalSha256": "bc9c1e6f344a58f490fa8d896848e6b5c9267fe643870f9dcd4179feb3ecced3",
+      "snapshotObservationSha256": "525eedfd7bb0fb081100995a99904f8cc724626291f5e6597e7c248f8cfb9094",
+      "confirmedAt": "2026-09-07T06:27:00.945Z",
+      "humanRationale": "the area is composed of several burst. Not hard/tricky enough to play",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "53a1d6a2186dbf08beea006a78bdcc2b8270c52e67e05a3fa8991d05763d70ce",
+      "scope": {
+        "endMs": 139432,
+        "startMs": 136918
+      },
+      "reviewContext": {
+        "endMs": 139832,
+        "startMs": 136518
+      },
+      "tagId": "tech",
+      "assessment": {
+        "presence": "absent"
+      },
+      "decisionId": "05e5c953-370b-4e3a-b6b8-57077134281f",
+      "disposition": "modified",
+      "observationId": "05e5c953-370b-4e3a-b6b8-57077134281f:observation",
+      "storedFoundationSha256": "15fa68913bdb2bf395a189df7ab433f6d5b126fc35c46c1dbc8e607ce2182e97",
+      "documentCanonicalSha256": "dd23690fc9c4c310832a7656ea577a4a05ed5201ec8058001c3f04ae468c1808",
+      "snapshotObservationSha256": "0f9183bf811de816f25aa835e9739bc07f66c1c6f05553ce6fafced3a389a7f4",
+      "confirmedAt": "2026-09-07T06:32:17.290Z",
+      "humanRationale": "This is not tricky to play",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "602ea45800fef2eb880132abcc72a040b1ba101245cb1938ae5e10513f8e1e47",
+      "scope": {
+        "endMs": 102760,
+        "startMs": 101689
+      },
+      "reviewContext": {
+        "endMs": 103000,
+        "startMs": 99793
+      },
+      "tagId": "tech",
+      "assessment": {
+        "presence": "absent"
+      },
+      "decisionId": "fa7a7631-5a2e-4d8f-b133-689b060ee770",
+      "disposition": "modified",
+      "observationId": "fa7a7631-5a2e-4d8f-b133-689b060ee770:observation",
+      "storedFoundationSha256": "15fa68913bdb2bf395a189df7ab433f6d5b126fc35c46c1dbc8e607ce2182e97",
+      "documentCanonicalSha256": "103243f0c5450ec6c63a34c73bcea183046c63ce2705129abb1d3633abe086ec",
+      "snapshotObservationSha256": "096c50fc361e409e5bdecaea9e880f206f24e5831565a6b922f8261b0a9c0ce7",
+      "confirmedAt": "2026-09-07T06:29:31.266Z",
+      "humanRationale": "The section is too brief for claiming tech, also not complex enough.",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "96e1b913582aced0bff19a874cd4b956406aa3cdd6d5c49ebc0fe6ae644d4c39",
+      "scope": {
+        "endMs": 112385,
+        "startMs": 110833
+      },
+      "reviewContext": {
+        "endMs": 112785,
+        "startMs": 110433
+      },
+      "tagId": "tech",
+      "assessment": {
+        "presence": "absent"
+      },
+      "decisionId": "825011b8-2a98-4cb3-80d9-795cd30c8de0",
+      "disposition": "modified",
+      "observationId": "825011b8-2a98-4cb3-80d9-795cd30c8de0:observation",
+      "storedFoundationSha256": "15fa68913bdb2bf395a189df7ab433f6d5b126fc35c46c1dbc8e607ce2182e97",
+      "documentCanonicalSha256": "2765b11623fa2747fa207ca1d60d4b2d88d445a0a0348fa2e5596e883a769563",
+      "snapshotObservationSha256": "c71977c7451072c6aad075f937ae9fc4fb1035f262bf8a4d18f03255f670b3ee",
+      "confirmedAt": "2026-09-07T06:50:01.350Z",
+      "humanRationale": "This section is all LN, we do not call it tech. LN release & coordination.",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "997e705a9bdc17c8fbd86036f4bb261c71fdc208e79f741051056ccc3262e268",
+      "scope": {
+        "endMs": 888766,
+        "startMs": 880150
+      },
+      "reviewContext": {
+        "endMs": 889036,
+        "startMs": 879842
+      },
+      "tagId": "tech",
+      "assessment": {
+        "presence": "absent"
+      },
+      "decisionId": "0b939ab4-d7df-4ced-a783-b0111da1d81b",
+      "disposition": "modified",
+      "observationId": "0b939ab4-d7df-4ced-a783-b0111da1d81b:observation",
+      "storedFoundationSha256": "15fa68913bdb2bf395a189df7ab433f6d5b126fc35c46c1dbc8e607ce2182e97",
+      "documentCanonicalSha256": "a418bbb03d2540d5862fc24aa488cb2813c2954456106c9fc61ecb6c0a9d0acc",
+      "snapshotObservationSha256": "df821e4be156b3107d4449f884449020d15ab85e22c29429e60ef4d45dfbc707",
+      "confirmedAt": "2026-09-07T06:53:59.894Z",
+      "humanRationale": "no TAP all LN, is LN coordination.",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "a11269b098ccd65e3b54435cab48b829631394f0e3742912538152247f2639a6",
+      "scope": {
+        "endMs": 195455,
+        "startMs": 193499
+      },
+      "reviewContext": {
+        "endMs": 195955,
+        "startMs": 192999
+      },
+      "tagId": "tech",
+      "assessment": {
+        "presence": "present",
+        "salience": "prominent"
+      },
+      "decisionId": "4b6fba9f-765e-44f2-9597-3697056da50e",
+      "disposition": "modified",
+      "observationId": "4b6fba9f-765e-44f2-9597-3697056da50e:observation",
+      "storedFoundationSha256": "15fa68913bdb2bf395a189df7ab433f6d5b126fc35c46c1dbc8e607ce2182e97",
+      "documentCanonicalSha256": "56de83a488b408f398e14dbfedf8c5419b3f4bfc906e2a4b9404fbc3d0d1c284",
+      "snapshotObservationSha256": "c8ad5c2a70d8dd4e4b54a71130d3b5787e73a64da2b8afe5abf8489e6ae7754e",
+      "confirmedAt": "2026-09-07T06:40:15.896Z",
+      "humanRationale": "/",
+      "humanRationaleSource": "decision.rationale",
+      "selectionReason": "GHOST VIP prominent assessment contrasts with retained machine wording that limited strength to supporting. The slash-only human rationale adds no explanation; source relationships in the guide are separately inspected facts."
+    },
+    {
+      "sourceSha256": "b07714a1675006d4292a16cb076a5efc29bdaf55aa954b786af93af8f1e59e0a",
+      "scope": {
+        "endMs": 266661,
+        "startMs": 265939
+      },
+      "reviewContext": {
+        "endMs": 266950,
+        "startMs": 265362
+      },
+      "tagId": "tech",
+      "assessment": {
+        "presence": "absent"
+      },
+      "decisionId": "0bece4cf-ce75-463a-9b57-e6db75685a77",
+      "disposition": "modified",
+      "observationId": "0bece4cf-ce75-463a-9b57-e6db75685a77:observation",
+      "storedFoundationSha256": "15fa68913bdb2bf395a189df7ab433f6d5b126fc35c46c1dbc8e607ce2182e97",
+      "documentCanonicalSha256": "29080e69506b7b05a6205fc8a5f0f400c2a73be0dc8e75f39aed9c360fbc345d",
+      "snapshotObservationSha256": "23d1ff899adbbd74455d7fe32994927ed1848c95b3c889ed0a1ff82f1d0ae4dc",
+      "confirmedAt": "2026-09-07T06:41:27.806Z",
+      "humanRationale": "this is chord minijack + a little stream",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "b80c682aa0d68005dd16d1f0d352eb998021ef5f4aef93dd98dcc341cddcde46",
+      "scope": {
+        "endMs": 96602,
+        "startMs": 94361
+      },
+      "reviewContext": {
+        "endMs": 97102,
+        "startMs": 93861
+      },
+      "tagId": "tech",
+      "assessment": {
+        "presence": "present",
+        "salience": "prominent"
+      },
+      "decisionId": "6c5283ce-a318-4962-849b-b5a5818ef1a2",
+      "disposition": "modified",
+      "observationId": "6c5283ce-a318-4962-849b-b5a5818ef1a2:observation",
+      "storedFoundationSha256": "15fa68913bdb2bf395a189df7ab433f6d5b126fc35c46c1dbc8e607ce2182e97",
+      "documentCanonicalSha256": "ad5ec63021279090eeccc19cda40a91e2715b8cc7cc02881caef1b8b3271cd60",
+      "snapshotObservationSha256": "71a20e8dfe3e9a666e773d5e228a9f3fd3002fde7ee44f0402c6bd53dfa27a9b",
+      "confirmedAt": "2026-09-07T06:59:23.220Z",
+      "humanRationale": "typical tech",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "d737022b048ca6e1d6a3a31aaf1c4afcba7a00e7c8cf2d6138afe46c48919df0",
+      "scope": {
+        "endMs": 175182,
+        "startMs": 173960
+      },
+      "reviewContext": {
+        "endMs": 175650,
+        "startMs": 173600
+      },
+      "tagId": "tech",
+      "assessment": {
+        "presence": "present",
+        "salience": "supporting"
+      },
+      "decisionId": "ee723e32-8bd6-4806-aee7-ea2189d5183f",
+      "disposition": "accepted",
+      "observationId": "ee723e32-8bd6-4806-aee7-ea2189d5183f:observation",
+      "storedFoundationSha256": "15fa68913bdb2bf395a189df7ab433f6d5b126fc35c46c1dbc8e607ce2182e97",
+      "documentCanonicalSha256": "9e24acab8361f9a4c9638752df3bb38810e737d7d00965352b5bd1006bbf9b20",
+      "snapshotObservationSha256": "283572c3d02f39046f15a36cceb94352c72c0a6e790a51600d6823cf94af9da5",
+      "confirmedAt": "2026-09-07T06:23:33.155Z",
+      "humanRationale": "technical hybrid",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "d862722201a4d12533113c13e47d6c670db60f13b592725934161534d975149e",
+      "scope": {
+        "endMs": 277941,
+        "startMs": 277123
+      },
+      "reviewContext": {
+        "endMs": 278341,
+        "startMs": 276723
+      },
+      "tagId": "tech",
+      "assessment": {
+        "presence": "absent"
+      },
+      "decisionId": "8fe744db-97bb-458a-b6ea-28ff62750936",
+      "disposition": "modified",
+      "observationId": "8fe744db-97bb-458a-b6ea-28ff62750936:observation",
+      "storedFoundationSha256": "15fa68913bdb2bf395a189df7ab433f6d5b126fc35c46c1dbc8e607ce2182e97",
+      "documentCanonicalSha256": "3d03540a40d99db04c8ad13ece5cd860ff860babbf8a39d61c9d0f35fd8581b2",
+      "snapshotObservationSha256": "45cd16c6fa4f58030237af53958b1bdb4aeb08a8dc679a6af1a31aeb7c98cee1",
+      "confirmedAt": "2026-09-07T06:53:14.840Z",
+      "humanRationale": "We play this part as drill/burst like, no flow change and easy to read, this part challenges stamina, and is a king of stream.",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "db071bb77b67638e382bfbb5c71ac8ab5ae22d3b928b88fb57180b2e9d58abbd",
+      "scope": {
+        "endMs": 127697,
+        "startMs": 126520
+      },
+      "reviewContext": {
+        "endMs": 128198,
+        "startMs": 126020
+      },
+      "tagId": "tech",
+      "assessment": {
+        "presence": "absent"
+      },
+      "decisionId": "dd30b806-a30c-4499-a9ed-e19bbeb69be1",
+      "disposition": "modified",
+      "observationId": "dd30b806-a30c-4499-a9ed-e19bbeb69be1:observation",
+      "storedFoundationSha256": "15fa68913bdb2bf395a189df7ab433f6d5b126fc35c46c1dbc8e607ce2182e97",
+      "documentCanonicalSha256": "16a22dbca4185d777ddf10f1120c540f78b7836b9dcbff82d5eeb53d75301fd5",
+      "snapshotObservationSha256": "ab79f6db65a3cd64ebf0318860e39aea91cfe106f47e54b45448fa088767657b",
+      "confirmedAt": "2026-09-07T06:47:22.053Z",
+      "humanRationale": "These are all LN and challenges LN coordination. Tech usually needs unexpected style variation & irregular timing/abrupt flow alternation",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "e5887492be82c1b0fad6763e112e8e9785a2ee4111adf0bdc235602d60c5606f",
+      "scope": {
+        "endMs": 32916,
+        "startMs": 32414
+      },
+      "reviewContext": {
+        "endMs": 33416,
+        "startMs": 31914
+      },
+      "tagId": "tech",
+      "assessment": {
+        "presence": "absent"
+      },
+      "decisionId": "308d74d9-46f1-4639-950a-1d9f7c4ad9b6",
+      "disposition": "modified",
+      "observationId": "308d74d9-46f1-4639-950a-1d9f7c4ad9b6:observation",
+      "storedFoundationSha256": "15fa68913bdb2bf395a189df7ab433f6d5b126fc35c46c1dbc8e607ce2182e97",
+      "documentCanonicalSha256": "548b58d164c1306bb24865f52271a268bcc8e4ef43110aa35f696be634aae9c7",
+      "snapshotObservationSha256": "af925139eb838fc77d1919807a215a928046656d1c0f449abb8148fd481dc505",
+      "confirmedAt": "2026-09-07T06:59:59.623Z",
+      "humanRationale": "no tap and section too short.",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "fc8f5bc098121aa7de7b190ffa3ac14f55e98045263c6cff42f0da06e76baaff",
+      "scope": {
+        "endMs": 12440,
+        "startMs": 11731
+      },
+      "reviewContext": {
+        "endMs": 12940,
+        "startMs": 11231
+      },
+      "tagId": "tech",
+      "assessment": {
+        "presence": "absent"
+      },
+      "decisionId": "230902ea-58c0-41d5-87cd-f71e6a18aacc",
+      "disposition": "modified",
+      "observationId": "230902ea-58c0-41d5-87cd-f71e6a18aacc:observation",
+      "storedFoundationSha256": "15fa68913bdb2bf395a189df7ab433f6d5b126fc35c46c1dbc8e607ce2182e97",
+      "documentCanonicalSha256": "4ebe9ba77cf76de4d7ec052d1b8306fae759bde885dc00be880b7d8f98829292",
+      "snapshotObservationSha256": "70aa44dc5626fee6acccbe6f74ffeac4f1660cbc53a087ff1712ca544917e79d",
+      "confirmedAt": "2026-09-07T06:28:37.973Z",
+      "humanRationale": "the area length is too limited to confirm it's tech. Rather, it's more LN coordination",
+      "humanRationaleSource": "decision.rationale"
+    }
+  ]
+}

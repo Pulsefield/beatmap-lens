@@ -1,89 +1,73 @@
 ---
 name: mania-pattern-judgment
-description: Judge local osu!mania patterns from source structure and expert-calibrated context. Use for section annotation, pattern review, or calibration; distinguish structural evidence, style salience, and human judgments.
+description: Judge osu!mania section styles across multiple dimensions using source structure and human calibration. Use for annotation, pattern review, and feedback-driven calibration.
 ---
 
 # Mania pattern judgment
 
-Judge the arrangement before choosing a tag. This revision incorporates the
-2026-09-05 pilot and subsequent corpus reviews, primarily on 4K examples. It is local
-guidance, not a claim that every community uses these terms identically. The current
-V2 campaign uses Jack, Stream, Tech, LN coordination, and Trill organization. Read
-the task's actual frozen Foundation; editing this skill does not change its approval
-or silently update old worker copies.
+Recognize the organization a player follows and explain its source relationships.
+Read the frozen Foundation and [judgment guide](references/judgment-guide.md).
+V2 covers Jack, Stream, Tech, LN coordination, and Trill; the task's pinned meanings
+remain authoritative.
 
-Keep the consumer's experimental section vocabulary separate from whole-difficulty
-community targets. For learning-oriented campaigns, use the learning boundary in
-[the judgment guide](references/judgment-guide.md#learning-oriented-campaigns).
-The analytical vocabulary below helps explain evidence; it does not require a
-supervised target or generation slider for every named pattern.
+When an annotation harness is supplied, start from its section brief. Invoke tools
+only for missing evidence, another viewing perspective, or a useful human comparison.
+Expand relevant example cards individually; do not dump ledgers or run every tool.
+Reuse visible evidence. Evaluation jobs restrict calibration access; respect their
+allowed pool.
 
-Read [the judgment guide](references/judgment-guide.md) before assigning semantics.
-For query construction or inexpensive weak annotation, also read
-[structural queries and routing](references/structural-queries.md). Exact facts,
-pattern identity, and section salience are separate outputs: a clear roll may
-receive supporting Stream; detecting occupied columns does not establish LN coordination.
+## One section, several judgments
 
-## Working method
+1. Read supplied human feedback at its exact scope, including revised boundaries.
+   Use the human decision's rationale instead of unresolved wording retained from
+   an older machine proposal. Inspect the exact difficulty, complete entering
+   holds, and neighboring rows needed to see entry, continuation, and exit.
+2. Describe the episode in familiar terms: repeated chords, alternating groups,
+   flowing singles, a direction change, or independent hold/release roles. Check
+   complete attack rows and timing; keep short LNs as LNs. Do not select notes
+   first and classify a cleaned sequence that hides interruptions.
+3. Review **every active Foundation dimension in the same pass**. Give each its
+   own witnesses, scope, presence, and salience. Share a `sectionId` for the same
+   episode; use a common scope when valid and separate justified cuts when the
+   organizations change. Several prominent dimensions are allowed; successive
+   episodes alone do not establish co-occurrence.
+4. Use `present` with `supporting`/`prominent`, an evidence-backed `absent`,
+   `unresolved` for an inspected semantic uncertainty, or `unreviewed` for a
+   dimension not actually inspected. Missing evidence and query misses are not
+   negatives. Inspect query-uncovered regions when whole-chart coverage is asked.
+5. Compare the closest human positive and counterexample when a distinction is
+   difficult. Explain the relevant similarity or difference, rather than copying
+   a verdict. Escalate only the concrete semantic choice that remains open.
 
-- Read the exact difficulty and the task's frozen Foundation. Inspect source
-  organization and its neighborhoods at a readable scale. Structural queries are
-  optional factual aids; the current campaign pauses the pattern analyzer and uses
-  Astra medium labelers with independent Astra high auditors. Community tags, votes,
-  and a pack's advertised style select candidates; they do not prove labels.
-  A detector miss is unreviewed, not absent. Exhaustive discovery still requires
-  inspecting query-uncovered portions when the task requests whole-chart coverage.
-- Stay within chart, causal-history, and canonical-profile evidence. Do not infer
-  audio-dependent styles, external presentation, provenance, or player-specific
-  responses from a chart-only review. Semantic observations supervise section
-  style; they are not labels for numerical gameplay demand or frontier responses.
-- Describe source facts first: simultaneous attack groups, column order, run
-  lengths and intervals, complete hold occupancy, release order, and rhythm resets.
-  Preserve short LNs as LNs even when their role feels like extended taps.
-- Locate changes in organization before assigning scope. Jumpstream, grouped
-  jumptrill, and rolls are distinct episodes. In the approved four-dimension pilot,
-  the reviewed jumptrill is Stream absent while jumpstream and roll/burst are
-  Stream positives; continuous activity does not bridge the intervening negative.
-- Compose a description from chord size, temporal relationship, repetition extent,
-  rhythm, and hold/release organization. Do not classify every repeated chord as
-  chordjack or every fast run as speedjack. Describe what can be established when
-  the campaign lacks the appropriate term.
-- Give each semantic claim its own scope, witnesses, context, rationale, assessment, and
-  independent salience. Multiple prominent judgments require independently valid
-  evidence in that scope. Successive patterns do not automatically establish co-occurrence.
-- Distinguish presence, prominence, example typicality, and confidence. A weak
-  example can be a certain positive. Too little evidence does not justify an
-  explicit negative. Rejecting an example does not negate every pattern in its context.
-- Reuse deterministic calculations for simple source facts. They do not replace
-  the requested independent semantic audit. A query-to-tag rule needs its own
-  held-out precision and coverage check before batch use.
-- Audit contextual inference using the guide's discriminating checks. Ask the expert a concrete question
-  when a necessary semantic choice remains open. Do not invent speed/tolerance
-  thresholds or silently settle an open definition to make an answer decidable.
+## Human-readable notes
 
-## Output and handoff
+Write `evidence.rationale` as **2–4 brief Markdown bullets**, normally at most
+80 words. Lead with recognizable organization; explain the decisive relation and
+its role in this section. Add a comparison, boundary, or uncertainty only when it
+changes the judgment. Keep spaces between words, numbers, and units.
 
-State local episodes and evidence first, separating approximate expert cuts from
-proposed precise source cuts. Then give independent concept assessments within
-appropriate scopes. Keep gaps unclassified unless inspected. Preserve shared
-source/episode grouping for related claims.
+For example, an inspected Tech negative might read:
 
-In Beatmap Lens, follow [the exchange reference](references/beatmap-lens-exchange.md).
-Submit proposals, audit, and questions. Do not write canonical human decisions or
-approve Foundation semantics on the expert's behalf. An explicit expert approval
-authorizes recording that reviewed snapshot through the human workflow; a newly
-created empty factory template still starts proposed. Skill guidance does not
-change the hash or meaning of an already pinned Foundation.
+- Chord minijacks lead into a short, readable stream.
+- The change follows a familiar flow; it does not create a tricky rhythm here.
 
-Without a frozen task, an unsealed source-backed analysis is useful. Label it as
-such and leave task/Foundation pins unset; do not fabricate a formal handoff.
+Keep full timestamps, source lines, arrays, calculations, and hashes in structured
+evidence or the analysis sidecar. Brief prose must still explain each claim; a
+tag name, density count, or copied Foundation definition is not a rationale.
 
-Consume an explicit human assessment at its exact scope without asking again.
-Use the human decision's rationale, not an older proposal's retained unresolved
-explanation. A later explicit clarification can settle an earlier uncertain acceptance.
-Do not infer a new tag or salience merely from a descriptive pattern name in feedback.
+## References and provenance
 
-If this revision conflicts with an older task's Foundation, preserve both versions
-and flag the mismatch. Newly proposed mappings stay experimental until calibrated;
-old packets keep their hashes and meanings. Preserve the original proposal and
-expert correction separately, including when a replacement task is eventually issued.
+- For Beatmap Lens delivery and independent audit, read
+  [exchange](references/beatmap-lens-exchange.md).
+- For deterministic source queries, read
+  [structural queries](references/structural-queries.md).
+- To update this skill from feedback, follow
+  [feedback maintenance](references/feedback-maintenance.md), including its length
+  budget. Retrieve only the relevant calibration records, not every past example.
+
+Submit proposals and audits; do not write canonical human decisions or approve
+Foundation semantics for the expert. Preserve original proposals, human corrections,
+and frozen task/skill hashes. Explicit human decisions need no repeat confirmation.
+Keep old packets and worker copies frozen. Identify guidance/Foundation conflicts
+without silently changing meanings.
+Without a frozen task, label source-backed analysis unsealed and leave pins unset.
