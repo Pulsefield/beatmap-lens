@@ -53,9 +53,12 @@ work returns to agents; concrete expert cases and audit conflicts reach the fixe
 page. Self-checks and machine agreement never create human-confirmed observations.
 After human changes, fetch a fresh task for new work and preserve old packets.
 
-When revisiting a pending machine claim at the same source, Foundation, tag, and
+When revisiting a machine claim at the same source, Foundation, tag, and
 complete scope, the new handoff can explicitly link `supersedes` entries containing
 the old `handoffId`, `handoffSha256`, `claimId`, and new `replacementClaimId`.
+An overlapping corrected scope additionally needs an explicit `scopeChangeReason`.
+Explain the changed boundary; removed portions remain unclassified unless separately
+judged. Keep alternative crops under their shared episode, not as independent samples.
 The old case retires after independent review supports the new conclusion or
 refers its concrete remaining uncertainty to the expert. This also allows a new
 expert comparison to reopen a previously machine-reviewed judgment, with one

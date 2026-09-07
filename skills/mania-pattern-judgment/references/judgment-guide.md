@@ -210,6 +210,15 @@ Five further decisions during the September 7 refinement sharpen these compariso
   ranges and rationales are in the ledger; these are additional scoped positives,
   not new minimum-count rules.
 
+The later `ab3460d1`, 14138–19078 ms, is **prominent**, described as explicit
+Drill with many rows. Its mixed single/chord groups do not impose a supporting
+ceiling. Compare coherent sustained exchange with the shorter mixed positive;
+group arity alone does not choose salience.
+`d5dc4e0f`, 448389–460548 ms, is **supporting**, described as slow Drill, despite
+progressively increasing gaps. This resolves that previously open tail. Compare
+its continuing group exchange with the interrupted short-block negative; slowing
+does not itself erase Drill or establish its strength.
+
 ### Roll and burst
 
 A roll exposes ordered motion across columns. The approved local Stream
@@ -374,6 +383,13 @@ counterweights to both shortcuts:
 - `0c60d6bd6e29`, 153281–153554 ms, is **absent** for LN coordination: the
   contextual release challenge does not supply attacks under the held notes in
   the judged interval. Do not import a surrounding positive into a release-only crop.
+- `c8d03a3e`, 346070–351800 ms, is **supporting**: two occupied lanes under
+  tapping Drill still give LN coordination a weak role. Static holds are not an
+  automatic negative, and repeated LN renewal is not an additional prerequisite.
+  The expert's descriptive Drill wording does not create a human Drill assessment.
+- `49fa8421`, 32420–34820 ms, is **absent**: the expert finds its coordination
+  role too easy compared with the surrounding map. Compare the actual independent
+  actions and their role in context; two occupied lanes alone do not settle it.
 
 For an analogy, state the recurring or isolated press/release/tap roles and explain
 which match the reviewed case. Merely having more than two LNs is not evidence of
@@ -437,6 +453,26 @@ The corpus comparisons refine this judgment:
 - **Queen Aluett**, 93516–94931 ms: explicit follow-up clarified Tech
   present/supporting. The earlier accepted-unresolved record is historical.
 
+Further September 7 decisions qualify the use of recovery cues:
+
+- `c379b920`, 75142–77828 ms, is **prominent**, described as expressive irregular
+  organization. The earlier machine negative relied on locally regular burst
+  blocks and resets. Such blocks can still form a tricky overall arrangement;
+  explain their relationships across the episode before claiming recovered flow.
+- `9b422f0f`, 103453–106630 ms, is **supporting**: changing rhythm and irregular,
+  fragmented stream-like organization express Tech weakly in this map. Neither
+  density nor absence of Jack proves that judgment by itself.
+- `02322a4a`, 193633–194937 ms, is **absent**: the expert finds the Drill/Jack
+  mixture recognizable and easy to follow. `a68c5d4d`, 235339–235993 ms, is also
+  **absent** for easily interpreted flow alternation. `f29d770e`, 97533–98106 ms,
+  is **absent** for ordinary variation over a short section. These are scoped
+  counterexamples to treating any rhythm or style change as Tech, not blanket
+  exclusions of mixed patterns, direction changes, or brief Tech.
+- `01e47b5f`, 389914–392610 ms, is **absent**, described as handstream with
+  direction/flow alternation. `75459099`, 194463–195999 ms, is **absent**, judged
+  easy to read and play. Preserve the whole reviewed scope rather than promoting
+  an isolated unusual interval inside it to a positive section label.
+
 Thus local expectation is a comparison tool, not a requirement to first find a
 perfect repeated motif. The expert may identify trickiness in unfamiliar mixed
 organization, but an agent must still explain actual timing/articulation relations.
@@ -496,9 +532,9 @@ a useful small subset. Broad control-facing concepts need their own calibration;
 they do not inherit the meaning of existing narrow concepts or community names.
 
 - Whether absence of a longjack anchor is necessary for chordjack in general.
-- Drill boundaries not settled by the reviewed examples, such as a progressively
-  slowing tail versus the approved steady slow alternation; use calibrated
-  comparisons rather than invented cutoffs.
+- Drill boundaries not settled by the reviewed examples; both steady slow and
+  progressively slowing positives now exist. Use their coherent group exchange
+  and the interrupted negative comparisons rather than invented cutoffs.
 - Concrete sufficient conditions for query-only supporting/prominent labels under
   the approved style-expression meaning; counts and coverage are not enough by default.
 - The final inventory and presentation of jumptrill, roll, burst, minijack, and

@@ -3,6 +3,48 @@
   "source": "persistent V2 corpus workspace, snapshot 2026-09-07",
   "decisions": [
     {
+      "sourceSha256": "01e47b5f654875fce19ec204fb0975cbe8f4703b3d234fb2e8adeb0e2fb8c0f2",
+      "scope": {
+        "endMs": 392610,
+        "startMs": 389914
+      },
+      "reviewContext": {
+        "endMs": 392900,
+        "startMs": 389600
+      },
+      "tagId": "tech",
+      "assessment": {
+        "presence": "absent"
+      },
+      "observationId": "b1d7c360-0af8-4ba7-a632-a2f8dd936863:observation",
+      "exactObservationSha256": "adc2f366cb282afa92570939fe2865e1447659f388b4bc47b41cab6849efb723",
+      "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
+      "confirmedAt": "2026-09-07T03:55:55.143Z",
+      "humanRationale": "it's handstream with direction/flow alternation.",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "02322a4a739eeb6d2d39dd59a1d667b019bdc23693d0c926ed75fe99d0412191",
+      "scope": {
+        "endMs": 194937,
+        "startMs": 193633
+      },
+      "reviewContext": {
+        "endMs": 195199,
+        "startMs": 192981
+      },
+      "tagId": "tech",
+      "assessment": {
+        "presence": "absent"
+      },
+      "observationId": "3c4ba000-f70c-4376-ae4a-6302804200ef:observation",
+      "exactObservationSha256": "3687cc9a060053aadf3764397f3bbb2890ca0750ec6e42ebe946792af053a8a5",
+      "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
+      "confirmedAt": "2026-09-07T03:43:40.566Z",
+      "humanRationale": "easy to read and play, highly recognizable drill+jack, not tech",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
       "sourceSha256": "04c92e42f99b42efbca4f9f1183e94e17199fde141ebbc6eafc3446b238e37f9",
       "scope": {
         "endMs": 360380,
@@ -415,6 +457,27 @@
       "humanRationaleSource": "decision.rationale"
     },
     {
+      "sourceSha256": "49fa84212e401ea9b52189b301ceb0e8f0a52f4e28eaac59d8d55cbb449cef09",
+      "scope": {
+        "endMs": 34820,
+        "startMs": 32420
+      },
+      "reviewContext": {
+        "endMs": 35421,
+        "startMs": 31820
+      },
+      "tagId": "ln-coordination",
+      "assessment": {
+        "presence": "absent"
+      },
+      "observationId": "e4fb80d6-e2d6-4f2f-8443-b8102cf8b206:observation",
+      "exactObservationSha256": "02731002ec3c132a0287b410d66ff0750f060cb2a380d38613d22a3cf9dd708e",
+      "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
+      "confirmedAt": "2026-09-07T03:45:30.730Z",
+      "humanRationale": "LN coordination skill demand here is too easy compared to other parts of the map",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
       "sourceSha256": "53a1d6a2186dbf08beea006a78bdcc2b8270c52e67e05a3fa8991d05763d70ce",
       "scope": {
         "endMs": 196922,
@@ -455,6 +518,27 @@
       "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
       "confirmedAt": "2026-09-07T02:43:46.873Z",
       "humanRationale": "gaps are same, typical drill",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "75459099083845fe286f22a125fb75aaaac7d194ba8814487646c418e668bb55",
+      "scope": {
+        "endMs": 195999,
+        "startMs": 194463
+      },
+      "reviewContext": {
+        "endMs": 196399,
+        "startMs": 194063
+      },
+      "tagId": "tech",
+      "assessment": {
+        "presence": "absent"
+      },
+      "observationId": "1d106b16-fb02-4829-a699-1b0b70d07b60:observation",
+      "exactObservationSha256": "e2d75ccbba8dcbb86be9fdd6dbb52e55ffe0cb79aa9eea072b208bfbb2c577e2",
+      "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
+      "confirmedAt": "2026-09-07T03:54:35.787Z",
+      "humanRationale": "it's not hard to read and play, not tech",
       "humanRationaleSource": "decision.rationale"
     },
     {
@@ -545,6 +629,71 @@
       "humanRationaleSource": "decision.rationale"
     },
     {
+      "sourceSha256": "9b422f0fbca360721bf1d9811095fbfe5b130bd3a7f8f739e4a4fbddb3b7a191",
+      "scope": {
+        "endMs": 106630,
+        "startMs": 103453
+      },
+      "reviewContext": {
+        "endMs": 107130,
+        "startMs": 102953
+      },
+      "tagId": "tech",
+      "assessment": {
+        "presence": "present",
+        "salience": "supporting"
+      },
+      "observationId": "e5d27c3d-f886-4663-85ad-f03620ee2c60:observation",
+      "exactObservationSha256": "59010e940c0c4980f581fd3d2dbd312facfa89f382573776b44ed5d1cdde78b5",
+      "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
+      "confirmedAt": "2026-09-07T03:52:52.125Z",
+      "humanRationale": "changing rhythm and irregular style gives it tech, but it's not so dense compared to other part in this map so I give a weak tech, also a lack in jack makes it a little stream like but fragmented.",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "a68c5d4d78b0095675b23a4e45ad9e632a6620cc6604fd785ac598b8cd7d3de2",
+      "scope": {
+        "endMs": 235993,
+        "startMs": 235339
+      },
+      "reviewContext": {
+        "endMs": 236393,
+        "startMs": 234939
+      },
+      "tagId": "tech",
+      "assessment": {
+        "presence": "absent"
+      },
+      "observationId": "84a6ec6a-a567-437c-a0af-433554943200:observation",
+      "exactObservationSha256": "c143a1ae72dfaf689126281b90623a04110ec7009f7e42c5050b5b0eb7152228",
+      "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
+      "confirmedAt": "2026-09-07T03:50:10.827Z",
+      "humanRationale": "the flow alternation is easy to interpret and play",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "ab3460d1bca2900e2c6cd8468827ff92fbb60af84d1e6cb47f6e906b0bb7077b",
+      "scope": {
+        "endMs": 19078,
+        "startMs": 14138
+      },
+      "reviewContext": {
+        "endMs": 19478,
+        "startMs": 13738
+      },
+      "tagId": "drill-organization",
+      "assessment": {
+        "presence": "present",
+        "salience": "prominent"
+      },
+      "observationId": "f41a36e9-109c-4780-b33f-50db5a20526a:observation",
+      "exactObservationSha256": "0c48d551338fd69dc5671c0bafba6c4d175cd59842ae251837fef64c8fbbf0e6",
+      "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
+      "confirmedAt": "2026-09-07T03:53:20.482Z",
+      "humanRationale": "explicit drill, many rows.",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
       "sourceSha256": "acb300c9f8cc4390d2e2aa1d163bdbb4dd5eea08ebad9834f6b6d5a6955a2793",
       "scope": {
         "endMs": 105844,
@@ -564,6 +713,72 @@
       "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
       "confirmedAt": "2026-09-07T02:34:11.890Z",
       "humanRationale": "has different ln start timing",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "c379b92031d2283486944e5095d6e89dd5757d5f0afbc140a8c66b3f75a2f650",
+      "scope": {
+        "endMs": 77828,
+        "startMs": 75142
+      },
+      "reviewContext": {
+        "endMs": 78500,
+        "startMs": 74342
+      },
+      "tagId": "tech",
+      "assessment": {
+        "presence": "present",
+        "salience": "prominent"
+      },
+      "observationId": "12a9821c-b501-4b3e-be1a-7d0fa3841cb9:observation",
+      "exactObservationSha256": "b3e5c3b27bd3470049700190bc0986569c85a11688ed3b93c65227f011788547",
+      "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
+      "confirmedAt": "2026-09-07T03:47:33.741Z",
+      "humanRationale": "expressive irregular pattern, it's tech",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "c8d03a3e7626bff318e7b0d4677989193f6fd5cb030a7bc339cbe82bee6a296b",
+      "scope": {
+        "endMs": 351800,
+        "startMs": 346070
+      },
+      "reviewContext": {
+        "endMs": 352250,
+        "startMs": 345620
+      },
+      "tagId": "ln-coordination",
+      "assessment": {
+        "presence": "present",
+        "salience": "supporting"
+      },
+      "observationId": "5b01de4b-5f04-47fd-b518-e63352eaccfa:observation",
+      "exactObservationSha256": "2022ecb38016469cf2883bb8fc53b37d47f62da98eb923fac109f17c53cc019e",
+      "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
+      "confirmedAt": "2026-09-07T03:49:38.968Z",
+      "humanRationale": "This is very typical drill, but LN coordination skill does play a part here, 2 lane occupied. Weak ln coordination perhaps.",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "d5dc4e0f187b35f803ed3d86cff4f2420559098ee14bc8076d70c633800327ba",
+      "scope": {
+        "endMs": 460548,
+        "startMs": 448389
+      },
+      "reviewContext": {
+        "endMs": 462600,
+        "startMs": 447900
+      },
+      "tagId": "drill-organization",
+      "assessment": {
+        "presence": "present",
+        "salience": "supporting"
+      },
+      "observationId": "43a32281-d2a7-450b-9bf8-82ac40e10fd9:observation",
+      "exactObservationSha256": "582707a1849df8893f8db39d1aacbef8e165e47d67652a58d72ebc54484e084d",
+      "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
+      "confirmedAt": "2026-09-07T03:57:00.017Z",
+      "humanRationale": "slow drill",
       "humanRationaleSource": "decision.rationale"
     },
     {
@@ -608,6 +823,27 @@
       "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
       "confirmedAt": "2026-09-07T03:27:26.044Z",
       "humanRationale": "minidrill, start boundary is clear.",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "f29d770e85b6a6a867100519896d7c49cf755186163497fd96209659d3fdfdf0",
+      "scope": {
+        "endMs": 98106,
+        "startMs": 97533
+      },
+      "reviewContext": {
+        "endMs": 98600,
+        "startMs": 97000
+      },
+      "tagId": "tech",
+      "assessment": {
+        "presence": "absent"
+      },
+      "observationId": "78e903f1-917d-4c02-9e6c-f8b032b1358d:observation",
+      "exactObservationSha256": "a88778d575fa54092155dd47305ffd01ca7b2ecffe0ef702add26237da3bfa61",
+      "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
+      "confirmedAt": "2026-09-07T03:48:23.379Z",
+      "humanRationale": "the style variation is ordinary and section is short, not tech",
       "humanRationaleSource": "decision.rationale"
     },
     {
