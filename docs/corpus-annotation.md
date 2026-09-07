@@ -7,17 +7,18 @@ partitioned into 44 assignments. Their summed Lens chart duration is 103,414,351
 that 500 charts have been annotated or accepted. Read the persisted campaign status
 for completed work.
 
-The experiment collects useful source-backed sections under the approved Jack
-organization, Stream organization, Tech, and LN coordination Foundation. Full-chart
-structural discovery is required, but representative section collection does not
-claim exhaustive semantic labeling of every instant or dimension.
+The current five-target campaign collects source-backed sections under the approved
+Jack organization, Stream organization, Drill organization, Tech, and LN coordination
+Foundation. The original four-target campaign remains preserved separately.
+Labelers must perform full-chart structural discovery; representative section
+collection does not claim exhaustive semantic labeling of every instant or dimension.
 
 ## Selection and clean inputs
 
 Select by the sum of difficulty-level community `top_tag_ids[].count` descending,
 then distinct tag count descending. Break ties by beatmapset ID and beatmap ID
 ascending. Retain one locally verified 4K difficulty per beatmapset, without a star
-filter. Count all stored community tag IDs, including tags outside the four section
+filter. Count all stored community tag IDs, including tags outside the section
 dimensions; do not count the beatmapset's free-form keyword string. Vote sums are
 not unique voters, missing tags are not negatives, and community metadata never
 establishes section truth or approves whole-map model targets. One per set also
@@ -63,7 +64,7 @@ Build the Inspector and start the persistent review workspace:
 
 ```sh
 pnpm --filter @pulsefield/beatmap-lens-inspector build
-node scripts/review-workspace.mjs --workspace .local/review-pilot/workspace
+node scripts/review-workspace.mjs --workspace .local/corpus-500-v2/workspace
 ```
 
 The human keeps **http://127.0.0.1:4176/review** open. The controller registers exact
@@ -104,12 +105,14 @@ retain those claims and inspect additional coverage without resubmitting them.
 
 ## Actual labelers, auditors, and skill provenance
 
-Use the supplied [corpus labeler](agent-roles/corpus-labeler.md) and
-[corpus auditor](agent-roles/corpus-auditor.md) roles. Each job receives only its own
-assignment, copied Parquet files, frozen references, and task bindings. The auditor
-receives the original sealed handoffs and discovery record, not the labeler's
-analysis logs or selection evidence. Workers do not call the service, inspect
-other jobs, or spawn agents. The controller seals and delivers their results.
+The current route uses the [query corpus labeler](agent-roles/query-corpus-labeler.md)
+and [submitted-evidence auditor](agent-roles/query-corpus-auditor.md). Labelers receive
+their assigned Parquets, frozen references, queries and task bindings. Auditors
+receive the labeler's unchanged result, selected exact evidence in sealed handoffs,
+coverage declarations, exact expert judgments and frozen skill. They do not receive
+Parquets, query indexes/evidence, prior machine hints, private analysis logs, or the
+large Foundation calibration view. Workers do not call the service, inspect other
+jobs, or spawn agents. The controller seals and delivers their results.
 
 The dispatcher launches separate actual `codex exec` processes for labeler and
 auditor, using ephemeral sessions and the job directory as the workspace. Producer
@@ -119,7 +122,7 @@ the actual command, CLI version, producer/role, input hashes, and execution stat
 completion is recorded. Changing a producer ID on a labeler's self-check does not
 constitute an independent audit.
 
-The prepared skill descriptor is:
+The original four-target bundle's skill descriptor was:
 
 ```json
 {
@@ -129,7 +132,9 @@ The prepared skill descriptor is:
 }
 ```
 
-The SHA-256 identifies the frozen `skill/manifest.json`; that manifest records
+For each campaign, use its actual `skill-provenance.json` and `run.json`; the example
+above is not the current five-target bundle. The SHA-256 identifies the frozen
+`skill/manifest.json`; that manifest records
 individual file hashes. The runner verifies both the manifest and its files before
 launch and before accepting the result. Workers copy this exact descriptor into
 `result.json`, and sealed handoff/audit provenance records it with the actual
@@ -141,11 +146,13 @@ From the repository root, launch or inspect the prepared campaign:
 
 ```sh
 python3 scripts/run-annotation-campaign.py run \
-  --campaign .local/corpus-500 --concurrency 3
-python3 scripts/run-annotation-campaign.py status --campaign .local/corpus-500
+  --campaign .local/corpus-500-v2 --concurrency 5
+python3 scripts/run-annotation-campaign.py status --campaign .local/corpus-500-v2
 ```
 
-Concurrency counts all active workers, including auditors. `--label-limit N` limits
+Concurrency counts all active workers, including resumed auditors. The supported
+range is 1–5; an explicit `--concurrency` overrides config `concurrency`, which
+defaults to 3 when absent. `--label-limit N` limits
 labeler assignments, not charts. The runner keeps one dispatcher lock, resumes
 persisted work, and retains failures for coordinator inspection instead of silently
 retrying changed judgments. A successful labeler job is followed by a separate
@@ -155,7 +162,89 @@ A persisted `controller/user-stop.json` blocks `run` before job setup or launch.
 `status` remains available. Existing stopped tasks, inputs, outputs, and history
 are retained; the runner does not automatically resume a user-stopped campaign.
 
-Workers use factual inspection helpers with the PyArrow-enabled Python runtime:
+### A new campaign after a Foundation change
+
+Use a separate campaign and review workspace for changed semantics. The original
+four-target campaign is frozen in `.local/corpus-500`; the query-first five-target
+campaign uses `.local/corpus-500-v2`, with the fixed review service pointing to its
+`workspace` directory. Campaign generations are separate from workflow protocol V2.
+
+Reuse the 500 source Parquets after checking their hashes, and keep the administrative
+source map outside worker inputs. Old submitted packets, task bindings, producer IDs,
+human decisions and acceptance counts stay in the original campaign. New completion
+counts only new-Foundation processing. Old machine locations can guide inspection;
+their old assessments and rationales are omitted from the worker's location hints.
+Old human feedback retains its original observation/decision, source, scope, time,
+and Foundation. A compatible explicit assessment needs no second expert review,
+but it does not become a new human-confirmed observation merely by being reused.
+
+`prepare-query-campaign-workspace.mjs` prepares a proposed five-target snapshot with
+selected existing source-backed human calibration examples and full provenance.
+Its separate `--approve` operation binds the exact prepared-file hash and explicit
+authorization before initializing the new workspace and exporting its seed task.
+It never overwrites the old workspace or invents a Drill salience example.
+
+For query-first jobs, freeze `annotation-facts.py`, `annotation-queries.py`,
+`prepare-query-evidence.py`, `check-annotation-result.py`, the skill tree/manifest, Foundation view and
+`roles/{labeler,auditor}.md` in `worker-common`. Set `queryFirst: true` in the new
+controller config. Labeler jobs receive a compact `query-index.json`, gzip evidence per
+chart, `prior-human-feedback.json`, and sanitized `prior-machine-candidates.json`.
+All these inputs are hashed. Each query reads one Parquet at a time; a full workflow
+document and the source-selection evidence are unnecessary for worker inference.
+
+When a pilot exposes a tooling or role defect, preserve the original common
+bundle and select a new snapshot with `workerCommonPath` in controller config.
+Existing jobs retain their original files and hashes. A job with the frozen
+`check-annotation-result.py` checks its result locally before finishing; the
+controller repeats the check before exchange. The check reports all mechanical
+coverage/reference errors together, including half-open LN intersection, so an
+agent can fix them without repeated sealing attempts. It does not establish the
+truth of a pattern description or replace independent audit.
+
+The optional `lnCoordinationRequiresTwoColumns` flag enables one conservative direct
+rule under the revised Foundation: a verified complete chart with fewer than two
+simultaneously LN-occupied columns is LN coordination absent. The half-open sweep
+processes releases before starts at the same timestamp. An incomplete population,
+partial range, or maximum of at least two abstains. Its output records the rule,
+code, Foundation and deterministic-query origin. Other structural matches do not
+automatically assign style or salience. Agents interpret abstentions before expert
+handoff; the rule does not manufacture an agent review or human confirmation.
+
+Optional config maps `models` and `reasoningEfforts` by labeler/auditor role. The
+current requested route is:
+
+```json
+{
+  "models": { "labeler": "gpt-6-astra", "auditor": "gpt-6-astra" },
+  "reasoningEfforts": { "labeler": "medium", "auditor": "high" },
+  "auditorContextMode": "labeler-evidence",
+  "concurrency": 5
+}
+```
+
+Each new job pins its requested configuration in `run.json` and its actual launch
+command; missing model/effort settings retain the CLI default. Do not call a requested
+model name a measured runtime response field. Failed execution keeps its actual logs
+and result state. Existing prepared, running and submitted jobs keep their original
+inputs and settings when configuration changes; setup never rewrites their history.
+
+`auditorContextMode: "labeler-evidence"` selects the light review package. Its
+`review-package.json` indexes the unchanged `labeler-result.json` and sealed handoffs,
+and preserves the labeler's exact expert-feedback inputs separately from its own
+claims. It omits current and historical machine-review hints. Administrative bindings
+retain task, source, Foundation and review-base hashes; complete frozen tasks stay
+with the controller. `run.reviewContextMode` records this limit. With the config key
+absent, newly prepared auditors retain the old `full-source` setup and its frozen role.
+Choose a matching frozen role snapshot when changing mode.
+
+The light auditor evaluates submitted evidence, rationale and coverage declarations.
+It does not independently traverse the original chart or prove that omitted notes
+are absent. Insufficient context, calculations or coverage explanation go back to the
+labeler as `needs-revision`; sufficient evidence with a genuine remaining semantic
+boundary goes to `needs-expert`. The ordinary audit output contract is unchanged.
+Labelers retain complete-source access and the mechanical result preflight.
+
+Labelers use factual inspection helpers with the PyArrow-enabled Python runtime:
 
 ```sh
 ../Pulsefield-model/.venv/bin/python scripts/annotation-facts.py overview CHART.parquet
@@ -169,9 +258,25 @@ coverage and resolves worker `noteLines`/`contextLines` against the original fro
 source. Every original claim and question requires an auditor outcome. Fixable
 scope/evidence defects return as `needs-revision`; concrete semantic doubts reach
 the expert. Supporting individual claims is insufficient when the chart's broader
-structure was skipped.
+structure was skipped. In light review mode, coverage review evaluates the submitted
+discovery evidence and states that limit explicitly; it is not a second source scan.
 
 ## Revision attempts
+
+If a labeler failed before delivering any sealed packet, use
+`prepare-annotation-recovery.py --campaign ROOT --assignment-id ID --findings-file FILE`.
+The findings file contains a nonempty `findings` array of concrete mechanical or
+semantic defects. Preparation preserves the original run/result and task bytes,
+checks that the review base, skill, Foundation and requested model are unchanged,
+and publishes a fresh attempt with no fabricated handoff supersession. A new role
+or helper snapshot is recorded separately. This does not launch a worker. Partial
+deliveries require the reviewed revision path below.
+
+When the user explicitly authorizes a model switch for an unsubmitted failed
+attempt, supply `--model-change-reason` to recovery preparation. The new attempt
+records both requested configurations and the reason; the old execution retains
+its actual model, inputs, outputs and failure. This option does not bypass source,
+Foundation, skill, review-base or partial-delivery checks.
 
 After both original jobs are submitted, prepare a separate attempt for the charts
 requiring correction:
@@ -207,8 +312,10 @@ rewrite an earlier job's inputs.
 
 The running dispatcher discovers new revision assignments dynamically and starts
 a fresh labeler followed by a fresh independent auditor. If it has exited, resume
-with the existing `run` command. Workers receive `prior-review.json` and must
+with the existing `run` command. Labelers receive `prior-review.json` and must
 correct the actual source/scope/reasoning defects, not merely repeat an old verdict.
+Light auditors review the replacement result and handoff with the expert judgments;
+they do not receive the large prior-review bundle or original chart.
 Once the replacement auditor has submitted, the explicit supersession chain chooses
 the current attempt for campaign acceptance. Final counts deduplicate by source;
 competing attempts without that chain are an error, not extra completed charts.
@@ -227,7 +334,7 @@ Before final acceptance, refresh saved feedback from the canonical service:
 
 ```sh
 python3 scripts/run-annotation-campaign.py status \
-  --campaign .local/corpus-500 --refresh
+  --campaign .local/corpus-500-v2 --refresh
 ```
 
 This refreshes submitted auditor jobs before computing status, so subsequent human
@@ -235,8 +342,8 @@ decisions and current review bases affect acceptance. Plain `status` reads the
 saved feedback snapshots and is not a final freshness check.
 
 Supported machine judgments remain `agent-reviewed`. `acceptedCharts` in
-`controller/progress.json` means current judgments and independent coverage review
-satisfy campaign acceptance; it is not a count of human-confirmed charts or
+`controller/progress.json` means current judgments and coverage review satisfy campaign
+acceptance under the run's recorded review mode; it is not a count of human-confirmed charts or
 exhaustive labels. Report
 labeler submissions, auditor submissions, accepted machine reviews, revision work,
 expert cases, and human decisions separately. Execution success or a cleared inbox

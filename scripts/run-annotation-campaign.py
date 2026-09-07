@@ -1,5 +1,6 @@
 """Dispatch isolated annotation and audit workers; persist every run for main-agent acceptance."""
 import argparse
+import copy
 from datetime import datetime, timezone
 import fcntl
 import gzip
@@ -15,6 +16,8 @@ import uuid
 
 REPO = Path(__file__).resolve().parents[1]
 PYTHON = REPO.parent / "Pulsefield-model/.venv/bin/python"
+QUERY_TOOLS = ("annotation-facts.py", "annotation-queries.py", "prepare-query-evidence.py")
+HUMAN_STATES = {"accepted", "modified", "rejected", "deferred"}
 
 
 def read(path):
@@ -42,33 +45,145 @@ def verify_skill(job, expected):
             raise ValueError(f"Worker skill file changed: {entry['path']}")
 
 
+def prior_feedback(root, job, assignment):
+    human, machine = [], []
+    for chart in assignment["charts"]:
+        sha = chart["sourceSha256"]
+        path = root / "controller/prior-feedback" / f"{sha}.json.gz"
+        if not path.exists():
+            human.append({"sourceSha256": sha, "snapshotAvailable": False})
+            continue
+        raw = path.read_bytes()
+        view = json.loads(gzip.decompress(raw))
+        if view["sourceSha256"] != sha:
+            raise ValueError("Prior feedback source differs from the assignment")
+        headers = {h["handoffId"]: h for h in view["handoffs"]}
+        reviews, hints = [], {}
+        for row in view["agentReviews"]:
+            if row.get("decision") or row["status"] in HUMAN_STATES:
+                record = copy.deepcopy(row)
+                if row["status"] == "deferred":
+                    record["summary"] = {key: row["summary"][key] for key in ("tagId", "scope", "reviewContext")}
+                reviews.append(record)
+            else:
+                claim = row["summary"]
+                key = (claim["tagId"], claim["scope"]["startMs"], claim["scope"]["endMs"])
+                hints[key] = {
+                    "sourceSha256": sha, "originalHandoffId": row["handoffId"],
+                    "originalFoundationSha256": headers[row["handoffId"]]["foundationSha256"],
+                    "originalClaimId": row["claimId"], "originalStatus": row["status"],
+                    **{key: claim[key] for key in ("tagId", "scope", "reviewContext")},
+                }
+        human.append({
+            "sourceSha256": sha, "snapshotAvailable": True,
+            "snapshotSha256": hashlib.sha256(raw).hexdigest(),
+            "documentVersion": view["documentVersion"], "reviewBase": view["reviewBase"],
+            "agentReviews": reviews, "directObservations": view["directObservations"],
+            "handoffs": [header for key, header in headers.items()
+                         if any(row["handoffId"] == key for row in reviews)],
+        })
+        machine.extend(hints.values())
+    write(job / "prior-human-feedback.json", {"charts": human})
+    write(job / "prior-machine-candidates.json", {
+        "kind": "historical-location-hints-not-current-labels",
+        "selectionPolicy": "Last listed location per source/tag/scope; no supersession lineage inferred.",
+        "candidates": machine,
+    })
+
+
+def prepare_review_package(job, label_job, assignment):
+    """Retain submitted evidence and exact expert feedback, without source-discovery inputs."""
+    shutil.copyfile(label_job / "result.json", job / "labeler-result.json")
+    (job / "handoffs").mkdir()
+    handoffs = []
+    for chart in assignment["charts"]:
+        name = f"handoffs/{chart['sourceSha256']}.json"
+        shutil.copyfile(label_job / "packets" / f"{chart['sourceSha256']}.json", job / name)
+        handoffs.append({"sourceSha256": chart["sourceSha256"], "path": name,
+                         "sha256": hashlib.sha256((job / name).read_bytes()).hexdigest()})
+    bindings = read(label_job / "bindings.json")
+    human = [{
+        "sourceSha256": binding["sourceSha256"],
+        "foundationSha256": binding["foundationSha256"], "base": binding["base"],
+        "existingReviews": [row for row in binding["existingReviews"]
+                            if row.get("decision") or row["status"] in HUMAN_STATES],
+        "humanObservations": binding.get("humanObservations", []),
+    } for binding in bindings]
+    write(job / "bindings.json", [
+        {key: binding[key] for key in ("sourceSha256", "taskId", "taskSha256", "foundationSha256", "base")}
+        for binding in bindings
+    ])
+    label_run = read(label_job / "run.json")
+    label_result = read(label_job / "result.json")
+    prior_path = label_job / "prior-human-feedback.json"
+    write(job / "review-package.json", {
+        "reviewContextMode": "labeler-evidence",
+        "evidenceLimit": "Submitted witnesses and coverage declarations only; no independent full-source inspection.",
+        "labeler": {key: label_run[key] for key in
+                    ("producerId", "skill", "requestedModel", "requestedReasoningEffort") if key in label_run},
+        "labelerResult": {"path": "labeler-result.json",
+                          "sha256": hashlib.sha256((job / "labeler-result.json").read_bytes()).hexdigest()},
+        "labelerBindingsSha256": hashlib.sha256((label_job / "bindings.json").read_bytes()).hexdigest(),
+        "discovery": [{key: chart[key] for key in ("sourceSha256", "inspectedRanges", "discoverySummary")}
+                      for chart in label_result["charts"]],
+        "handoffs": handoffs,
+        "expertJudgments": {"current": human,
+                            "prior": read(prior_path) if prior_path.exists() else {"charts": []}},
+    })
+
+
 def setup_job(root, assignment, role, label_job=None):
     job = root / "workers" / f"{assignment['assignmentId']}-{role}"
     if (job / "run.json").exists():
         return job
     job.mkdir(parents=True, exist_ok=True)
     config = read(root / "controller/config.json")
+    assignment = copy.deepcopy(assignment)
     total = sum(chart["durationMs"] for chart in assignment["charts"])
-    if total != assignment["durationMs"] or total > config["maxDurationMs"]:
+    if total != assignment["durationMs"] or total > min(config["maxDurationMs"], 2400000):
         raise ValueError("Assigned source duration exceeds 40 minutes or has a wrong total")
-    shutil.copytree(root / "worker-common", job, dirs_exist_ok=True)
-    (job / "charts").mkdir(exist_ok=True)
-    for chart in assignment["charts"]:
-        source = Path(chart["parquetPath"])
-        target = job / "charts" / source.name
-        shutil.copyfile(source, target)
-        if hashlib.sha256(target.read_bytes()).hexdigest() != chart["parquetSha256"]:
-            raise ValueError("Parquet changed after assignment")
-        chart["parquetPath"] = str(target)
+    common = root / config.get("workerCommonPath", "worker-common")
+    review_mode = config.get("auditorContextMode", "full-source") if role == "auditor" else "full-source"
+    evidence_only = review_mode == "labeler-evidence"
+    if evidence_only:
+        shutil.copytree(common / "skill", job / "skill")
+        shutil.copyfile(common / "skill-provenance.json", job / "skill-provenance.json")
+        shutil.copyfile(common / "roles/auditor.md", job / "ROLE.md")
+        verify_skill(job, config["skill"])
+        prepare_review_package(job, label_job, assignment)
+        assignment["charts"] = [{key: chart[key] for key in ("sourceSha256", "durationMs", "parquetSha256")}
+                                for chart in assignment["charts"]]
+    else:
+        shutil.copytree(common, job, dirs_exist_ok=True)
+        (job / "charts").mkdir(exist_ok=True)
+        for chart in assignment["charts"]:
+            source = Path(chart["parquetPath"])
+            target = job / "charts" / source.name
+            shutil.copyfile(source, target)
+            if hashlib.sha256(target.read_bytes()).hexdigest() != chart["parquetSha256"]:
+                raise ValueError("Parquet changed after assignment")
+            chart["parquetPath"] = str(target)
     write(job / "assignment.json", assignment)
-    shutil.copyfile(REPO / "scripts/annotation-facts.py", job / "annotation-facts.py")
-    shutil.copyfile(REPO / f"docs/agent-roles/corpus-{role}.md", job / "ROLE.md")
-    if label_job:
+    query_first = config.get("queryFirst", False)
+    if query_first and not evidence_only:
+        shutil.copyfile(job / "roles" / f"{role}.md", job / "ROLE.md")
+        verify_skill(job, config["skill"])
+        command = [str(PYTHON), str(job / "prepare-query-evidence.py"), str(job),
+                   "--foundation-sha", config["foundationSha256"]]
+        if config.get("lnCoordinationRequiresTwoColumns", False):
+            command.append("--ln-coordination-requires-two-columns")
+        with (job / "query-preparation.log").open("w") as log:
+            subprocess.run(command, cwd=job, stdout=log, stderr=log, check=True)
+        prior_feedback(root, job, assignment)
+    elif not evidence_only:
+        shutil.copyfile(REPO / "scripts/annotation-facts.py", job / "annotation-facts.py")
+        shutil.copyfile(REPO / f"docs/agent-roles/corpus-{role}.md", job / "ROLE.md")
+    if label_job and not evidence_only:
         shutil.copyfile(label_job / "bindings.json", job / "bindings.json")
         shutil.copytree(label_job / "packets", job / "handoffs", dirs_exist_ok=True)
         label_result = read(label_job / "result.json")
         write(job / "discovery.json", [{"sourceSha256": c["sourceSha256"], "inspectedRanges": c["inspectedRanges"], "discoverySummary": c["discoverySummary"]} for c in label_result["charts"]])
-    if assignment.get("revisionOf"):
+    if assignment.get("revisionOf") and not evidence_only:
         shutil.copyfile(root / "controller/revision-inputs" / assignment["assignmentId"] / "prior-review.json", job / "prior-review.json")
     run = {
         "producerId": f"corpus-500-{role}-{uuid.uuid4()}", "role": role,
@@ -76,17 +191,45 @@ def setup_job(root, assignment, role, label_job=None):
         "chartCount": len(assignment["charts"]), "skill": config["skill"],
         "toolVersion": subprocess.check_output([config.get("codexCommand", "codex"), "--version"], text=True).strip(),
         "status": "prepared", "preparedAt": now(),
+        "modelSource": "campaign-role-config" if config.get("models", {}).get(role) else "cli-default",
     }
+    if role == "auditor":
+        run["reviewContextMode"] = review_mode
+    if config.get("models", {}).get(role):
+        run["requestedModel"] = config["models"][role]
+    if config.get("reasoningEfforts", {}).get(role):
+        run["requestedReasoningEffort"] = config["reasoningEfforts"][role]
+    if query_first:
+        run["queryFirst"] = True
+        run["workerCommonPath"] = str(common)
     if assignment.get("revisionOf"):
         run["revisionOf"] = assignment["revisionOf"]
     write(job / "run.json", run)
     prompt = f"""Complete your assigned osu!mania {role} task. Read ROLE.md, skill/SKILL.md and its referenced judgment guide, foundation.json, skill-provenance.json, assignment.json and bindings.json before judging. Use only this job's supplied inputs and write only here. Do not inspect selection/admin directories or other jobs, and do not spawn agents. Python with PyArrow is {PYTHON}. The annotation-facts.py helper provides factual overview and precise row inspection; it does not assign labels. Work through every assigned chart. Use the already approved four-dimensional Foundation, preserve uncertainty and source-time evidence, and write result.json exactly as ROLE.md specifies. The controller handles sealing, provenance and delivery. This assignment contains {total} ms of chart data (maximum 2,400,000 ms); that limit is dataset duration, NOT your wall time. Finish all assigned work, validate your JSON and references, then report completion. No final commentary can substitute for writing result.json."""
+    if query_first and not evidence_only:
+        prompt = prompt.replace("already approved four-dimensional Foundation", "supplied pinned approved Foundation and its current targets")
+        prompt += " Start with query-index.json and the compact gzip NDJSON files it references. These contain deterministic source facts, not machine or human review. Read prior-human-feedback.json for exact historical human decisions with their original Foundation provenance; rejection is not absence and deferral is not a label. Read prior-machine-candidates.json only as old location hints: it deliberately omits old machine judgments and rationales. Reinspect under the current Foundation rather than inheriting old labels. Cover the complete source, unhinted regions, and newly introduced targets including Drill. The frozen annotation-queries.py supports precise follow-up queries; repeated-subset requires explicit --columns and never skips intervening rows. Use --skill-file skill/SKILL.md and --skill-file skill/references/judgment-guide.md when calling it. Distinguish selected witnesses, incidental notes, and candidate-local entering holds. Query ruleLabels, when present, are explicitly identified necessary-condition negatives under the pinned Foundation; retain their deterministic-query origin in your rationale and analysis sidecar. Abstentions require agent judgment. No query supplies positive salience or independent audit. Verify the full arrangement and explain uncertainty honestly; do not invent conclusions to fill a quota."
+    if evidence_only:
+        prompt = f"""Review the assigned labeler's submitted judgments as an independent auditor. Read ROLE.md, skill/SKILL.md and its referenced judgment guide, skill-provenance.json, and review-package.json. Read the package's discovery declarations and sealed handoff files for every judgment, rationale, exact submitted noteRefs/contextNoteRefs and question. The unchanged labeler-result.json is an administrative original; its claims duplicate the handoffs and do not need to be read again. Read its exact expertJudgments with their original scope, source and Foundation provenance. Administrative bindings.json and assignment.json preserve exchange identities, not additional semantic evidence. Use only these supplied inputs and write only here; do not inspect other jobs, controller/selection directories or recover original chart data, and do not spawn agents. This run's reviewContextMode is labeler-evidence: you have NOT independently traversed the original chart. Selected references are not the complete contents of a scope. Assess the submitted reasoning, calculations, evidence sufficiency and consistency with expert guidance. Review coverage declarations for supported explanation and visible gaps, without claiming independent full-source coverage. Return concrete missing evidence, unsupported inference or coverage explanation as needs-revision for the labeler to fix; use needs-expert only for a genuine semantic question that remains despite sufficient supplied evidence. Do not invent ambiguity or infer absence from unprovided notes. Follow ROLE.md's unchanged audit result contract, covering every original claim and question, and write result.json with exact skill provenance. The controller seals and delivers it against the original handoffs and frozen tasks. This assignment represents {total} ms of chart duration (maximum 2,400,000 ms), not a wall-time limit. No final commentary substitutes for result.json."""
     if assignment.get("revisionOf") and role == "labeler":
         prompt += " This is a new revision attempt. Read prior-review.json. Correct the concrete source, scope, coverage or reasoning defects using the supplied chart data. Keep already supported content accurate, address every revision finding, and return a complete replacement proposal collection for these charts. Preserve explicit human decisions in bindings.json. Do not overwrite or present the prior agent's work as your own execution. The new handoff supersedes the listed old handoff only in this campaign's acceptance record; original history remains intact."
-    elif assignment.get("revisionOf"):
+    elif assignment.get("revisionOf") and not evidence_only:
         prompt += " This is an independent audit of a new revision handoff. Read prior-review.json for the earlier defects, then verify the new handoff against the actual chart data. Follow the auditor result schema and independently check every new claim and discovery coverage; the earlier verdict is not evidence that the revision is correct."
     (job / "prompt.txt").write_text(prompt)
-    run["inputHashes"] = {name: hashlib.sha256((job / name).read_bytes()).hexdigest() for name in ["assignment.json", "prompt.txt", "ROLE.md", "foundation.json", "annotation-facts.py"]}
+    names = ["assignment.json", "prompt.txt", "ROLE.md"]
+    if evidence_only:
+        names += ["skill-provenance.json", "review-package.json", "labeler-result.json", "bindings.json"]
+        names += [str(path.relative_to(job)) for path in sorted((job / "handoffs").glob("*.json"))]
+    else:
+        names += ["foundation.json", "annotation-facts.py"]
+    run["inputHashes"] = {name: hashlib.sha256((job / name).read_bytes()).hexdigest() for name in names}
+    if query_first and not evidence_only:
+        paths = [*(job / name for name in QUERY_TOOLS), job / "query-index.json",
+                 job / "prior-human-feedback.json", job / "prior-machine-candidates.json",
+                 *sorted((job / "query-evidence").glob("*.ndjson.gz"))]
+        run["inputHashes"].update({str(path.relative_to(job)): hashlib.sha256(path.read_bytes()).hexdigest() for path in paths})
+        if (job / "check-annotation-result.py").exists():
+            run["inputHashes"]["check-annotation-result.py"] = hashlib.sha256((job / "check-annotation-result.py").read_bytes()).hexdigest()
     if (job / "prior-review.json").exists():
         run["inputHashes"]["prior-review.json"] = hashlib.sha256((job / "prior-review.json").read_bytes()).hexdigest()
     write(job / "run.json", run)
@@ -114,6 +257,12 @@ def launch(root, job):
     codex = read(root / "controller/config.json").get("codexCommand", "codex")
     run["toolVersion"] = subprocess.check_output([codex, "--version"], text=True).strip()
     command = [codex, "-a", "never", "exec", "-C", str(job), "--skip-git-repo-check", "--sandbox", "workspace-write", "--ephemeral", "--json", "--output-schema", str(job / "final-schema.json"), "-o", str(job / "last-message.json"), "-"]
+    overrides = []
+    if run.get("requestedModel"):
+        overrides.extend(["--model", run["requestedModel"]])
+    if run.get("requestedReasoningEffort"):
+        overrides.extend(["-c", f"model_reasoning_effort={json.dumps(run['requestedReasoningEffort'])}"])
+    command[-1:-1] = overrides
     process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=out, stderr=err, text=True)
     process.stdin.write((job / "prompt.txt").read_text())
     process.stdin.close()
@@ -149,26 +298,35 @@ def complete(root, job, process):
     if isinstance(process, AdoptedWorker):
         run["completionEvidence"] = "Process exited; terminal agent event used because its parent exit status is unavailable."
     run["threadIds"], run["usage"] = [], []
-    for line in (job / "events.jsonl").open():
-        try:
-            event = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if event.get("type") == "thread.started":
-            run["threadIds"].append(event["thread_id"])
-        if event.get("type") == "turn.completed" and "usage" in event:
-            run["usage"].append(event["usage"])
+    with (job / "events.jsonl").open() as events:
+        for line in events:
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if event.get("type") == "thread.started":
+                run["threadIds"].append(event["thread_id"])
+            if event.get("type") == "turn.completed" and "usage" in event:
+                run["usage"].append(event["usage"])
     write(job / "run.json", run)
     if process.returncode != 0 or not (job / "result.json").exists():
         run.update(status="execution-failed", error="Worker failed or did not write result.json; inspect its execution log.")
     else:
         try:
             verify_skill(job, run["skill"])
+            if run.get("queryFirst") or run.get("reviewContextMode") == "labeler-evidence":
+                for name, expected in run["inputHashes"].items():
+                    if hashlib.sha256((job / name).read_bytes()).hexdigest() != expected:
+                        raise ValueError(f"Worker input changed during execution: {name}")
             result = read(job / "result.json")
             if result["skill"] != run["skill"]:
                 raise ValueError("Result skill provenance differs from the actual frozen skill")
             run["resultSha256"] = hashlib.sha256((job / "result.json").read_bytes()).hexdigest()
             write(job / "run.json", run)
+            if run["role"] == "labeler" and "check-annotation-result.py" in run["inputHashes"]:
+                with (job / "result-check.json").open("w") as report:
+                    subprocess.run([str(PYTHON), str(job / "check-annotation-result.py"), str(job)],
+                                   cwd=job, stdout=report, check=True)
             exchange(root, job, "label" if run["role"] == "labeler" else "audit")
             run["status"] = "submitted"
         except (ValueError, KeyError, subprocess.CalledProcessError) as error:
@@ -244,7 +402,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=["run", "status"])
     parser.add_argument("--campaign", default=str(REPO / ".local/corpus-500"))
-    parser.add_argument("--concurrency", type=int, default=3)
+    parser.add_argument("--concurrency", type=int, help="Active labeler/auditor limit (config concurrency, otherwise 3; maximum 5)")
     parser.add_argument("--label-limit", type=int)
     parser.add_argument("--refresh", action="store_true", help="Refresh canonical feedback before reporting status")
     args = parser.parse_args()
@@ -254,6 +412,13 @@ def main():
             refresh_completed(root)
         print(json.dumps(status(root), ensure_ascii=False, indent=2))
         return
+    if args.concurrency is None:
+        config_path = root / "controller/config.json"
+        args.concurrency = read(config_path).get("concurrency", 3) if config_path.exists() else 3
+    if not 1 <= args.concurrency <= 5:
+        parser.error("Use between one and five concurrent workers.")
+    if args.label_limit is not None and args.label_limit < 1:
+        parser.error("--label-limit must select at least one assignment.")
     stop = root / "controller/user-stop.json"
     if stop.exists():
         parser.error(f"Campaign is stopped by user request ({stop}); existing tasks and outputs are preserved.")
@@ -290,6 +455,13 @@ def main():
                 active[label_job] = (AdoptedWorker(label_job, run["pid"]), None, None)
             elif run["status"] in ("execution-failed", "acceptance-failed"):
                 queue.remove(label_job)  # Main agent inspects failures; do not silently retry changed work.
+        # Submitted labelers may have inserted already-running auditors above.
+        # Count all of them before launching any prepared job after a restart.
+        for job in list(queue):
+            run = read(job / "run.json")
+            if run["status"] == "running":
+                queue.remove(job)
+                active[job] = (AdoptedWorker(job, run["pid"]), None, None)
         while queue and len(active) < args.concurrency:
             job = queue.pop(0)
             run = read(job / "run.json")

@@ -159,7 +159,7 @@ if (command === "refresh") {
           !result.coverageReview?.rationale?.trim() ||
           !["supported", "needs-revision"].includes(result.coverageReview.outcome)
         )
-          throw new Error("Auditor must independently assess chart discovery coverage.");
+          throw new Error("Auditor must assess the supplied chart discovery evidence.");
         const handoff = await json(join(job, "handoffs", `${sha}.json`));
         packet = await domain.sealAuditV2(task, handoff, {
           auditId: `${run.producerId}-${sha.slice(0, 12)}`,
