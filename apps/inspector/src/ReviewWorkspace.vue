@@ -18,6 +18,7 @@ import { type StoredReviewV2, WorkflowDirectoryV2 } from "./annotation/workflow/
 import { assertTaskPacketV2, handoffBaseStatusV2, readAgentReviewsV2, readDispositionsV2, sameBase } from "./annotation/workflow/domain";
 import { createExperimentalFoundationV2 } from "./annotation/workflow/experimental-campaign";
 import { createRemoteReviewStore, type RemoteSourceV2, type ReviewStoreV2 } from "./annotation/workflow/remote-workspace";
+import { agentVersionLabel, reviewVersionOptions, skillKey } from "./annotation/workflow/review-provenance";
 import FallingNoteViewport from "./FallingNoteViewport.vue";
 import WorkflowClaimEditor from "./WorkflowClaimEditor.vue";
 import WorkspaceModeSwitch from "./WorkspaceModeSwitch.vue";
@@ -62,12 +63,27 @@ const editorReviewRevision = ref<number>();
 const handoffStatuses = ref<Record<string, string>>({});
 const agentReviews = shallowRef<readonly AgentReviewV2[]>([]);
 const expertLimit = ref(5);
+const chartHistoryVersion = ref("");
 const calibrationId = ref("");
 const document = computed(() => stored.value?.document);
 const activeFoundation = computed(() => document.value?.foundation ?? foundation.value);
 const activeClaim = computed(() => drafts.value.find(claim => claim.id === activeClaimId.value));
 const expertQueue = computed(() => agentReviews.value.filter(review => review.status === "needs-expert"));
 const activeReview = computed(() => agentReviews.value.find(review => review.handoffId === activeHandoffId.value && review.claimId === activeClaimId.value));
+const activeHandoff = computed(() => document.value?.handoffs.find(entry => entry.handoff.handoffId === activeHandoffId.value)?.handoff);
+const auditPackets = computed(() => new Map(document.value?.audits?.map(entry => [entry.audit.auditId, entry.audit])));
+const chartHistory = computed(() => agentReviews.value.map(review => {
+  const handoff = document.value?.handoffs.find(entry => entry.handoff.handoffId === review.handoffId)?.handoff;
+  return { handoffId: review.handoffId, claimId: review.claimId, claim: review.claim, status: review.status, rationale: review.rationale,
+    tagId: review.claim.tagId, scope: review.claim.scope, ...(handoff ? { agent: handoff.agent, submittedAt: handoff.createdAt } : {}) };
+}));
+const chartVersions = computed(() => reviewVersionOptions(chartHistory.value, "labeler"));
+const visibleHandoffs = computed(() => document.value?.handoffs.filter(entry => !chartHistoryVersion.value || skillKey(entry.handoff.agent) === chartHistoryVersion.value) ?? []);
+const relatedReviews = computed(() => chartHistory.value.filter(review => activeClaim.value
+  && review.claim.tagId === activeClaim.value.tagId
+  && !(review.handoffId === activeHandoffId.value && review.claimId === activeClaimId.value)
+  && Math.max(review.scope.startMs, activeClaim.value.scope.startMs) < Math.min(review.scope.endMs, activeClaim.value.scope.endMs))
+  .sort((a, b) => (b.submittedAt ?? "").localeCompare(a.submittedAt ?? "")));
 const originalProposal = computed(() => document.value?.handoffs.find(entry => entry.handoff.handoffId === activeHandoffId.value)?.handoff.proposals.find(claim => claim.id === activeClaimId.value));
 const finalDecision = computed(() => decisionsForClaim.value.at(-1)?.disposition === "deferred" ? undefined : decisionsForClaim.value.at(-1));
 const finalObservation = computed(() => document.value?.observations.find(observation => observation.id === finalDecision.value?.observationId));
@@ -733,9 +749,11 @@ onBeforeUnmount(() => { stashDraft(); playback?.dispose(); });
           <button type="button" @click="openProposal(review.handoffId, review.claim)">Review {{ review.claim.tagId }} · {{ review.claim.scope.startMs }}–{{ review.claim.scope.endMs }} ms</button>
         </div>
         <button v-if="expertQueue.length > expertLimit" type="button" @click="expertLimit += 5">Show more · {{ expertQueue.length - expertLimit }} remaining</button>
-        <details class="review-all-agent-work"><summary>All agent work · {{ agentReviews.length }}</summary>
-        <div v-for="entry in document.handoffs" :key="entry.handoff.handoffId" class="review-handoff">
+        <details class="review-all-agent-work"><summary>Review history · {{ agentReviews.length }} claims</summary>
+        <label>History labeler version<select v-model="chartHistoryVersion"><option value="">All versions</option><option v-for="option in chartVersions" :key="option.key" :value="option.key">{{ option.label }} · {{ option.count }}</option></select></label>
+        <div v-for="entry in visibleHandoffs" :key="entry.handoff.handoffId" class="review-handoff">
           <strong>{{ entry.handoff.agent.producerId }} · {{ entry.handoff.agent.role }}</strong>
+          <p class="review-copy" :title="entry.handoff.agent.skill?.sha256">{{ agentVersionLabel(entry.handoff.agent) }} · {{ new Date(entry.handoff.createdAt).toLocaleString() }}</p>
           <p class="review-copy">Task base: {{ handoffStatuses[entry.handoff.handoffId] ?? entry.baseStatus }} · {{ entry.handoff.handoffId.slice(0, 12) }}</p>
           <button v-for="claim in entry.handoff.proposals" :key="claim.id" type="button" class="review-list-row" @click="openProposal(entry.handoff.handoffId, claim)"><span>{{ claim.tagId }}<small>{{ claim.scope.startMs }}–{{ claim.scope.endMs }} ms</small></span><span>{{ latestDecision(entry.handoff.handoffId, claim.id) }}</span></button>
           <details v-if="entry.handoff.audit.length"><summary>Submission self-checks · {{ entry.handoff.audit.length }}</summary><p v-for="audit in entry.handoff.audit" :key="audit.id">{{ audit.finding }}</p></details>
@@ -821,13 +839,15 @@ onBeforeUnmount(() => { stashDraft(); playback?.dispose(); });
         <template v-if="activeClaim">
           <section v-if="editorOrigin === 'proposal' && activeReview" class="review-section review-audit-result">
             <h2>{{ latestDecision(activeHandoffId, activeClaim.id) }}</h2>
+            <p v-if="activeHandoff" class="review-copy" :title="activeHandoff.agent.skill?.sha256">Labeler {{ agentVersionLabel(activeHandoff.agent) }}<br>{{ new Date(activeHandoff.createdAt).toLocaleString() }} · {{ activeHandoff.agent.producerId }}</p>
             <template v-if="activeReview.supersededBy">
               <p>This original proposal was replaced by an independently reviewed machine judgment. Its history remains available.</p>
               <button type="button" @click="openQuestion(activeReview.supersededBy.handoffId, activeReview.supersededBy.claimId)">View replacement judgment</button>
             </template>
             <p v-if="activeReview.question">{{ activeReview.question }}</p>
             <p class="review-copy">{{ activeReview.rationale }}</p>
-            <details v-if="activeReview.audits.length"><summary>Independent findings · {{ activeReview.audits.length }}</summary><p v-for="finding in activeReview.audits" :key="finding.auditId" class="review-decision"><strong>{{ finding.producerId }} · {{ finding.result.outcome }}</strong><br>{{ finding.result.rationale }}</p></details>
+            <details v-if="activeReview.audits.length"><summary>Independent findings · {{ activeReview.audits.length }}</summary><p v-for="finding in activeReview.audits" :key="finding.auditId" class="review-decision"><strong>{{ finding.producerId }} · {{ finding.result.outcome }}</strong><br><span :title="auditPackets.get(finding.auditId)?.agent.skill?.sha256">Auditor {{ agentVersionLabel(auditPackets.get(finding.auditId)?.agent) }}</span><br>{{ auditPackets.get(finding.auditId)?.createdAt }}<br>{{ finding.result.rationale }}</p></details>
+            <details v-if="relatedReviews.length" class="review-related-history"><summary>Other judgments for this range · {{ relatedReviews.length }}</summary><p class="review-copy">Same label and overlapping ranges. These may be separate submissions; only explicit replacement links establish a revision chain.</p><button v-for="review in relatedReviews" :key="`${review.handoffId}:${review.claimId}`" type="button" @click="openQuestion(review.handoffId, review.claimId)"><span>{{ agentVersionLabel(review.agent) }}<br>{{ review.scope.startMs }}–{{ review.scope.endMs }} ms · {{ review.status }}</span><span>View →</span></button></details>
           </section>
           <section v-if="remoteSource && editorOrigin === 'proposal' && !proposalEditing" class="review-section review-proposed-judgment">
             <h2>{{ activeFoundation.tags.find(tag => tag.id === activeClaim?.tagId)?.displayName }}</h2>

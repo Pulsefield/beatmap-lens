@@ -69,7 +69,8 @@ export async function startReviewWorkspace(options) {
         throw httpError(404, "Source is not registered in this workspace.");
       throw error;
     });
-    return `${info.mtimeMs}:${info.size}`;
+    // Rebuild pre-provenance summaries even when canonical source files are unchanged.
+    return `provenance-v1:${info.mtimeMs}:${info.size}`;
   }
 
   async function source(sha) {
@@ -93,14 +94,39 @@ export async function startReviewWorkspace(options) {
     };
     const { document, version } = stored;
     const agentReviews = await domain.readAgentReviewsV2(document);
+    const handoffsById = new Map(
+      document.handoffs.map(({ handoff }) => [handoff.handoffId, handoff]),
+    );
+    const auditsById = new Map((document.audits ?? []).map(({ audit }) => [audit.auditId, audit]));
     const reviews = agentReviews.map(
-      ({ handoffId, claimId, claim, status, rationale, question, expertReason, supersededBy }) => ({
+      ({
+        handoffId,
+        claimId,
+        claim,
+        status,
+        rationale,
+        question,
+        expertReason,
+        supersededBy,
+        audits,
+      }) => ({
         handoffId,
         claimId,
         tagId: claim.tagId,
         scope: claim.scope,
         status,
         rationale,
+        agent: handoffsById.get(handoffId).agent,
+        submittedAt: handoffsById.get(handoffId).createdAt,
+        audits: audits.map(({ auditId, result }) => {
+          const audit = auditsById.get(auditId);
+          return {
+            auditId,
+            agent: audit.agent,
+            createdAt: audit.createdAt,
+            outcome: result.outcome,
+          };
+        }),
         ...(question ? { question } : {}),
         ...(expertReason ? { expertReason } : {}),
         ...(supersededBy ? { supersededBy } : {}),

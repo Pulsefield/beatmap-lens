@@ -48,6 +48,52 @@ afterEach(() => {
 });
 
 describe("ReviewWorkspace mounted workflow", () => {
+  it("shows frozen versions and opens an earlier judgment for the same range", async () => {
+    const f = await workspaceFixture(true);
+    if (!f.task) throw new Error("Missing task.");
+    let current = await f.read();
+    if (!current) throw new Error("Missing review.");
+    for (const hash of ["a", "b"]) {
+      const handoff = await sealHandoffV2(f.task, {
+        handoffId: `version-${hash}`,
+        createdAt: NOW,
+        agent: {
+          role: "labeler",
+          producerId: `labeler-${hash}`,
+          skill: { name: "judgment", version: "same-name", sha256: hash.repeat(64) },
+        },
+        proposals: [f.claim],
+        audit: [],
+        questions: [],
+      });
+      current = (await f.directory.importHandoff(f.sourceBytes, current.version, handoff)).stored;
+    }
+    const container = document.createElement("div");
+    document.body.append(container);
+    const app = createApp(ReviewWorkspace, {
+      remoteSource: { ...current, sourceBytes: Array.from(f.sourceBytes) },
+      openClaim: { handoffId: "version-b", claimId: f.claim.id },
+    });
+    app.config.errorHandler = (error) => appErrors.push(error);
+    apps.push(app);
+    app.mount(container);
+    await vi.waitFor(() =>
+      expect(container.querySelector(".review-audit-result")?.textContent).toContain(
+        "same-name · bbbbbbbb",
+      ),
+    );
+    expect(container.querySelector(".review-related-history")?.textContent).toContain(
+      "same-name · aaaaaaaa",
+    );
+    (container.querySelector(".review-related-history button") as HTMLButtonElement).click();
+    await vi.waitFor(() =>
+      expect(container.querySelector(".review-audit-result > p")?.textContent).toContain(
+        "Labeler same-name · aaaaaaaa",
+      ),
+    );
+    expect((await f.read())?.version).toEqual(current.version);
+  });
+
   it("uses Inspector audio preferences, saves offset changes, and loads the source audio URL", async () => {
     preferences.value = {
       annotatorId: "inspector-user",

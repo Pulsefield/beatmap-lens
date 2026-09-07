@@ -7,6 +7,7 @@ import type {
   InboxSourceV2,
   ReviewInboxV2,
 } from "./annotation/workflow/remote-workspace";
+import { reviewVersionOptions } from "./annotation/workflow/review-provenance";
 import {
   drawReviewSample,
   sampleCandidates,
@@ -102,6 +103,127 @@ async function change(control: HTMLInputElement | HTMLSelectElement, value: stri
 }
 
 describe("machine review sampling", () => {
+  it("keeps equal labels from different skill hashes and auditor versions distinct", async () => {
+    const { source, claim } = await fixture();
+    const agent = (hash: string) => ({
+      producerId: hash,
+      role: "labeler" as const,
+      skill: { name: "judgment", version: "same-version-name", sha256: hash.repeat(64) },
+    });
+    const audit = (hash: string) => ({
+      auditId: hash,
+      agent: { ...agent(hash), role: "auditor" as const },
+      createdAt: "2026-09-07T10:00:00Z",
+      outcome: "supported" as const,
+    });
+    const input = {
+      ...source,
+      reviews: [
+        claim("old", { agent: agent("a"), audits: [audit("a")] }),
+        claim("new", { agent: agent("b"), audits: [audit("a")] }),
+        claim("reaudited", { agent: agent("a"), audits: [audit("b")] }),
+        claim("same-cohort", { agent: agent("a"), audits: [audit("a")] }),
+      ],
+    };
+    expect(sampleCandidates([input], "", "all").map((x) => x.claim.claimId)).toEqual([
+      "old",
+      "new",
+      "reaudited",
+    ]);
+    expect(
+      sampleCandidates([input], "", "all", { labelerVersion: "b".repeat(64) }).map(
+        (x) => x.claim.claimId,
+      ),
+    ).toEqual(["new"]);
+    expect(
+      sampleCandidates([input], "", "all", { auditorVersion: "b".repeat(64) }).map(
+        (x) => x.claim.claimId,
+      ),
+    ).toEqual(["reaudited"]);
+    expect(reviewVersionOptions(input.reviews, "labeler").map((x) => x.label)).toEqual([
+      "same-version-name · aaaaaaaa",
+      "same-version-name · bbbbbbbb",
+    ]);
+  });
+
+  it("filters history and sampling by exact versions and opens superseded records", async () => {
+    const { source, inbox, fetcher, claim } = await fixture();
+    const agent = (hash: string) => ({
+      producerId: `producer-${hash}`,
+      role: "labeler" as const,
+      skill: { name: "judgment", version: "same-name", sha256: hash.repeat(64) },
+    });
+    const history = claim("historical", {
+      agent: agent("a"),
+      status: "superseded",
+      submittedAt: "2026-09-06T10:00:00Z",
+    });
+    const input = {
+      ...inbox,
+      sources: [
+        {
+          ...source,
+          reviews: [
+            history,
+            claim("latest", { agent: agent("b"), submittedAt: "2026-09-07T10:00:00Z" }),
+            claim("human", { agent: agent("a"), status: "modified" }),
+          ],
+        },
+      ],
+    };
+    fetcher.mockImplementation(async (url) =>
+      Response.json(
+        url.endsWith("inbox")
+          ? input
+          : { document: { source: source.source }, version: source.version },
+      ),
+    );
+    vi.stubGlobal("fetch", fetcher);
+    const { container } = mount();
+    await vi.waitFor(() =>
+      expect(container.querySelector('select[name="labelerVersion"]')?.children).toHaveLength(3),
+    );
+    await click(container, "Browse review history");
+    await change(
+      container.querySelector('select[name="labelerVersion"]') as HTMLSelectElement,
+      "a".repeat(64),
+    );
+    expect(container.querySelectorAll(".inbox-history-list button")).toHaveLength(2);
+    await change(
+      container.querySelector('select[name="historyStatus"]') as HTMLSelectElement,
+      "superseded",
+    );
+    const button = container.querySelector(".inbox-history-list button") as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+    expect(button.textContent).toContain("same-name · aaaaaaaa");
+    button.click();
+    await vi.waitFor(() =>
+      expect(container.querySelector("output")?.textContent).toContain('"claimId":"historical"'),
+    );
+    await click(container, "Inbox");
+    await change(
+      container.querySelector('select[name="labelerVersion"]') as HTMLSelectElement,
+      "b".repeat(64),
+    );
+    await click(container, "Sample machine-reviewed sections");
+    container
+      .querySelector("form")
+      ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await nextTick();
+    const saved = JSON.parse(
+      localStorage.getItem(`beatmap-lens-review-sample:${inbox.workspace}`) ?? "{}",
+    );
+    expect(saved.labelerVersion).toBe("b".repeat(64));
+    expect(saved.claims.map((x: { claimId: string }) => x.claimId)).toEqual(["latest"]);
+    await change(
+      container.querySelector('select[name="labelerVersion"]') as HTMLSelectElement,
+      "a".repeat(64),
+    );
+    expect(container.querySelector(".inbox-sampler")?.textContent).toContain(
+      "labeler same-name · bbbbbbbb",
+    );
+  });
+
   it("visits unsaved samples in order and reports failed cross-chart loads in the active view", async () => {
     const { inbox, source, fetcher } = await fixture();
     const sources = source.reviews.map((claim, index) => ({
@@ -199,7 +321,7 @@ describe("machine review sampling", () => {
     let { app, container } = mount();
     await vi.waitFor(() => expect(container.textContent).toContain("3 machine-reviewed"));
     await click(container, "Sample machine-reviewed sections");
-    const selects = container.querySelectorAll("select");
+    const selects = container.querySelectorAll("form select");
     await change(selects[0] as HTMLSelectElement, "tech");
     await change(selects[1] as HTMLSelectElement, "prominent");
     await change(container.querySelector("input") as HTMLInputElement, "2");

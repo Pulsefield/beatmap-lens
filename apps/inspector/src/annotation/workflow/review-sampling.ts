@@ -1,4 +1,9 @@
 import type { InboxClaimV2, InboxSourceV2 } from "./remote-workspace";
+import {
+  matchesReviewVersions,
+  type ReviewVersionFilter,
+  reviewVersionKey,
+} from "./review-provenance";
 
 export const REVIEW_TARGETS: Record<string, string> = {
   "jack-organization": "Jack",
@@ -18,7 +23,7 @@ export interface ReviewSampleItem {
   source: InboxSourceV2;
   claim: InboxClaimV2;
 }
-export interface ReviewSampleBatch {
+export interface ReviewSampleBatch extends ReviewVersionFilter {
   createdAt: string;
   tagId: string;
   strength: SampleStrength;
@@ -46,6 +51,7 @@ export function sampleCandidates(
   sources: readonly InboxSourceV2[],
   tagId: string,
   strength: SampleStrength,
+  versions: ReviewVersionFilter = {},
 ): ReviewSampleItem[] {
   const seen = new Set<string>();
   return sources.flatMap((source) =>
@@ -57,6 +63,7 @@ export function sampleCandidates(
           ["absent", "supporting", "prominent"].includes(level) &&
           (!tagId || claim.tagId === tagId) &&
           (strength === "all" || level === strength) &&
+          matchesReviewVersions(claim, versions) &&
           !source.requests.some(
             (request) =>
               request.handoffId === claim.handoffId &&
@@ -68,6 +75,7 @@ export function sampleCandidates(
           claim.scope.endMs,
           claim.tagId,
           level,
+          reviewVersionKey(claim),
         ]);
         if (!eligible || seen.has(key)) return false;
         seen.add(key);

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { type InboxClaimV2, type InboxSourceV2, type RemoteSourceV2, type ReviewInboxV2, reviewRequest } from "./annotation/workflow/remote-workspace";
+import { agentVersionLabel, auditVersionLabel, matchesReviewVersions, reviewVersionOptions } from "./annotation/workflow/review-provenance";
 import { assessmentStrength, drawReviewSample, REVIEW_TARGETS, type ReviewSampleBatch, type ReviewSampleItem, type SampleStrength, sampleCandidates, sampleKey, sampleRef } from "./annotation/workflow/review-sampling";
 import ReviewWorkspace from "./ReviewWorkspace.vue";
 
@@ -13,12 +14,35 @@ const showingInbox = ref(true);
 const loading = ref(false);
 const lastSynced = ref("");
 const showingSampler = ref(false);
+const showingHistory = ref(false);
+const labelerVersion = ref("");
+const auditorVersion = ref("");
+const historySearch = ref("");
+const historyStatus = ref("");
+const historyTag = ref("");
+const historyLimit = ref(50);
+const versions = computed(() => ({ labelerVersion: labelerVersion.value, auditorVersion: auditorVersion.value }));
+const allReviews = computed(() => (inbox.value?.sources ?? []).flatMap(source => source.reviews));
+const labelerVersions = computed(() => reviewVersionOptions(allReviews.value, "labeler"));
+const auditorVersions = computed(() => reviewVersionOptions(allReviews.value, "auditor"));
+const versionedItems = computed(() => (inbox.value?.sources ?? []).flatMap(source => source.reviews
+  .filter(claim => matchesReviewVersions(claim, versions.value)).map(claim => ({ source, claim }))));
+const historyStatuses = computed(() => [...new Set(versionedItems.value.map(item => item.claim.status))].sort());
+const historyItems = computed(() => {
+  const terms = historySearch.value.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  return versionedItems.value.filter(({ source, claim }) => (!historyStatus.value || claim.status === historyStatus.value)
+    && (!historyTag.value || claim.tagId === historyTag.value)
+    && terms.every(term => [source.source.title, source.source.difficulty, claim.handoffId, claim.agent?.producerId,
+      ...(claim.audits ?? []).map(audit => audit.agent.producerId)].join(" ").toLowerCase().includes(term)))
+    .sort((a, b) => (b.claim.submittedAt ?? "").localeCompare(a.claim.submittedAt ?? "") || sampleKey(sampleRef(a)).localeCompare(sampleKey(sampleRef(b))));
+});
+watch([labelerVersion, auditorVersion, historySearch, historyStatus, historyTag], () => { historyLimit.value = 50; });
 const sampleTag = ref("");
 const sampleStrength = ref<SampleStrength>("all");
 const sampleLimit = ref(10);
 const sampleBatch = shallowRef<ReviewSampleBatch>();
 const activeSampleKey = ref("");
-const candidates = computed(() => sampleCandidates(inbox.value?.sources ?? [], sampleTag.value, sampleStrength.value));
+const candidates = computed(() => sampleCandidates(inbox.value?.sources ?? [], sampleTag.value, sampleStrength.value, versions.value));
 const sampleItems = computed(() => new Map((inbox.value?.sources ?? []).flatMap(source => source.reviews.map(claim => {
   const item = { source, claim };
   return [sampleKey(sampleRef(item)), item] as const;
@@ -40,6 +64,8 @@ watch(() => inbox.value?.workspace, workspace => {
   if (sampleBatch.value) {
     sampleTag.value = sampleBatch.value.tagId;
     sampleStrength.value = sampleBatch.value.strength;
+    labelerVersion.value = sampleBatch.value.labelerVersion ?? "";
+    auditorVersion.value = sampleBatch.value.auditorVersion ?? "";
     showingSampler.value = true;
   }
 });
@@ -55,7 +81,7 @@ const tasks = computed(() => (inbox.value?.sources ?? []).flatMap(source => [
   ...source.expertQueue.filter(review => !(source.requests ?? []).some(request => request.handoffId === review.handoffId && request.pendingClaimIds.includes(review.claimId))).map(review => ({
     id: `${review.handoffId}:${review.claimId}`, source, title: "Expert judgment needed", question: review.question ?? review.rationale, claims: [review],
   })),
-]));
+]).map(task => ({ ...task, claims: task.claims.filter(claim => matchesReviewVersions(claim, versions.value)) })).filter(task => task.claims.length));
 const counts = computed(() => {
   const total: Record<string, number> = {};
   for (const source of inbox.value?.sources ?? []) for (const [status, count] of Object.entries(source.counts)) total[status] = (total[status] ?? 0) + count;
@@ -78,9 +104,18 @@ function strengthLabel(claim: InboxClaimV2): string {
   return strength === "absent" ? "absent · 0" : strength;
 }
 
+function versionSelectionLabel(value: string | undefined, role: "labeler" | "auditor"): string {
+  return (role === "labeler" ? labelerVersions.value : auditorVersions.value).find(option => option.key === value)?.label ?? "All versions";
+}
+
+function submittedLabel(claim: InboxClaimV2): string {
+  return claim.submittedAt ? new Date(claim.submittedAt).toLocaleString() : "Submission time unavailable";
+}
+
 function drawSample(): void {
   sampleBatch.value = {
     createdAt: new Date().toISOString(), tagId: sampleTag.value, strength: sampleStrength.value,
+    ...versions.value,
     claims: drawReviewSample(candidates.value, sampleLimit.value),
   };
   activeSampleKey.value = "";
@@ -148,35 +183,58 @@ onBeforeUnmount(() => { stopped = true; clearTimeout(timer); });
     <p v-if="connectionError" class="inbox-error" role="alert">{{ connectionError }}</p>
     <p v-if="loadError" class="inbox-error" role="alert">{{ loadError }}</p>
     <div class="inbox-summary"><strong>{{ tasks.length }} pending {{ tasks.length === 1 ? 'task' : 'tasks' }}</strong><span>{{ counts['agent-reviewed'] ?? 0 }} machine-reviewed</span><span>{{ humanAssessments.settled }} explicit human judgments</span><span v-if="humanAssessments.unresolved || humanAssessments.unreviewed">{{ humanAssessments.unresolved + humanAssessments.unreviewed }} uncertain or unreviewed human records</span><span>{{ counts.deferred ?? 0 }} deferred</span></div>
-    <div class="inbox-sample-entry"><button type="button" :aria-expanded="showingSampler" aria-controls="review-sampler" @click="showingSampler = !showingSampler">Sample machine-reviewed sections <span>{{ showingSampler ? '−' : '+' }}</span></button><span>Optional expert spot-check</span></div>
+    <section class="inbox-version-filters" aria-label="Review version filters">
+      <div class="inbox-filter-controls">
+        <label>Labeler version<select v-model="labelerVersion" name="labelerVersion"><option value="">All versions · {{ labelerVersions.length }}</option><option v-for="option in labelerVersions" :key="option.key" :value="option.key">{{ option.label }} · {{ option.count }} claims</option></select></label>
+        <label>Auditor version<select v-model="auditorVersion" name="auditorVersion"><option value="">All versions · {{ auditorVersions.length }}</option><option v-for="option in auditorVersions" :key="option.key" :value="option.key">{{ option.label }} · {{ option.count }} claims</option></select></label>
+      </div>
+      <p>{{ versionedItems.length }} / {{ allReviews.length }} claims match. Version filters apply to requests, sampling and history. Versions with the same name remain separate by content hash.</p>
+      <p v-if="auditorVersion">Shows claims reviewed by this auditor version. Their status still reflects all recorded audits and human decisions.</p>
+    </section>
+    <div class="inbox-sample-entry"><button type="button" :aria-expanded="showingSampler" aria-controls="review-sampler" @click="showingSampler = !showingSampler">Sample machine-reviewed sections <span>{{ showingSampler ? '−' : '+' }}</span></button><button type="button" :aria-expanded="showingHistory" aria-controls="review-history" @click="showingHistory = !showingHistory">Browse review history <span>{{ showingHistory ? '−' : '+' }}</span></button></div>
     <section v-if="showingSampler" id="review-sampler" class="inbox-sampler">
       <h2>Sample section labels</h2>
-      <p>Random section labels. Identical judgments are sampled once per batch; human-reviewed, superseded and pending expert claims are excluded.</p>
+      <p>Random section labels. Identical judgments within the same labeler and auditor versions are sampled once; human-reviewed, stale, superseded and pending expert claims are excluded.</p>
       <form class="inbox-sample-controls" @submit.prevent="drawSample">
-        <label>Label type<select v-model="sampleTag"><option value="">All five labels</option><option v-for="(name, id) in REVIEW_TARGETS" :key="id" :value="id">{{ name }}</option></select></label>
-        <label>Strength<select v-model="sampleStrength"><option value="all">All strengths</option><option value="absent">Absent · 0</option><option value="supporting">Supporting · weak</option><option value="prominent">Prominent · strong</option></select></label>
+        <label>Label type<select v-model="sampleTag" name="sampleTag"><option value="">All five labels</option><option v-for="(name, id) in REVIEW_TARGETS" :key="id" :value="id">{{ name }}</option></select></label>
+        <label>Strength<select v-model="sampleStrength" name="sampleStrength"><option value="all">All strengths</option><option value="absent">Absent · 0</option><option value="supporting">Supporting · weak</option><option value="prominent">Prominent · strong</option></select></label>
         <label>Sample count<input v-model.number="sampleLimit" type="number" min="1" max="100" step="1" required></label>
         <button type="submit" class="inbox-sample-draw" :disabled="!candidates.length || !!connectionError || loading">{{ sampleBatch ? 'Draw new sample' : 'Draw sample' }}</button>
       </form>
       <p class="inbox-sample-count" role="status">{{ candidates.length }} matching sections · up to {{ sampleLimit }} will be drawn</p>
       <template v-if="sampleBatch">
         <div class="inbox-sample-heading"><h2>Current sample · {{ sampleReviewed }}/{{ sampleRows.length }} reviewed</h2><span>{{ REVIEW_TARGETS[sampleBatch.tagId] ?? 'All labels' }} · {{ sampleBatch.strength }} · saved in this browser</span></div>
+        <p>Sample versions: labeler {{ versionSelectionLabel(sampleBatch.labelerVersion, 'labeler') }} · auditor {{ versionSelectionLabel(sampleBatch.auditorVersion, 'auditor') }}. Changing filters affects the next draw.</p>
         <p class="inbox-sample-help">Modify judgment to save the correct label, strength or range with your reason. Reject only if you cannot provide a replacement. A stale item waits for the agent to reread your feedback.</p>
         <div class="inbox-sample-list"><template v-for="(row, index) in sampleRows" :key="row.key">
           <button v-if="row.item" type="button" :disabled="loading || ['stale', 'superseded', 'awaiting-audit', 'needs-revision'].includes(row.item.claim.status)" @click="openSample(row.item)">
-            <span><span class="inbox-sample-number">{{ index + 1 }}.</span> {{ row.item.source.source.title }} <small>[{{ row.item.source.source.difficulty }}] · {{ (row.item.claim.scope.startMs / 1000).toFixed(3) }}–{{ (row.item.claim.scope.endMs / 1000).toFixed(3) }} s</small></span>
+            <span><span class="inbox-sample-number">{{ index + 1 }}.</span> {{ row.item.source.source.title }} <small>[{{ row.item.source.source.difficulty }}] · {{ (row.item.claim.scope.startMs / 1000).toFixed(3) }}–{{ (row.item.claim.scope.endMs / 1000).toFixed(3) }} s</small><small>Labeler {{ agentVersionLabel(row.item.claim.agent) }}<br>Auditor {{ auditVersionLabel(row.item.claim) }}</small></span>
             <span>{{ REVIEW_TARGETS[row.item.claim.tagId] ?? row.item.claim.tagId }} · {{ strengthLabel(row.item.claim) }}<small>{{ row.item.claim.status === 'stale' ? 'Awaiting agent reread' : reviewLabel(row.item.claim) }} →</small></span>
           </button>
           <p v-else>Sample {{ index + 1 }} is no longer available in this workspace.</p>
         </template></div>
       </template>
     </section>
-    <section v-if="inbox && !tasks.length" class="inbox-empty"><h2>No requests waiting</h2><p>New requests arrive here automatically. Machine review results remain available below.</p></section>
+    <section v-if="showingHistory" id="review-history" class="inbox-history">
+      <h2>Review history</h2><p>Includes human decisions, stale results and superseded proposals. Newest submissions first; open a result to inspect its audits and related versions.</p>
+      <div class="inbox-filter-controls inbox-history-controls">
+        <label>Search history<input v-model="historySearch" type="search" name="historySearch" placeholder="Chart, difficulty or agent"></label>
+        <label>Review status<select v-model="historyStatus" name="historyStatus"><option value="">All statuses</option><option v-for="state in historyStatuses" :key="state" :value="state">{{ state }}</option></select></label>
+        <label>History label<select v-model="historyTag" name="historyTag"><option value="">All five labels</option><option v-for="(name, id) in REVIEW_TARGETS" :key="id" :value="id">{{ name }}</option></select></label>
+      </div>
+      <p role="status">{{ historyItems.length }} matching records · showing {{ Math.min(historyLimit, historyItems.length) }}</p>
+      <div class="inbox-history-list"><button v-for="item in historyItems.slice(0, historyLimit)" :key="sampleKey(sampleRef(item))" type="button" :disabled="loading" @click="open(item.source, item.claim)">
+        <span>{{ item.source.source.title }} <small>[{{ item.source.source.difficulty }}] · {{ submittedLabel(item.claim) }}</small><small>Labeler {{ agentVersionLabel(item.claim.agent) }}<br>Auditor {{ auditVersionLabel(item.claim) }}</small></span>
+        <span>{{ REVIEW_TARGETS[item.claim.tagId] ?? item.claim.tagId }} · {{ strengthLabel(item.claim) }}<small>{{ (item.claim.scope.startMs / 1000).toFixed(3) }}–{{ (item.claim.scope.endMs / 1000).toFixed(3) }} s · {{ reviewLabel(item.claim) }} →</small></span>
+      </button></div>
+      <p v-if="!historyItems.length">No review history matches these filters.</p>
+      <button v-if="historyItems.length > historyLimit" type="button" @click="historyLimit += 50">Show 50 more records</button>
+    </section>
+    <section v-if="inbox && !tasks.length" class="inbox-empty"><h2>No requests waiting{{ labelerVersion || auditorVersion ? ' for these versions' : '' }}</h2><p>New requests arrive here automatically. Browse review history to inspect earlier results.</p></section>
     <section v-for="task in tasks" :key="`${task.source.source.sha256}:${task.id}`" class="inbox-task">
       <div><p class="inbox-kicker">{{ task.title }}</p><h2>{{ task.source.source.title }} <span>[{{ task.source.source.difficulty }}]</span></h2><p class="inbox-question">{{ task.question }}</p></div>
-      <div class="inbox-claims"><button v-for="claim in task.claims" :key="claim.claimId" type="button" :disabled="loading" @click="open(task.source, claim)"><span>{{ claim.tagId }}<small>{{ (claim.scope.startMs / 1000).toFixed(3) }}–{{ (claim.scope.endMs / 1000).toFixed(3) }} s · {{ claim.status }}</small></span><span>Review →</span></button></div>
+      <div class="inbox-claims"><button v-for="claim in task.claims" :key="claim.claimId" type="button" :disabled="loading" @click="open(task.source, claim)"><span>{{ claim.tagId }}<small>{{ (claim.scope.startMs / 1000).toFixed(3) }}–{{ (claim.scope.endMs / 1000).toFixed(3) }} s · {{ claim.status }}</small><small>Labeler {{ agentVersionLabel(claim.agent) }}<br>Auditor {{ auditVersionLabel(claim) }}</small></span><span>Review →</span></button></div>
     </section>
-    <details v-if="inbox?.sources.length" class="inbox-history"><summary>All agent work · {{ counts.total ?? 0 }} claims</summary><p>Awaiting audit {{ counts['awaiting-audit'] ?? 0 }} · Needs revision {{ counts['needs-revision'] ?? 0 }} · Stale {{counts.stale ?? 0 }} · Rejected {{ counts.rejected ?? 0 }}</p><section v-for="source in inbox.sources" :key="source.source.sha256"><h2>{{ source.source.title }} · {{ source.source.difficulty }}</h2><button type="button" :disabled="loading" @click="open(source)"><span>Open chart</span><span>{{ source.source.noteCount }} notes →</span></button><button v-for="claim in source.reviews" :key="`${claim.handoffId}:${claim.claimId}`" type="button" :disabled="loading" @click="open(source, claim)"><span>{{ claim.tagId }} · {{ (claim.scope.startMs / 1000).toFixed(3) }} s</span><span>{{ reviewLabel(claim) }} →</span></button></section></details>
     <details v-if="failedDeliveries.length" class="inbox-history"><summary>Delivery issues · {{ failedDeliveries.length }}</summary><p v-for="receipt in failedDeliveries" :key="receipt.id">{{ receipt.error }}</p></details>
     <footer v-if="inbox">Decisions are saved to the connected workspace and returned to the agent outbox automatically.</footer>
   </div>
@@ -223,7 +281,14 @@ footer { padding-top: 28px; }
 .inbox-sampler { padding: 8px 0 24px; border-bottom: 1px solid var(--line); }
 .inbox-sample-controls { display: grid; grid-template-columns: 1.3fr 1.3fr .7fr auto; gap: 16px; align-items: end; margin: 20px 0 8px; }
 .inbox-sample-controls label { display: grid; gap: 8px; font-size: 12px; }
-.inbox-sample-controls select, .inbox-sample-controls input { width: 100%; box-sizing: border-box; min-height: 44px; padding: 10px; border: 0; border-radius: 10px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow-control); font: inherit; }
+.inbox-filter-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 20px 0 12px; }
+.inbox-filter-controls label { display: grid; min-width: 0; gap: 8px; font-size: 12px; }
+.inbox-filter-controls select, .inbox-filter-controls input, .inbox-sample-controls select, .inbox-sample-controls input { width: 100%; min-width: 0; box-sizing: border-box; min-height: 44px; padding: 10px; border: 0; border-radius: 10px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow-control); font: inherit; }
+.inbox-version-filters p { font-size: 12px; color: var(--ink-secondary); }
+.inbox-history-controls { grid-template-columns: 2fr 1fr 1fr; }
+.inbox-history-list { margin: 16px 0; }
+.inbox-history-list button > span { min-width: 0; overflow-wrap: anywhere; }
+.inbox-history-list button > span:last-child { text-align: right; }
 .inbox-sample-controls .inbox-sample-draw { background: var(--ink); color: var(--surface); justify-content: center; }
 .inbox-sample-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-top: 28px; }
 .inbox-sample-list { margin-top: 16px; }
@@ -231,5 +296,5 @@ footer { padding-top: 28px; }
 .inbox-sample-list button > span:last-child { text-align: right; flex-shrink: 0; }
 .inbox-sample-number { font: 11px var(--font-data); color: var(--ink-secondary); }
 @media (max-width: 920px) { .inbox-page { padding: 28px 20px; } .inbox-header, .inbox-task { display: block; } .inbox-connection, .inbox-claims { margin-top: 20px; } .inbox-navigation, .inbox-active-error { left: auto; right: 8px; } }
-@media (max-width: 600px) { .inbox-sample-controls { grid-template-columns: 1fr 1fr; } .inbox-sample-entry, .inbox-sample-heading { align-items: flex-start; flex-direction: column; gap: 8px; } .inbox-sample-list button { align-items: flex-start; flex-direction: column; gap: 4px; } .inbox-sample-list button > span:last-child { text-align: left; } }
+@media (max-width: 600px) { .inbox-sample-controls { grid-template-columns: 1fr 1fr; } .inbox-filter-controls { grid-template-columns: 1fr; } .inbox-sample-entry, .inbox-sample-heading { align-items: flex-start; flex-direction: column; gap: 8px; } .inbox-history-list button, .inbox-sample-list button { align-items: flex-start; flex-direction: column; gap: 4px; } .inbox-history-list button > span:last-child, .inbox-sample-list button > span:last-child { text-align: left; } }
 </style>

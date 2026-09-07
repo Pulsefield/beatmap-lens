@@ -1,4 +1,14 @@
-import { mkdir, mkdtemp, open, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  open,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { Agent, get as httpGet, request as httpRequest, type IncomingMessage } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -183,6 +193,36 @@ describe("local Review service exchange", () => {
     expect(await get(restarted.url, `feedback/${f.sha}`)).toEqual(feedback);
     expect(restarted.cacheInfo().fullSourceReads).toBe(0);
   }, 10_000);
+
+  it("rebuilds summaries written before inbox provenance without changing canonical records", async () => {
+    const f = await fixture();
+    const service = await start(f.workspace);
+    await post(service.url, "submit", { kind: "handoff", packet: f.handoff });
+    await post(service.url, "submit", { kind: "audit", packet: f.audit });
+    await get(service.url, "inbox");
+    await service.close();
+    const sourcePath = join(f.workspace, "workflow", `${f.sha}.v2.json`);
+    const before = await readFile(sourcePath, "utf8");
+    const info = await stat(sourcePath);
+    const cachePath = join(f.workspace, "exchange/outbox", `${f.sha}.feedback-cache.json`);
+    const cache = JSON.parse(await readFile(cachePath, "utf8"));
+    cache.stamp = `${info.mtimeMs}:${info.size}`;
+    for (const review of cache.row.reviews) {
+      delete review.agent;
+      delete review.submittedAt;
+      delete review.audits;
+    }
+    await writeFile(cachePath, JSON.stringify(cache));
+    const restarted = await start(f.workspace);
+    const inbox = await get(restarted.url, "inbox");
+    expect(inbox.sources[0].reviews[0]).toMatchObject({
+      agent: f.handoff.agent,
+      submittedAt: f.handoff.createdAt,
+      audits: [{ agent: f.audit.agent, outcome: "supported" }],
+    });
+    expect(restarted.cacheInfo().fullSourceReads).toBe(1);
+    expect(await readFile(sourcePath, "utf8")).toBe(before);
+  });
 
   it("drains queued human decisions, closes old keep-alive streams, and restarts on the same port", async () => {
     const f = await fixture();
@@ -614,6 +654,16 @@ describe("local Review service exchange", () => {
           tagId: claim.tagId,
           scope: claim.scope,
           assessment: claim.assessment,
+          agent: handoff.agent,
+          submittedAt: handoff.createdAt,
+          audits: [
+            {
+              auditId: audit.auditId,
+              agent: audit.agent,
+              createdAt: audit.createdAt,
+              outcome: audit.claims.find((result) => result.claimId === claim.id)?.outcome,
+            },
+          ],
         }),
       ),
     );
