@@ -56,8 +56,11 @@ After human changes, fetch a fresh task for new work and preserve old packets.
 When revisiting a pending machine claim at the same source, Foundation, tag, and
 complete scope, the new handoff can explicitly link `supersedes` entries containing
 the old `handoffId`, `handoffSha256`, `claimId`, and new `replacementClaimId`.
-The old expert case retires only after the new conclusion receives independent
-support. Further revisions continue linearly from the replacement. Follow the
+The old case retires after independent review supports the new conclusion or
+refers its concrete remaining uncertainty to the expert. This also allows a new
+expert comparison to reopen a previously machine-reviewed judgment, with one
+current expert task. A superseded row is history, not a settled label; inspect the
+terminal assessment and audit status. Further revisions continue linearly from the replacement. Follow the
 feedback's `supersededBy` chain to the current assessment, keeping all old evidence.
 An existing human decision cannot be replaced this way. A human response arriving
 during the machine review still takes precedence.

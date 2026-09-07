@@ -191,6 +191,25 @@ The [September 7 expert decisions](expert-review-20260907.json) distinguish:
   (`1cbae1c465a1`, 24072–24880 ms), but can also articulate a stream-like passage
   (`53a1d6a2186d`, 195959–196922 ms).
 
+Five further decisions during the September 7 refinement sharpen these comparisons:
+
+- `e613eacc59db`, 122038–128238 ms, is **prominent**: the expert accepts the
+  many repetitions despite long gaps. Its 16 fixed crossed-pair rows are 400 ms
+  apart. A slow pulse alone cannot veto Drill or restrict it to supporting.
+- `080a2de5d981`, 66132–66774 ms, is **absent**. The expert identifies only three
+  evenly spaced rows, rather than a typical drill across the whole crop. The
+  source has 171/171/85/86/128-ms gaps; merely grouping its six alternating attack
+  rows does not establish one coherent episode. Preserve this local decision
+  alongside Panic; neither "any tempo change is absent" nor "fixed groups always
+  survive tempo changes" follows.
+- `1fe462e0773d` is **prominent** at the human's revised **112953–113968 ms** scope,
+  with continuing alternation in context. This differs from the old proposal's
+  112953–113656 ms scope. Use the actual human crop and continuation when comparing
+  LN transitions; do not automatically penalize every LN ending as weak Drill.
+- The brief `0df03fb88f02` and `eb6636276d2b` cases remain **supporting**. Their exact
+  ranges and rationales are in the ledger; these are additional scoped positives,
+  not new minimum-count rules.
+
 ### Roll and burst
 
 A roll exposes ordered motion across columns. The approved local Stream
@@ -477,8 +496,9 @@ a useful small subset. Broad control-facing concepts need their own calibration;
 they do not inherit the meaning of existing narrow concepts or community names.
 
 - Whether absence of a longjack anchor is necessary for chordjack in general.
-- Drill boundaries not settled by the reviewed examples, especially very slow
-  sustained alternation; use calibrated comparisons rather than invented cutoffs.
+- Drill boundaries not settled by the reviewed examples, such as a progressively
+  slowing tail versus the approved steady slow alternation; use calibrated
+  comparisons rather than invented cutoffs.
 - Concrete sufficient conditions for query-only supporting/prominent labels under
   the approved style-expression meaning; counts and coverage are not enough by default.
 - The final inventory and presentation of jumptrill, roll, burst, minijack, and

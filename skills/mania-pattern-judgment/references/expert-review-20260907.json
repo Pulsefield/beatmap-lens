@@ -67,6 +67,27 @@
       "humanRationaleSource": "decision.rationale"
     },
     {
+      "sourceSha256": "080a2de5d981bfb6bb8adc93c24ac1fdd749e8a227b9cf81beed7db8e4ecc925",
+      "scope": {
+        "endMs": 66774,
+        "startMs": 66132
+      },
+      "reviewContext": {
+        "endMs": 67274,
+        "startMs": 65632
+      },
+      "tagId": "drill-organization",
+      "assessment": {
+        "presence": "absent"
+      },
+      "observationId": "a63e5f84-217c-49fa-9547-3f2a4eea104e:observation",
+      "exactObservationSha256": "099b6750654cdc3dcdea27c51df6f7af6bb5fa800af5f0a1743561af30e2e209",
+      "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
+      "confirmedAt": "2026-09-07T03:24:35.139Z",
+      "humanRationale": "3 rows with even gap, not typical drill",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
       "sourceSha256": "0c60d6bd6e29c842ad526878a5ca6e008876cd7d89a4af131f76c47a34c3c31a",
       "scope": {
         "endMs": 153554,
@@ -85,6 +106,28 @@
       "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
       "confirmedAt": "2026-09-07T02:08:17.942Z",
       "humanRationale": "this is not LN coordination. the context area challenges LN release timing, the selected area when hold is occupied we do not see an attack.",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "0df03fb88f0237b7719816fb0c04591becb6372ef3b2670d99b9e260f47c7ab1",
+      "scope": {
+        "endMs": 48637,
+        "startMs": 48261
+      },
+      "reviewContext": {
+        "endMs": 49237,
+        "startMs": 47661
+      },
+      "tagId": "drill-organization",
+      "assessment": {
+        "presence": "present",
+        "salience": "supporting"
+      },
+      "observationId": "86ba3567-b6c8-4e62-b350-50afbdcb8c9c:observation",
+      "exactObservationSha256": "bdcedb58b738e06b77f716134690fee367fe7c9b92894a991a653b4a7de409bc",
+      "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
+      "confirmedAt": "2026-09-07T03:24:59.141Z",
+      "humanRationale": "weak drill",
       "humanRationaleSource": "decision.rationale"
     },
     {
@@ -129,6 +172,28 @@
       "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
       "confirmedAt": "2026-09-07T02:10:47.718Z",
       "humanRationale": "this is a clearly seperated drill section with 5 rows.",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "1fe462e0773df58dd965d659f7c80da22fd37cf38c0f26f17e494717e6eb2ac1",
+      "scope": {
+        "endMs": 113968,
+        "startMs": 112953
+      },
+      "reviewContext": {
+        "endMs": 114400,
+        "startMs": 112600
+      },
+      "tagId": "drill-organization",
+      "assessment": {
+        "presence": "present",
+        "salience": "prominent"
+      },
+      "observationId": "1832f2a6-8138-4c71-9ef7-3ba24a41efd7:observation",
+      "exactObservationSha256": "4dd9812883aca1c35419f2c8acc13d625419d758d77a1eba4fa1c596df10b648",
+      "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
+      "confirmedAt": "2026-09-07T03:26:32.504Z",
+      "humanRationale": "according to context we can see 2-3 row alternation lasted for long, it's drill.",
       "humanRationaleSource": "decision.rationale"
     },
     {
@@ -499,6 +564,50 @@
       "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
       "confirmedAt": "2026-09-07T02:34:11.890Z",
       "humanRationale": "has different ln start timing",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "e613eacc59db702a0f86d35b355f9c1071db6329e835241e4be2cbae6ad81742",
+      "scope": {
+        "endMs": 128238,
+        "startMs": 122038
+      },
+      "reviewContext": {
+        "endMs": 128838,
+        "startMs": 121438
+      },
+      "tagId": "drill-organization",
+      "assessment": {
+        "presence": "present",
+        "salience": "prominent"
+      },
+      "observationId": "64b6f4ac-401a-4f3f-908d-9594ef3ed963:observation",
+      "exactObservationSha256": "5769f11a71fc714ace8417d2cc87d9f30a71be4590a9ec4925bdb0e87c290c02",
+      "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
+      "confirmedAt": "2026-09-07T03:28:13.561Z",
+      "humanRationale": "typical drill, though gap is long but the pattern repeats very many times.",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "eb6636276d2bfc8bb00dabf339a2da04527c3f6cd38744c9d20a7e3473e0f1aa",
+      "scope": {
+        "endMs": 59324,
+        "startMs": 58614
+      },
+      "reviewContext": {
+        "endMs": 59824,
+        "startMs": 58114
+      },
+      "tagId": "drill-organization",
+      "assessment": {
+        "presence": "present",
+        "salience": "supporting"
+      },
+      "observationId": "48b66d16-ad3d-498e-9c3d-596e79dea63d:observation",
+      "exactObservationSha256": "536a7c7811b0bddd0186b203480b46a4458b4970e8cb8a002c583553ac637699",
+      "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
+      "confirmedAt": "2026-09-07T03:27:26.044Z",
+      "humanRationale": "minidrill, start boundary is clear.",
       "humanRationaleSource": "decision.rationale"
     },
     {
