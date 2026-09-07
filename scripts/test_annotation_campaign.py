@@ -111,6 +111,240 @@ class SupersessionAcceptanceTest(unittest.TestCase):
         self.assertEqual(self.acceptance(), "stale")
 
 
+class CoverageCorrectionAcceptanceTest(unittest.TestCase):
+    def setUp(self):
+        self.temporary = TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.sha, self.foundation = "a" * 64, "f" * 64
+        self.job = self.root / "workers/original-auditor"
+        self.label_job = self.root / "workers/original-labeler"
+        self.original_chart = {"sourceSha256": self.sha, "coverageReview": {
+            "outcome": "needs-revision", "rationale": "Inspect the omitted local stream episode."},
+            "claims": [{"claimId": "old", "outcome": "supported", "rationale": "Supported original section."}],
+            "questions": []}
+        self.handoff = {"handoffId": "original", "sourceSha256": self.sha,
+                        "foundationSha256": self.foundation, "proposals": [{"id": "old"}], "questions": []}
+        self.handoff_sha = campaign.revision.canonical_hashes([self.handoff])[0]
+        old_skill = {"name": "fixture-skill", "version": "old", "sha256": "0" * 64}
+        for role, result in (("labeler", {"skill": old_skill, "charts": [{
+                "sourceSha256": self.sha, "inspectedRanges": [{"startMs": 0, "endMs": 10000}],
+                "discoverySummary": "Original complete survey, missing one representative local claim.",
+                "claims": [{"id": "old"}], "questions": []}]}),
+                ("auditor", {"skill": old_skill, "charts": [self.original_chart]})):
+            job = self.root / "workers" / f"original-{role}"
+            campaign.write(job / "result.json", result)
+            campaign.write(job / "assignment.json", {"charts": [{"sourceSha256": self.sha}]})
+            campaign.write(job / "run.json", {"assignmentId": "original", "role": role,
+                "producerId": f"original-{role}", "status": "submitted", "skill": old_skill,
+                "resultSha256": self.digest(job / "result.json")})
+        campaign.write(self.job / "handoffs" / f"{self.sha}.json", self.handoff)
+        skill_file = self.root / "correction/skill/SKILL.md"
+        skill_file.parent.mkdir(parents=True)
+        skill_file.write_text("Updated frozen skill, unchanged approved Foundation.\n")
+        manifest = self.root / "correction/skill/manifest.json"
+        campaign.write(manifest, {"files": [{"path": "SKILL.md", "sha256": self.digest(skill_file)}]})
+        self.skill = {"name": "fixture-skill", "version": "updated", "sha256": self.digest(manifest)}
+        self.claim = {"id": "new", "tagId": "stream-organization",
+                      "scope": {"startMs": 1000, "endMs": 2000},
+                      "reviewContext": {"startMs": 900, "endMs": 2100},
+                      "assessment": {"presence": "present", "salience": "supporting"},
+                      "evidence": {"noteRefs": [], "contextNoteRefs": [],
+                                   "rationale": "The newly inspected complete episode supports Stream."}}
+        self.labeled = {"sourceSha256": self.sha, "coverageOrigin": {
+            "handoffId": "original", "handoffSha256": self.handoff_sha,
+            "auditorResultSha256": self.digest(self.job / "result.json"),
+            "labelerResultSha256": self.digest(self.label_job / "result.json")},
+            "inspectedRanges": [{"startMs": 900, "endMs": 2100}],
+            "discoverySummary": "Inherit the pinned original survey; newly inspect only the missing 900–2100 ms episode.",
+            "claims": [self.claim], "questions": []}
+        self.audited = {"sourceSha256": self.sha, "coverageReview": {
+            "outcome": "supported", "rationale": "Original survey plus this independent local review addresses the gap."},
+            "claims": [{"claimId": "new", "outcome": "supported", "rationale": "The complete submitted episode supports Stream."}],
+            "questions": []}
+        self.labeler, self.auditor = [{"agent": {"producerId": f"correction-{role}", "role": role,
+            "model": "gpt-6-astra", "reasoningEffort": "medium" if role == "labeler" else "high"},
+            "skill": self.skill, "foundationSha256": self.foundation,
+            "inputProvenance": {"skillManifest": {"path": "correction/skill/manifest.json", "sha256": self.skill["sha256"]}},
+            "charts": [chart]} for role, chart in (("labeler", self.labeled), ("auditor", self.audited))]
+        self.correction = {"sourceSha256": self.sha, "handoffId": "original", "handoffSha256": self.handoff_sha,
+            "originalAuditorResultSha256": self.digest(self.job / "result.json"),
+            "addedClaims": [{"handoffId": "added", "handoffSha256": "e" * 64, "claimId": "new"}]}
+        self.correction_path = self.root / "controller/coverage-corrections/original.json"
+        self.feedback = {"sourceSha256": self.sha, "documentVersion": {"revision": 1, "sha256": "b" * 64},
+            "handoffs": [{"handoffId": "original", "handoffSha256": self.handoff_sha,
+                          "foundationSha256": self.foundation, "baseStatus": "current"},
+                         {"handoffId": "added", "handoffSha256": "e" * 64,
+                          "foundationSha256": self.foundation, "baseStatus": "current", "questions": [],
+                          "agent": {**self.labeler["agent"], "skill": self.skill}}],
+            "audits": [{"auditId": "added-audit", "handoffId": "added", "handoffSha256": "e" * 64,
+                        "foundationSha256": self.foundation, "questions": [],
+                        "agent": {**self.auditor["agent"], "skill": self.skill}}],
+            "agentReviews": [{"handoffId": "original", "claimId": "old", "status": "agent-reviewed",
+                              "summary": {"assessment": {"presence": "absent"}}},
+                             {"handoffId": "added", "claimId": "new", "status": "agent-reviewed",
+                              "summary": {**{key: self.claim[key] for key in
+                                             ("id", "tagId", "scope", "reviewContext", "assessment")},
+                                          "rationale": self.claim["evidence"]["rationale"]},
+                              "audits": [{"auditId": "added-audit", "result": self.audited["claims"][0]}]}]}
+
+    def digest(self, path):
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+
+    def save_correction(self):
+        for role, result in (("labeler", self.labeler), ("auditor", self.auditor)):
+            path = self.root / "correction" / f"{role}.json"
+            campaign.write(path, result)
+            self.correction[f"{role}Result"] = {"path": str(path.relative_to(self.root)), "sha256": self.digest(path)}
+            if role == "labeler":
+                self.auditor["inputProvenance"]["labelerResultSha256"] = self.digest(path)
+        campaign.write(self.correction_path, self.correction)
+
+    def progress(self):
+        path = self.job / "feedback" / f"{self.sha}.json.gz"
+        path.parent.mkdir(exist_ok=True)
+        path.write_bytes(gzip.compress(json.dumps(self.feedback).encode()))
+        return campaign.status(self.root)
+
+    def acceptance(self):
+        return self.progress()["charts"][0]["status"]
+
+    def test_supported_correction_retains_originals_and_records_its_provenance(self):
+        self.assertEqual(self.acceptance(), "needs-revision")
+        original = {p: p.read_bytes() for p in (self.job / "result.json", self.label_job / "result.json")}
+        self.save_correction()
+        progress = self.progress()
+        self.assertEqual(progress["acceptedCharts"], 1)
+        self.assertEqual(progress["charts"][0]["coverageCorrection"], {
+            "path": "controller/coverage-corrections/original.json", "sha256": self.digest(self.correction_path)})
+        self.assertEqual(original, {p: p.read_bytes() for p in original})
+
+    def test_factual_survey_clarification_does_not_require_a_new_claim(self):
+        self.labeled["claims"], self.audited["claims"], self.correction["addedClaims"] = [], [], []
+        self.save_correction()
+        self.assertEqual(self.acceptance(), "accepted-reviewed")
+        self.audited["coverageReview"]["outcome"] = "needs-revision"
+        self.save_correction()
+        self.assertEqual(self.acceptance(), "needs-revision")
+
+    def test_changed_original_and_correction_artifacts_are_rejected(self):
+        self.save_correction()
+        for path in (self.job / "result.json", self.label_job / "result.json",
+                     self.root / "correction/labeler.json", self.root / "correction/auditor.json"):
+            with self.subTest(path=path):
+                original = path.read_bytes()
+                path.write_bytes(original + b"\n")
+                with self.assertRaisesRegex(ValueError, "artifact changed"):
+                    self.acceptance()
+                path.write_bytes(original)
+        changed_handoff = {**self.handoff, "questions": [{"id": "different"}]}
+        campaign.write(self.job / "handoffs" / f"{self.sha}.json", changed_handoff)
+        with self.assertRaisesRegex(ValueError, "original source, handoff or audit pins"):
+            self.acceptance()
+
+    def test_changed_record_pins_and_inherited_survey_identity_are_rejected(self):
+        self.save_correction()
+        for key in ("sourceSha256", "handoffId", "handoffSha256", "originalAuditorResultSha256"):
+            with self.subTest(key=key):
+                campaign.write(self.correction_path, {**self.correction, key: "different"})
+                with self.assertRaisesRegex(ValueError, "original source, handoff or audit pins"):
+                    self.acceptance()
+        self.labeled["coverageOrigin"]["labelerResultSha256"] = "different"
+        self.save_correction()
+        with self.assertRaisesRegex(ValueError, "unchanged original survey"):
+            self.acceptance()
+
+    def test_independent_producer_exact_audit_binding_and_foundation_are_required(self):
+        self.auditor["agent"]["producerId"] = self.labeler["agent"]["producerId"]
+        self.save_correction()
+        with self.assertRaisesRegex(ValueError, "independent high-effort audit"):
+            self.acceptance()
+        self.auditor["agent"]["producerId"] = "correction-auditor"
+        self.save_correction()
+        self.auditor["inputProvenance"]["labelerResultSha256"] = "different"
+        path = self.root / "correction/auditor.json"
+        campaign.write(path, self.auditor)
+        self.correction["auditorResult"]["sha256"] = self.digest(path)
+        campaign.write(self.correction_path, self.correction)
+        with self.assertRaisesRegex(ValueError, "independent high-effort audit"):
+            self.acceptance()
+        self.labeler["foundationSha256"] = "different"
+        self.save_correction()
+        with self.assertRaisesRegex(ValueError, "role or Foundation"):
+            self.acceptance()
+
+    def test_changed_frozen_skill_is_rejected(self):
+        self.save_correction()
+        (self.root / "correction/skill/SKILL.md").write_text("Changed after review.\n")
+        with self.assertRaisesRegex(ValueError, "Worker skill file changed"):
+            self.acceptance()
+
+    def test_every_new_claim_needs_a_matching_canonical_handoff_and_audit(self):
+        self.audited["claims"] = []
+        self.save_correction()
+        with self.assertRaisesRegex(ValueError, "every new claim and question"):
+            self.acceptance()
+        self.audited["claims"] = [self.feedback["agentReviews"][1]["audits"][0]["result"]]
+        self.correction["addedClaims"][0]["handoffSha256"] = "different"
+        self.save_correction()
+        with self.assertRaisesRegex(ValueError, "canonical identity or producer"):
+            self.acceptance()
+        self.correction["addedClaims"][0]["handoffSha256"] = "e" * 64
+        self.save_correction()
+        self.feedback["agentReviews"][1]["audits"] = []
+        self.assertEqual(self.acceptance(), "awaiting-review")
+
+    def test_new_claim_current_states_and_stale_bases_prevent_acceptance(self):
+        self.save_correction()
+        review = self.feedback["agentReviews"][1]
+        for status, expected in (("needs-expert", "needs-expert"), ("needs-revision", "needs-revision"),
+                                 ("awaiting-audit", "awaiting-review"), ("rejected", "needs-revision")):
+            with self.subTest(status=status):
+                review["status"] = status
+                self.assertEqual(self.acceptance(), expected)
+        review["status"] = "agent-reviewed"
+        self.feedback["handoffs"][1]["baseStatus"] = "stale"
+        self.assertEqual(self.acceptance(), "stale")
+        review.update(status="modified", modifiedClaim={"assessment": {"presence": "absent"}})
+        self.assertEqual(self.acceptance(), "accepted-reviewed")
+        review.update(status="superseded", supersededBy={"handoffId": "latest", "claimId": "latest-stream"})
+        self.feedback["handoffs"].append({"handoffId": "latest", "baseStatus": "current"})
+        latest = {"handoffId": "latest", "claimId": "latest-stream", "status": "agent-reviewed",
+                  "summary": {"assessment": {"presence": "absent"}}}
+        self.feedback["agentReviews"].append(latest)
+        self.assertEqual(self.acceptance(), "accepted-reviewed")
+        latest["status"] = "needs-expert"
+        self.assertEqual(self.acceptance(), "needs-expert")
+        self.feedback["handoffs"][-1]["baseStatus"] = "stale"
+        self.assertEqual(self.acceptance(), "stale")
+
+    def test_original_claim_checks_remain_required_with_corrected_coverage(self):
+        self.save_correction()
+        original = self.feedback["agentReviews"][0]
+        original["status"] = "needs-expert"
+        self.assertEqual(self.acceptance(), "needs-expert")
+        original["status"] = "needs-revision"
+        self.assertEqual(self.acceptance(), "needs-revision")
+        original["status"] = "agent-reviewed"
+        self.feedback["handoffs"][0]["baseStatus"] = "stale"
+        self.assertEqual(self.acceptance(), "stale")
+
+    def test_new_questions_require_audit_and_remain_unsettled_until_resolved(self):
+        question = {"id": "new-question", "claimIds": ["new"], "text": "Is this sufficient Stream?"}
+        self.labeled["questions"] = [question]
+        self.save_correction()
+        with self.assertRaisesRegex(ValueError, "every new claim and question"):
+            self.acceptance()
+        answer = {"questionId": "new-question", "disposition": "needs-expert", "rationale": "A remaining semantic boundary."}
+        self.audited["questions"] = [answer]
+        self.feedback["handoffs"][1]["questions"] = [question]
+        self.feedback["audits"][0]["questions"] = [answer]
+        self.save_correction()
+        self.assertEqual(self.acceptance(), "needs-expert")
+        self.feedback["agentReviews"][1]["status"] = "accepted"
+        self.assertEqual(self.acceptance(), "accepted-reviewed")
+
+
 class CampaignStopTest(unittest.TestCase):
     def test_user_stop_blocks_run_before_setup_and_keeps_status_available(self):
         with TemporaryDirectory() as temporary:

@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import fcntl
 import gzip
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -18,6 +19,11 @@ REPO = Path(__file__).resolve().parents[1]
 PYTHON = REPO.parent / "Pulsefield-model/.venv/bin/python"
 QUERY_TOOLS = ("annotation-facts.py", "annotation-queries.py", "prepare-query-evidence.py")
 HUMAN_STATES = {"accepted", "modified", "rejected", "deferred"}
+
+spec = importlib.util.spec_from_file_location(
+    "annotation_revision", Path(__file__).with_name("prepare-annotation-revision.py"))
+revision = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(revision)
 
 
 def read(path):
@@ -374,6 +380,115 @@ def chart_acceptance(chart, feedback, handoff):
     return "accepted-reviewed"
 
 
+def pinned_correction_result(path, expected):
+    raw = path.read_bytes()
+    if hashlib.sha256(raw).hexdigest() != expected:
+        raise ValueError(f"Coverage correction artifact changed: {path}")
+    return json.loads(raw)
+
+
+def corrected_coverage_acceptance(root, job, run, chart, feedback, handoff, correction):
+    sha, handoff_id = chart["sourceSha256"], handoff["handoffId"]
+    headers = {h["handoffId"]: h for h in feedback["handoffs"]}
+    original_header = headers[handoff_id]
+    if (correction["sourceSha256"] != sha or feedback["sourceSha256"] != sha
+            or handoff["sourceSha256"] != sha or correction["handoffId"] != handoff_id
+            or correction["handoffSha256"] != original_header["handoffSha256"]
+            or revision.canonical_hashes([handoff])[0] != correction["handoffSha256"]
+            or original_header["foundationSha256"] != handoff["foundationSha256"]
+            or correction["originalAuditorResultSha256"] != run["resultSha256"]):
+        raise ValueError("Coverage correction differs from its original source, handoff or audit pins")
+    pinned_correction_result(job / "result.json", run["resultSha256"])
+    label_job = root / "workers" / f"{run['assignmentId']}-labeler"
+    label_run = read(label_job / "run.json")
+    pinned_correction_result(label_job / "result.json", label_run["resultSha256"])
+    labeler, auditor = [pinned_correction_result(root / correction[key]["path"], correction[key]["sha256"])
+                        for key in ("labelerResult", "auditorResult")]
+    if (labeler["agent"]["producerId"] == auditor["agent"]["producerId"]
+            or auditor["agent"]["reasoningEffort"] != "high"
+            or auditor["inputProvenance"]["labelerResultSha256"] != correction["labelerResult"]["sha256"]
+            or labeler["skill"] != auditor["skill"]):
+        raise ValueError("Coverage correction requires an independent high-effort audit of the pinned labeler result")
+    for result, role in ((labeler, "labeler"), (auditor, "auditor")):
+        if (result["agent"]["role"] != role or not result["agent"]["producerId"].strip()
+                or not result["agent"]["model"].strip()
+                or result["foundationSha256"] != handoff["foundationSha256"]):
+            raise ValueError("Coverage correction worker provenance differs from its role or Foundation")
+        manifest = result["inputProvenance"]["skillManifest"]
+        if manifest["sha256"] != result["skill"]["sha256"]:
+            raise ValueError("Coverage correction skill differs from its frozen manifest")
+        verify_skill((root / manifest["path"]).parent.parent, result["skill"])
+    labeled, audited = [revision.one(result["charts"], "sourceSha256", sha) for result in (labeler, auditor)]
+    if labeled["coverageOrigin"] != {
+            "handoffId": handoff_id, "handoffSha256": correction["handoffSha256"],
+            "auditorResultSha256": run["resultSha256"], "labelerResultSha256": label_run["resultSha256"]}:
+        raise ValueError("Coverage correction does not identify the unchanged original survey and audit")
+    if (not labeled["discoverySummary"].strip() or not labeled["inspectedRanges"]
+            or any(r["endMs"] <= r["startMs"] for r in labeled["inspectedRanges"])
+            or audited["coverageReview"]["outcome"] not in ("supported", "needs-revision")
+            or not audited["coverageReview"]["rationale"].strip()):
+        raise ValueError("Coverage correction requires inspected ranges, discovery explanation and coverage review")
+    claims = {c["id"]: c for c in labeled["claims"]}
+    claim_audits = {c["claimId"]: c for c in audited["claims"]}
+    questions = {q["id"]: q for q in labeled["questions"]}
+    question_audits = {q["questionId"]: q for q in audited["questions"]}
+    links = correction["addedClaims"]
+    if (len(claims) != len(labeled["claims"]) or len(claim_audits) != len(audited["claims"])
+            or set(claims) != set(claim_audits) or len(links) != len(claims)
+            or {link["claimId"] for link in links} != set(claims)
+            or len(questions) != len(labeled["questions"]) or len(question_audits) != len(audited["questions"])
+            or set(questions) != set(question_audits)):
+        raise ValueError("Coverage correction must audit and link every new claim and question exactly once")
+    coverage = audited["coverageReview"]
+    states = [chart_acceptance({**chart, "coverageReview": coverage}, feedback, handoff)]
+    linked_questions = set()
+    for added_id in dict.fromkeys(link["handoffId"] for link in links):
+        header = headers[added_id]
+        added = [link for link in links if link["handoffId"] == added_id]
+        claim_ids = {link["claimId"] for link in added}
+        if (added_id == handoff_id or header["foundationSha256"] != handoff["foundationSha256"]
+                or header["agent"]["producerId"] != labeler["agent"]["producerId"]
+                or header["agent"]["role"] != "labeler" or header["agent"]["skill"] != labeler["skill"]
+                or any(link["handoffSha256"] != header["handoffSha256"] for link in added)):
+            raise ValueError("Coverage correction added handoff differs from its canonical identity or producer")
+        for question in header["questions"]:
+            if questions.get(question["id"]) != question:
+                raise ValueError("Coverage correction question differs from its canonical handoff")
+            linked_questions.add(question["id"])
+        audit_questions = [question_audits[q["id"]] for q in header["questions"]]
+        audits = {a["auditId"] for a in feedback["audits"]
+                  if a["handoffId"] == added_id and a["handoffSha256"] == header["handoffSha256"]
+                  and a["foundationSha256"] == handoff["foundationSha256"]
+                  and a["agent"]["producerId"] == auditor["agent"]["producerId"]
+                  and a["agent"]["role"] == "auditor" and a["agent"]["skill"] == auditor["skill"]
+                  and a["questions"] == audit_questions}
+        reviews = [r for r in feedback["agentReviews"] if r["handoffId"] == added_id]
+        if {r["claimId"] for r in reviews} != claim_ids:
+            states.append("awaiting-review")
+            continue
+        for review in reviews:
+            claim = claims[review["claimId"]]
+            if (any(review["summary"][key] != claim[key]
+                    for key in ("tagId", "scope", "reviewContext", "assessment"))
+                    or review["summary"]["rationale"] != claim["evidence"]["rationale"]):
+                raise ValueError("Coverage correction claim differs from its canonical summary")
+        if any(not any(a["auditId"] in audits and a["result"] == claim_audits[r["claimId"]]
+                       for a in r["audits"]) for r in reviews):
+            states.append("awaiting-review")
+            continue
+        states.append(chart_acceptance(
+            {"coverageReview": coverage, "questions": audit_questions}, feedback,
+            {"handoffId": added_id, "proposals": [{"id": claim_id} for claim_id in claim_ids],
+             "questions": header["questions"]}))
+    if links and linked_questions != set(questions):
+        raise ValueError("Coverage correction questions are missing from its canonical handoffs")
+    if not links:
+        states.append(chart_acceptance(audited, {"agentReviews": [], "handoffs": []},
+                                       {"handoffId": "", "proposals": [], "questions": labeled["questions"]}))
+    return next(state for state in ("stale", "needs-revision", "needs-expert", "awaiting-review", "accepted-reviewed")
+                if state in states)
+
+
 def status(root):
     runs = [read(p) for p in sorted((root / "workers").glob("*/run.json"))]
     chart_statuses = []
@@ -387,8 +502,16 @@ def status(root):
             sha = chart["sourceSha256"]
             feedback = json.loads(gzip.decompress((job / "feedback" / f"{sha}.json.gz").read_bytes()))
             handoff = read(job / "handoffs" / f"{sha}.json")
-            state = chart_acceptance(chart, feedback, handoff)
-            chart_statuses.append({"sourceSha256": sha, "status": state, "handoffId": handoff["handoffId"], "auditor": run["producerId"], "feedbackDocumentVersion": feedback["documentVersion"]})
+            correction_path = root / "controller/coverage-corrections" / f"{handoff['handoffId']}.json"
+            if correction_path.exists():
+                state = corrected_coverage_acceptance(root, job, run, chart, feedback, handoff, read(correction_path))
+            else:
+                state = chart_acceptance(chart, feedback, handoff)
+            entry = {"sourceSha256": sha, "status": state, "handoffId": handoff["handoffId"], "auditor": run["producerId"], "feedbackDocumentVersion": feedback["documentVersion"]}
+            if correction_path.exists():
+                entry["coverageCorrection"] = {"path": str(correction_path.relative_to(root)),
+                                               "sha256": hashlib.sha256(correction_path.read_bytes()).hexdigest()}
+            chart_statuses.append(entry)
     chart_statuses = [c for c in chart_statuses if c["handoffId"] not in superseded]
     if len({c["sourceSha256"] for c in chart_statuses}) != len(chart_statuses):
         raise ValueError("Campaign has competing attempts without an explicit supersession chain")

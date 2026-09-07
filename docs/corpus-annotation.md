@@ -320,6 +320,52 @@ Once the replacement auditor has submitted, the explicit supersession chain choo
 the current attempt for campaign acceptance. Final counts deduplicate by source;
 competing attempts without that chain are an error, not extra completed charts.
 
+For a submitted attempt whose remaining defect is a bounded omission or a factual
+survey correction, retain the original worker results and review only the missing
+windows. After independent review and canonical delivery of any new claims, retain
+an immutable local `controller/coverage-corrections/<originalHandoffId>.json`:
+
+```json
+{
+  "sourceSha256": "SOURCE_SHA",
+  "handoffId": "ORIGINAL_HANDOFF_ID",
+  "handoffSha256": "ORIGINAL_CANONICAL_HANDOFF_SHA",
+  "originalAuditorResultSha256": "ORIGINAL_AUDITOR_FILE_SHA",
+  "labelerResult": { "path": "correction/labeler.json", "sha256": "LABELER_FILE_SHA" },
+  "auditorResult": { "path": "correction/auditor.json", "sha256": "AUDITOR_FILE_SHA" },
+  "addedClaims": [
+    { "handoffId": "NEW_HANDOFF_ID", "handoffSha256": "NEW_CANONICAL_HANDOFF_SHA", "claimId": "NEW_CLAIM_ID" }
+  ]
+}
+```
+
+Paths are campaign-relative or absolute. Both new result files record their actual
+`agent` (`producerId`, `role`, `model`, `reasoningEffort`), matching frozen `skill`,
+unchanged `foundationSha256`, and `inputProvenance.skillManifest` (`path`, `sha256`)
+pointing to `skill/manifest.json`. The auditor must be a different producer at
+`high` effort and pin the exact labeler file in
+`inputProvenance.labelerResultSha256`. The new frozen skill may differ from the old
+run's skill; both histories remain explicit.
+
+Each labeler chart records `sourceSha256`, `coverageOrigin` (`handoffId`,
+`handoffSha256`, `auditorResultSha256`, `labelerResultSha256`), `inspectedRanges`,
+`discoverySummary`, `claims`, and `questions`. The original labeler hash comes from
+the sibling original labeler job and its `run.resultSha256`, for either audit mode.
+`inspectedRanges` contains only the newly inspected windows. Explain the inherited
+survey and the correction separately in `discoverySummary`; an inherited full
+survey is not a new worker's full-source inspection. Each auditor chart retains
+`sourceSha256`, `coverageReview`, and an outcome for every new claim and question.
+`addedClaims` must link every new labeler claim ID to its delivered canonical
+handoff. It may be empty for a factual clarification that adds no semantic claim.
+
+`status` verifies original pins, new artifact hashes, frozen skill files, independent
+audit binding, and canonical claim/audit identities. It replaces only the coverage
+verdict and records the correction path/hash in progress. Original claims and
+questions retain ordinary lineage, human-decision and stale-base checks; every
+added claim and question must also satisfy those checks. A revised coverage review
+that still needs revision cannot complete the chart. This local record does not
+alter the canonical workflow or authorize skipping incomplete coverage.
+
 ## Feedback, acceptance, and checkpointing
 
 The controller uses `GET /api/review/feedback/SOURCE_SHA` for compact machine
