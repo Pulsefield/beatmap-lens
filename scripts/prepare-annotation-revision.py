@@ -50,6 +50,7 @@ const {createServer}=await import(pathToFileURL(require.resolve('vite')).href);
 const server=await createServer({root:process.cwd(),configFile:false,server:{middlewareMode:true,ws:false,watch:null},optimizeDeps:{noDiscovery:true,include:[]}});
 try {
  const {serializeCanonicalJson}=await server.ssrLoadModule('/apps/inspector/src/annotation/canonical-json.ts');
+ process.stdin.setEncoding('utf8');
  let input='';
  for await (const chunk of process.stdin) input+=chunk;
  const packets=JSON.parse(input);
