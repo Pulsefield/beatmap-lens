@@ -108,6 +108,11 @@ The equivalent service command is
 The fixed human page is **http://127.0.0.1:4176/review**. It displays incoming
 expert cases, explicit spot-check requests, ordinary agent review status, and saved
 human responses. Normal review requires no JSON import/export or directory picker.
+The selected chart's left rail shows difficulty-level community tags, per-tag votes,
+their sum, and the dataset snapshot date. The service reads metadata on demand from
+`../Pulsefield-model/dataset`; use `--dataset PATH` for another dataset root. These
+display-only tags are joined by beatmapset and beatmap IDs and are excluded from
+canonical review documents, frozen agent tasks, and agent feedback.
 The service keeps canonical documents in `workflow/*.v2.json` and exchange delivery
 records in `exchange/inbox`, `exchange/receipts`, `exchange/requests`, and
 `exchange/outbox`, within the selected persistent workspace.

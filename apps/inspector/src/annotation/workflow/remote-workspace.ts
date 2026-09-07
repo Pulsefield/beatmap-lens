@@ -3,8 +3,14 @@ import type { AgentReviewV2, AssessmentV2, ReviewBaseV2 } from "./contracts";
 import type { StoredReviewV2, WorkflowDirectoryV2 } from "./directory";
 
 export type ReviewStoreV2 = Omit<WorkflowDirectoryV2, "registerSourceFromApprovedFoundation">;
+export interface CommunityTagMetadata {
+  readonly tags: readonly { readonly id: number; readonly name: string; readonly count: number }[];
+  readonly totalVotes: number;
+  readonly fetchedAt: string;
+}
 export interface RemoteSourceV2 extends StoredReviewV2 {
   readonly sourceBytes: readonly number[];
+  readonly communityTags?: CommunityTagMetadata | null;
 }
 export interface InboxSourceV2 {
   readonly source: SourceIdentityV1;

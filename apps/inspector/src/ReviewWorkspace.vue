@@ -536,6 +536,20 @@ onBeforeUnmount(stashDraft);
         <h2>{{ source.source.title }}</h2>
         <p class="review-copy">{{ source.source.artist }} · {{ source.source.difficulty }}</p>
         <dl class="review-facts"><dt>Beatmapset</dt><dd>{{ source.source.beatmapSetId ?? 'Local' }}</dd><dt>Difficulty</dt><dd>{{ source.source.beatmapId ?? 'Local' }}</dd><dt>Structure</dt><dd>{{ source.source.keyCount }}K · {{ source.source.noteCount }} notes</dd><dt>Source SHA</dt><dd :title="source.source.sha256">{{ source.source.sha256.slice(0, 12) }}</dd><dt>Foundation</dt><dd>{{ activeFoundation.approval.status }}</dd></dl>
+        <section v-if="remoteSource && source.source.sha256 === remoteSource.document.source.sha256" class="review-community" aria-label="Community tags">
+          <h2>Community tags</h2>
+          <template v-if="remoteSource.communityTags">
+            <p class="review-copy">{{ remoteSource.communityTags.totalVotes.toLocaleString() }} total votes · this difficulty</p>
+            <dl v-if="remoteSource.communityTags.tags.length" class="review-community-tags">
+              <template v-for="tag in remoteSource.communityTags.tags" :key="tag.id">
+                <dt>{{ tag.name }}</dt><dd :aria-label="`${tag.count} votes`">{{ tag.count.toLocaleString() }}</dd>
+              </template>
+            </dl>
+            <p v-else class="review-copy">No community tags recorded.</p>
+            <p class="review-community-snapshot">Dataset snapshot · {{ remoteSource.communityTags.fetchedAt.slice(0, 10) }}</p>
+          </template>
+          <p v-else class="review-copy">Community metadata unavailable.</p>
+        </section>
         <label>Human reviewer<input v-model="humanId" autocomplete="off" placeholder="Your reviewer ID"></label>
         <p v-if="remoteSource" class="review-copy">Your saved decision returns to the agent automatically. New arrivals keep your current draft intact.</p>
         <template v-else>
@@ -659,6 +673,10 @@ p { margin: 0; line-height: 1.6; }
 .review-kicker { font: 11px var(--font-data); color: var(--ink-secondary); }
 .review-copy { font-size: 12px; color: var(--ink-secondary); line-height: 1.65; }
 .review-facts { display: grid; grid-template-columns: auto 1fr; gap: 8px; margin: 0; padding: 12px 0; border-block: 1px solid var(--line); font-size: 11px; }
+.review-community { display: grid; gap: 8px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.review-community-tags { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; margin: 4px 0; font-size: 12px; line-height: 1.5; }
+.review-community-tags dt { overflow-wrap: anywhere; }
+.review-community-snapshot { font-size: 11px; color: var(--ink-secondary); }
 dd { margin: 0; text-align: right; font-family: var(--font-data); overflow-wrap: anywhere; }
 .review-preview, .review-timeline { min-width: 0; height: 100dvh; overflow: hidden; }
 .review-timeline { border-left: 1px solid var(--line); }

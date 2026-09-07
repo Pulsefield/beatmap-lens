@@ -67,8 +67,8 @@ async function fixture() {
   return { ...f, workspace, handoff, audit, request, sha: f.inspected.source.sha256 };
 }
 
-async function start(workspace: string) {
-  const service = await startReviewWorkspace({ workspace, port: 0, pollIntervalMs: 25 });
+async function start(workspace: string, dataset?: string) {
+  const service = await startReviewWorkspace({ workspace, dataset, port: 0, pollIntervalMs: 25 });
   let closed = false;
   const close = async () => {
     if (closed) return;
@@ -95,6 +95,95 @@ async function get(url: string, pathname: string) {
 }
 
 describe("local Review service exchange", () => {
+  it("adds difficulty-specific community votes only to the human source response", async () => {
+    const f = await fixture();
+    const dataset = join(f.workspace, "dataset");
+    const service = await start(f.workspace, dataset);
+    expect((await get(service.url, `source/${f.sha}`)).communityTags).toBeNull();
+    const second = await post(service.url, "source", {
+      sourceBytes: Array.from(
+        new TextEncoder().encode(
+          new TextDecoder().decode(f.sourceBytes).replace("BeatmapID: 123", "BeatmapID: 124"),
+        ),
+      ),
+      foundationSourceSha256: f.sha,
+      foundationSha256: f.task.foundationSha256,
+    });
+    expect(second.status).toBe(200);
+    const originalFile = await readFile(join(f.workspace, "workflow", `${f.sha}.v2.json`), "utf8");
+    const task = await get(service.url, `task/${f.sha}`);
+    const feedback = await get(service.url, `feedback/${f.sha}`);
+    const inbox = await get(service.url, "inbox");
+    const fetchedAt = "2026-08-05T08:27:08.166480+00:00";
+    await mkdir(join(dataset, "0/456"), { recursive: true });
+    await mkdir(join(dataset, "metadata"));
+    await writeFile(
+      join(dataset, "0/456/metadata.json"),
+      JSON.stringify({
+        schema_version: 1,
+        id: 456,
+        fetched_at: fetchedAt,
+        tags: {
+          mapper_raw: "Keywords do not count as community votes",
+          related: [
+            { id: 58, name: "sliders/high sv" },
+            { id: 118, name: "style/generic hybrid" },
+          ],
+        },
+        beatmaps: [
+          {
+            id: 123,
+            top_tag_ids: [
+              { tag_id: 58, count: 4 },
+              { tag_id: 118, count: 2 },
+              { tag_id: 111, count: 4 },
+            ],
+          },
+          {
+            id: 124,
+            top_tag_ids: [
+              { tag_id: 111, count: 1 },
+              { tag_id: 118, count: 12 },
+            ],
+          },
+        ],
+      }),
+    );
+    const vocabularyPath = join(dataset, "metadata/osu_tags_2026-08-07.json");
+    await writeFile(
+      vocabularyPath,
+      JSON.stringify({ schema_version: 1, tags: [{ id: 111, name: "skillset/tech" }] }),
+    );
+    const first = await get(service.url, `source/${f.sha}`);
+    expect(first.communityTags).toEqual({
+      tags: [
+        { id: 111, name: "skillset/tech", count: 4 },
+        { id: 58, name: "sliders/high sv", count: 4 },
+        { id: 118, name: "style/generic hybrid", count: 2 },
+      ],
+      totalVotes: 10,
+      fetchedAt,
+    });
+    await rm(vocabularyPath);
+    expect((await get(service.url, `source/${second.value.source.sha256}`)).communityTags).toEqual({
+      tags: [
+        { id: 118, name: "style/generic hybrid", count: 12 },
+        { id: 111, name: "skillset/tech", count: 1 },
+      ],
+      totalVotes: 13,
+      fetchedAt,
+    });
+    expect(first.document).toEqual(f.registered);
+    expect(first.document).not.toHaveProperty("communityTags");
+    expect(await get(service.url, `task/${f.sha}`)).toEqual(task);
+    expect(await get(service.url, `task/${second.value.source.sha256}`)).toEqual(second.value);
+    expect(await get(service.url, `feedback/${f.sha}`)).toEqual(feedback);
+    expect(await get(service.url, "inbox")).toEqual(inbox);
+    expect(await readFile(join(f.workspace, "workflow", `${f.sha}.v2.json`), "utf8")).toBe(
+      originalFile,
+    );
+  }, 10_000);
+
   it("counts explicit human assessments separately from historical uncertain acceptances", async () => {
     const f = await fixture();
     const claim = { ...f.claim, assessment: { presence: "unresolved" as const } };

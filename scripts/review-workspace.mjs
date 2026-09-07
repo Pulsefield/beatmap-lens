@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 import { extname, join, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
+import { createCommunityTagReader } from "./review-community-tags.mjs";
 import { atomicWrite, LocalDirectoryHandle } from "./workflow-local-directory.mjs";
 
 const repo = fileURLToPath(new URL("../", import.meta.url));
@@ -17,6 +18,9 @@ const packetContracts = {
 /** One local writer owns both HTTP commands and filesystem exchange delivery. */
 export async function startReviewWorkspace(options) {
   const workspace = resolve(options.workspace);
+  const communityTags = createCommunityTagReader(
+    resolve(options.dataset ?? join(repo, "../Pulsefield-model/dataset")),
+  );
   const exchange = join(workspace, "exchange");
   const staticRoot = resolve(options.staticRoot ?? join(repo, "apps/inspector/dist"));
   for (const name of ["inbox", "outbox", "receipts", "requests"]) {
@@ -544,6 +548,7 @@ export async function startReviewWorkspace(options) {
         return send(response, 200, {
           ...current.stored,
           sourceBytes: Array.from(current.sourceBytes),
+          communityTags: await communityTags(current.stored.document.source),
         });
       }
       if (action === "task") return send(response, 200, (await source(sha)).task);
@@ -751,17 +756,23 @@ async function readBody(request) {
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const { values } = parseArgs({
-    options: { workspace: { type: "string" }, port: { type: "string" }, help: { type: "boolean" } },
+    options: {
+      workspace: { type: "string" },
+      port: { type: "string" },
+      dataset: { type: "string" },
+      help: { type: "boolean" },
+    },
   });
   if (values.help || !values.workspace) {
     process.stdout.write(
-      "Local Review writer\n  node scripts/review-workspace.mjs --workspace PATH [--port 4176]\n\nOpen /review. Agents submit handoff, audit or review-request packets through\n/api/review/submit or exchange/inbox/*.json, and read exchange/outbox dispositions.\n",
+      "Local Review writer\n  node scripts/review-workspace.mjs --workspace PATH [--port 4176] [--dataset PATH]\n\nOpen /review. Agents submit handoff, audit or review-request packets through\n/api/review/submit or exchange/inbox/*.json, and read exchange/outbox dispositions.\n",
     );
     process.exit(values.help ? 0 : 1);
   }
   const service = await startReviewWorkspace({
     workspace: values.workspace,
     port: values.port ? Number(values.port) : 4176,
+    dataset: values.dataset,
   });
   process.stdout.write(
     `${JSON.stringify({ url: `${service.url}/review`, workspace: resolve(values.workspace) })}\n`,
