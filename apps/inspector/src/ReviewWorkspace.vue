@@ -334,7 +334,7 @@ watch(() => props.remoteSource, async (remote, _previous, onCleanup) => {
       playhead.value = inspected.chart.notes[0]?.startMs ?? 0;
       restoreSection();
       openRequestedClaim();
-      status.value = "Connected to review inbox. Decisions return to the agent automatically.";
+      status.value = "Connected · changes save to workspace";
     } catch (cause) {
       if (!superseded) error.value = cause instanceof Error ? cause.message : String(cause);
     } finally {
@@ -697,8 +697,7 @@ onBeforeUnmount(() => { stashDraft(); playback?.dispose(); });
       <h1>Beatmap Lens</h1>
       <button v-if="remoteSource" type="button" @click="emit('back-to-inbox')">← Back to inbox</button>
       <WorkspaceModeSwitch v-else model-value="review" :disabled="busy || sourceLoading" @update:model-value="emit('change-mode', $event)" />
-      <p class="review-kicker">Agent–human review · V2</p>
-      <p class="review-copy">Partial observations. Each concept has its own evidence and decision.</p>
+
       <template v-if="!remoteSource">
       <label class="review-file">Open .osu difficulties<input type="file" accept=".osu" multiple :disabled="busy || sourceLoading" @change="openFiles"></label>
       <label v-if="files.length > 1">Difficulty<select v-model="selectedFile" :disabled="busy || sourceLoading" @change="changeDifficulty"><option v-for="(file, index) in files" :key="file.name" :value="index">{{ file.name }}</option></select></label>
@@ -708,9 +707,8 @@ onBeforeUnmount(() => { stashDraft(); playback?.dispose(); });
       <template v-if="source">
         <h2>{{ source.source.title }}</h2>
         <p class="review-copy">{{ source.source.artist }} · {{ source.source.difficulty }}</p>
-        <dl class="review-facts"><dt>Beatmapset</dt><dd>{{ source.source.beatmapSetId ?? 'Local' }}</dd><dt>Difficulty</dt><dd>{{ source.source.beatmapId ?? 'Local' }}</dd><dt>Structure</dt><dd>{{ source.source.keyCount }}K · {{ source.source.noteCount }} notes</dd><dt>Source SHA</dt><dd :title="source.source.sha256">{{ source.source.sha256.slice(0, 12) }}</dd><dt>Foundation</dt><dd>{{ activeFoundation.approval.status }}</dd></dl>
-        <section v-if="remoteSource && source.source.sha256 === remoteSource.document.source.sha256" class="review-community" aria-label="Community tags">
-          <h2>Community tags</h2>
+        <details><summary>Chart details</summary><dl class="review-facts"><dt>Beatmapset</dt><dd>{{ source.source.beatmapSetId ?? 'Local' }}</dd><dt>Difficulty</dt><dd>{{ source.source.beatmapId ?? 'Local' }}</dd><dt>Structure</dt><dd>{{ source.source.keyCount }}K · {{ source.source.noteCount }} notes</dd><dt>Source SHA</dt><dd :title="source.source.sha256">{{ source.source.sha256.slice(0, 12) }}</dd><dt>Foundation</dt><dd>{{ activeFoundation.approval.status }}</dd></dl></details>
+        <details v-if="remoteSource && source.source.sha256 === remoteSource.document.source.sha256" class="review-community" aria-label="Community tags" open><summary>Community tags <span v-if="remoteSource.communityTags">· {{ remoteSource.communityTags.tags.length }}</span></summary>
           <template v-if="remoteSource.communityTags">
             <p class="review-copy">{{ remoteSource.communityTags.totalVotes.toLocaleString() }} total votes · this difficulty</p>
             <dl v-if="remoteSource.communityTags.tags.length" class="review-community-tags">
@@ -722,10 +720,9 @@ onBeforeUnmount(() => { stashDraft(); playback?.dispose(); });
             <p class="review-community-snapshot">Dataset snapshot · {{ remoteSource.communityTags.fetchedAt.slice(0, 10) }}</p>
           </template>
           <p v-else class="review-copy">Community metadata unavailable.</p>
-        </section>
+        </details>
         <label>Human reviewer<input v-model="humanId" autocomplete="off" placeholder="Your reviewer ID"></label>
-        <p v-if="remoteSource" class="review-copy">Your saved decision returns to the agent automatically. New arrivals keep your current draft intact.</p>
-        <template v-else>
+        <template v-if="!remoteSource">
         <div class="review-actions"><button type="button" :disabled="busy || sourceLoading || !stored" @click="exportTask">Export frozen task</button><button type="button" :disabled="busy || sourceLoading || !stored" @click="exportDecisions">Export dispositions</button></div>
         <label class="review-file">Import agent handoff<input type="file" accept=".json" :disabled="busy || sourceLoading || !stored" @change="importJson($event, 'handoff')"></label>
         <label class="review-file">Import independent audit<input type="file" accept=".json" :disabled="busy || sourceLoading || !stored" @change="importJson($event, 'audit')"></label>
@@ -761,8 +758,8 @@ onBeforeUnmount(() => { stashDraft(); playback?.dispose(); });
         </div>
         </details>
       </section>
-      <section v-if="document?.observations.length" class="review-section"><h2>Human observations · {{ document.observations.length }}</h2><button v-for="observation in document.observations" :key="observation.id" type="button" class="review-list-row" @click="openObservation(observation.claim)"><span>{{ observation.claim.tagId }}<small>{{ observation.claim.scope.startMs }}–{{ observation.claim.scope.endMs }} ms</small><small>{{ observation.origin.kind === 'direct-human' ? 'Direct human judgment' : 'Proposal decision' }} · {{ observation.confirmedAt }}</small></span><span>{{ assessmentLabel(observation.claim) }}</span></button></section>
-      <p class="review-copy review-legacy">Existing Annotate records retain V1 positive-only semantics. Review V2 writes separate workflow files.</p>
+      <details v-if="document?.observations.length" class="review-section"><summary>Human observations · {{ document.observations.length }}</summary><button v-for="observation in document.observations" :key="observation.id" type="button" class="review-list-row" @click="openObservation(observation.claim)"><span>{{ observation.claim.tagId }}<small>{{ observation.claim.scope.startMs }}–{{ observation.claim.scope.endMs }} ms</small><small>{{ observation.origin.kind === 'direct-human' ? 'Direct human judgment' : 'Proposal decision' }} · {{ observation.confirmedAt }}</small></span><span>{{ assessmentLabel(observation.claim) }}</span></button></details>
+
     </aside>
     <div v-if="source && frame && !calibrationExample" class="review-preview" :class="{ 'mobile-active': mobilePanel === 'preview' }">
       <FallingNoteViewport :annotation-bands="[]" :candidate-note-ids="candidateIds" :chart-artist="source.source.artist" :chart-difficulty="source.source.difficulty" :chart-end-ms="endMs" :chart-title="source.source.title" :frame="frame" :frame-p95-ms="0" :key-count="source.chart.keyCount" :locked="busy" :playhead-ms="playhead" :selected-note-ids="selectedNoteIds" v-bind="selectionBand ? { selectionBand } : {}" :size="size" :visual-speed="speed" @resize="size = $event" @seek="seekPlayhead" @viewport-navigate="seekPlayhead" @note-toggle="toggleNote" @range-start="beginRange($event.anchorMs)" @range-preview="dragRange($event.focusMs)" @range-commit="dragRange($event.focusMs); selectionAnchor = undefined; gestureClaim = undefined" @range-cancel="cancelRange" />
@@ -794,10 +791,10 @@ onBeforeUnmount(() => { stashDraft(); playback?.dispose(); });
             <button type="button" :disabled="transportDisabled || !activeClaim" :aria-pressed="looping" @click="playSelection(true)">Loop <kbd>L</kbd></button>
             <button type="button" :disabled="transportDisabled" :aria-pressed="musicEnabled" @click="toggleMusic">Music {{ musicEnabled ? 'on' : 'off' }}</button>
           </div>
-          <p class="review-copy">{{ audioDescription }}</p>
           <details>
             <summary>Playback settings &amp; zoom</summary>
             <div class="review-playback-settings">
+              <p class="review-copy">{{ audioDescription }}</p>
               <div class="review-controls">
                 <label>Source time · ms<input :value="Math.round(playhead)" type="number" min="0" :max="endMs" @input="seekPlayhead(($event.target as HTMLInputElement).valueAsNumber)"></label>
                 <label>Visual speed<input :value="speed" type="number" min="30" max="2000" step="30" @change="setVisualSpeed"></label>
@@ -817,7 +814,48 @@ onBeforeUnmount(() => { stashDraft(); playback?.dispose(); });
             </div>
           </details>
         </section>
-        <div class="review-actions"><button type="button" :disabled="busy || sourceLoading" @click="newSection">New section at playhead</button><button type="button" :disabled="busy || sourceLoading" @click="restoreSection">Restore section draft</button></div>
+        <div v-if="drafts.length > 1" class="review-assessments"><button v-for="claim in drafts" :key="claim.id" type="button" :class="{ 'is-active': activeClaimId === claim.id }" @click="activeClaimId = claim.id"><span>{{ claim.tagId }}</span><span>{{ claim.assessment.presence === 'present' ? claim.assessment.salience : claim.assessment.presence }}</span></button></div>
+        <p class="review-kicker">{{ editorOrigin === 'proposal' ? 'Agent proposal' : editorOrigin === 'observation' ? 'Saved human observation' : 'Human section draft' }}</p>
+        <template v-if="activeClaim">
+          <section v-if="editorOrigin === 'proposal' && activeReview" class="review-judgment-status">
+            <p class="review-kicker">{{ latestDecision(activeHandoffId, activeClaim.id) }} · <span :title="activeHandoff ? agentVersionLabel(activeHandoff.agent) : ''">version {{ activeHandoff?.agent.skill?.sha256.slice(0, 8) ?? 'unversioned' }}</span></p>
+            <p v-if="activeReview.question">{{ activeReview.question }}</p>
+            <template v-if="activeReview.supersededBy"><p class="review-copy">This proposal has been replaced.</p><button type="button" @click="openQuestion(activeReview.supersededBy.handoffId, activeReview.supersededBy.claimId)">View replacement judgment</button></template>
+          </section>
+          <section v-if="remoteSource && editorOrigin === 'proposal' && !proposalEditing" class="review-section review-proposed-judgment">
+            <h2>{{ activeFoundation.tags.find(tag => tag.id === activeClaim?.tagId)?.displayName }}</h2>
+            <p>{{ activeClaim.assessment.presence }}{{ activeClaim.assessment.presence === 'present' ? ` · ${activeClaim.assessment.salience}` : '' }}</p>
+            <p class="review-kicker">{{ (activeClaim.scope.startMs / 1000).toFixed(3) }}–{{ (activeClaim.scope.endMs / 1000).toFixed(3) }} s</p>
+            <div class="review-actions"><button type="button" @click="focus(activeClaim.scope)">View claim range</button><button type="button" @click="focus(activeClaim.reviewContext)">View context</button></div>
+
+          </section>
+          <template v-else>
+            <WorkflowClaimEditor :model-value="activeClaim" :tags="activeFoundation.tags" :disabled="!canEdit" @update:model-value="updateClaim" @focus="focus" />
+            <details class="review-section"><summary>Choose source-backed evidence</summary><label>Click notes to toggle<select v-model="evidenceMode"><option value="noteRefs">Witness for this claim</option><option value="contextNoteRefs">Necessary context</option></select></label><button type="button" :disabled="!canEdit" @click="selectScopeNotes">Use arrangement in claim scope</button><p class="review-copy">Notes crossing the start retain their original LN start and end. Select witnesses independently for each concept.</p><div class="review-note-list"><label v-for="note in visibleNotes" :key="note.id"><input type="checkbox" :checked="activeClaim.evidence[evidenceMode].some(ref => ref.sourceLine === note.sourceLine)" :disabled="!canEdit" @change="toggleNote(note.id)"><span>L{{ note.sourceLine }} · C{{ note.column + 1 }} · {{ note.startMs }}{{ note.kind === 'long' ? `–${note.endMs}` : '' }} ms</span></label></div><div class="review-actions"><button type="button" :disabled="notePage === 0" @click="notePage--">Previous notes</button><button type="button" :disabled="(notePage + 1) * 80 >= candidateNotes.length" @click="notePage++">Next notes</button></div></details>
+          </template>
+          <button v-if="editorOrigin === 'direct'" class="review-primary" type="button" :disabled="busy || sourceLoading || !stored || !approved || !humanId.trim() || draftIsStale" @click="saveSection">Save section judgments</button>
+          <template v-if="editorOrigin === 'proposal'">
+            <section v-if="finalDecision" class="review-human-result"><h2>Human judgment · {{ finalDecision.disposition }}</h2><template v-if="finalObservation"><p>{{ finalObservation.claim.tagId }} · {{ assessmentLabel(finalObservation.claim) }}</p><button type="button" @click="openObservation(finalObservation.claim)">View saved human judgment</button></template><p v-if="finalDecision.rationale">{{ finalDecision.rationale }}</p></section>
+            <p v-if="uncertainAcceptance" class="review-copy">This historical acceptance kept {{ finalObservation?.claim.assessment.presence }}. It did not decide whether this pattern is present.</p>
+            <p v-if="laterClarification" class="review-copy">Later direct human judgment: {{ assessmentLabel(laterClarification.claim) }} · {{ laterClarification.confirmedAt }}.<button type="button" @click="openObservation(laterClarification.claim)">View human clarification</button></p>
+            <p v-else-if="!finalDecision && !settled(originalProposal)" class="review-copy">This proposal does not decide presence. Choose present with salience or absent in the judgment editor, or defer the review.</p>
+            <template v-if="!finalDecision">
+            <details :key="`${activeHandoffId}:${activeClaim.id}:${proposalEditing}`" class="review-decision-note" :open="proposalEditing"><summary>{{ proposalEditing ? 'Reason for modification' : 'Add a decision note' }}</summary><label>Human decision rationale<textarea v-model="decisionNote" rows="3" placeholder="Optional for confirmation, rejection or deferral. Explain a modification."></textarea></label></details>
+            <div class="review-actions"><button v-if="settled(originalProposal)" type="button" :disabled="busy || sourceLoading || !approved || !humanId.trim() || handoffStatuses[activeHandoffId] === 'stale'" class="review-primary" @click="decide('accepted')">Accept original</button><button v-if="remoteSource && !proposalEditing" type="button" @click="proposalEditing = true">{{ settled(originalProposal) ? 'Modify judgment' : 'Decide judgment' }}</button><button v-else type="button" :disabled="busy || sourceLoading || !approved || !humanId.trim() || !decisionNote.trim() || !settled(activeClaim) || handoffStatuses[activeHandoffId] === 'stale'" class="review-primary" @click="decide('modified')">Save modified</button><button type="button" :disabled="busy || sourceLoading || !humanId.trim()" @click="decide('rejected')">Reject proposal</button><button type="button" :disabled="busy || sourceLoading || !humanId.trim()" @click="decide('deferred')">Defer</button></div>
+            </template>
+            <details v-if="decisionsForClaim.length"><summary>Human decision history · {{ decisionsForClaim.length }}</summary><p v-for="decision in decisionsForClaim" :key="decision.id" class="review-decision">{{ decision.disposition }} · {{ decision.humanId }} · {{ decision.decidedAt }}<br>{{ decision.rationale }}</p></details>
+          </template>
+          <section v-if="editorOrigin === 'proposal' && activeReview" class="review-section review-audit-result">
+            <details><summary>Agent reasoning &amp; provenance</summary>
+            <p v-if="activeHandoff" class="review-copy" :title="activeHandoff.agent.skill?.sha256">Labeler {{ agentVersionLabel(activeHandoff.agent) }}<br>{{ new Date(activeHandoff.createdAt).toLocaleString() }} · {{ activeHandoff.agent.producerId }}</p>
+            <p class="review-copy">{{ activeReview.rationale }}</p>
+            <p class="review-rationale">{{ originalProposal?.evidence.rationale }}</p>
+            </details>
+            <details v-if="activeReview.audits.length"><summary>Independent findings · {{ activeReview.audits.length }}</summary><p v-for="finding in activeReview.audits" :key="finding.auditId" class="review-decision"><strong>{{ finding.producerId }} · {{ finding.result.outcome }}</strong><br><span :title="auditPackets.get(finding.auditId)?.agent.skill?.sha256">Auditor {{ agentVersionLabel(auditPackets.get(finding.auditId)?.agent) }}</span><br>{{ auditPackets.get(finding.auditId)?.createdAt }}<br>{{ finding.result.rationale }}</p></details>
+            <details v-if="relatedReviews.length" class="review-related-history"><summary>Other judgments for this range · {{ relatedReviews.length }}</summary><p class="review-copy">Same label and overlapping ranges. These may be separate submissions; only explicit replacement links establish a revision chain.</p><button v-for="review in relatedReviews" :key="`${review.handoffId}:${review.claimId}`" type="button" @click="openQuestion(review.handoffId, review.claimId)"><span>{{ agentVersionLabel(review.agent) }}<br>{{ review.scope.startMs }}–{{ review.scope.endMs }} ms · {{ review.status }}</span><span>View →</span></button></details>
+          </section>
+        </template>
+        <details class="review-section" :open="!activeClaim"><summary>New section &amp; drafts</summary><div class="review-actions"><button type="button" :disabled="busy || sourceLoading" @click="newSection">New section at playhead</button><button type="button" :disabled="busy || sourceLoading" @click="restoreSection">Restore section draft</button></div></details>
         <p v-if="draftIsStale && editorOrigin === 'direct'" class="review-copy">This draft was based on an earlier saved human review. Compare it with the saved observations before continuing.<button type="button" @click="editorBase = stored?.version; editorReviewRevision = document?.reviewRevision; stashDraft()">I reviewed this draft against the current revision</button></p>
         <details class="review-section"><summary>Foundation · {{ activeFoundation.tags.length }} concepts · {{ activeFoundation.calibrationExamples.length }} examples</summary>
           <p class="review-copy">Section judgments use local definitions. Community correspondences do not establish training equivalence.</p>
@@ -834,44 +872,6 @@ onBeforeUnmount(() => { stashDraft(); playback?.dispose(); });
           <label v-if="!approved" class="review-file">Import calibration Foundation<input type="file" accept=".json" :disabled="busy || sourceLoading || !stored" @change="importJson($event, 'foundation')"></label>
           <button v-if="!approved" type="button" :disabled="busy || sourceLoading || !stored || !humanId.trim() || !activeFoundation.calibrationExamples.length" @click="approveFoundation">Approve these definitions and examples</button>
         </details>
-        <div v-if="drafts.length > 1" class="review-assessments"><button v-for="claim in drafts" :key="claim.id" type="button" :class="{ 'is-active': activeClaimId === claim.id }" @click="activeClaimId = claim.id"><span>{{ claim.tagId }}</span><span>{{ claim.assessment.presence === 'present' ? claim.assessment.salience : claim.assessment.presence }}</span></button></div>
-        <p class="review-kicker">{{ editorOrigin === 'proposal' ? 'Agent proposal · review each claim' : editorOrigin === 'observation' ? 'Saved human observation' : 'Human section draft' }}</p>
-        <template v-if="activeClaim">
-          <section v-if="editorOrigin === 'proposal' && activeReview" class="review-section review-audit-result">
-            <h2>{{ latestDecision(activeHandoffId, activeClaim.id) }}</h2>
-            <p v-if="activeHandoff" class="review-copy" :title="activeHandoff.agent.skill?.sha256">Labeler {{ agentVersionLabel(activeHandoff.agent) }}<br>{{ new Date(activeHandoff.createdAt).toLocaleString() }} · {{ activeHandoff.agent.producerId }}</p>
-            <template v-if="activeReview.supersededBy">
-              <p>This original proposal was replaced by an independently reviewed machine judgment. Its history remains available.</p>
-              <button type="button" @click="openQuestion(activeReview.supersededBy.handoffId, activeReview.supersededBy.claimId)">View replacement judgment</button>
-            </template>
-            <p v-if="activeReview.question">{{ activeReview.question }}</p>
-            <p class="review-copy">{{ activeReview.rationale }}</p>
-            <details v-if="activeReview.audits.length"><summary>Independent findings · {{ activeReview.audits.length }}</summary><p v-for="finding in activeReview.audits" :key="finding.auditId" class="review-decision"><strong>{{ finding.producerId }} · {{ finding.result.outcome }}</strong><br><span :title="auditPackets.get(finding.auditId)?.agent.skill?.sha256">Auditor {{ agentVersionLabel(auditPackets.get(finding.auditId)?.agent) }}</span><br>{{ auditPackets.get(finding.auditId)?.createdAt }}<br>{{ finding.result.rationale }}</p></details>
-            <details v-if="relatedReviews.length" class="review-related-history"><summary>Other judgments for this range · {{ relatedReviews.length }}</summary><p class="review-copy">Same label and overlapping ranges. These may be separate submissions; only explicit replacement links establish a revision chain.</p><button v-for="review in relatedReviews" :key="`${review.handoffId}:${review.claimId}`" type="button" @click="openQuestion(review.handoffId, review.claimId)"><span>{{ agentVersionLabel(review.agent) }}<br>{{ review.scope.startMs }}–{{ review.scope.endMs }} ms · {{ review.status }}</span><span>View →</span></button></details>
-          </section>
-          <section v-if="remoteSource && editorOrigin === 'proposal' && !proposalEditing" class="review-section review-proposed-judgment">
-            <h2>{{ activeFoundation.tags.find(tag => tag.id === activeClaim?.tagId)?.displayName }}</h2>
-            <p>{{ activeClaim.assessment.presence }}{{ activeClaim.assessment.presence === 'present' ? ` · ${activeClaim.assessment.salience}` : '' }}</p>
-            <p class="review-kicker">{{ (activeClaim.scope.startMs / 1000).toFixed(3) }}–{{ (activeClaim.scope.endMs / 1000).toFixed(3) }} s</p>
-            <div class="review-actions"><button type="button" @click="focus(activeClaim.scope)">View claim range</button><button type="button" @click="focus(activeClaim.reviewContext)">View context</button></div>
-            <p class="review-rationale">{{ activeClaim.evidence.rationale }}</p>
-          </section>
-          <template v-else>
-            <WorkflowClaimEditor :model-value="activeClaim" :tags="activeFoundation.tags" :disabled="!canEdit" @update:model-value="updateClaim" @focus="focus" />
-            <details class="review-section"><summary>Choose source-backed evidence</summary><label>Click notes to toggle<select v-model="evidenceMode"><option value="noteRefs">Witness for this claim</option><option value="contextNoteRefs">Necessary context</option></select></label><button type="button" :disabled="!canEdit" @click="selectScopeNotes">Use arrangement in claim scope</button><p class="review-copy">Notes crossing the start retain their original LN start and end. Select witnesses independently for each concept.</p><div class="review-note-list"><label v-for="note in visibleNotes" :key="note.id"><input type="checkbox" :checked="activeClaim.evidence[evidenceMode].some(ref => ref.sourceLine === note.sourceLine)" :disabled="!canEdit" @change="toggleNote(note.id)"><span>L{{ note.sourceLine }} · C{{ note.column + 1 }} · {{ note.startMs }}{{ note.kind === 'long' ? `–${note.endMs}` : '' }} ms</span></label></div><div class="review-actions"><button type="button" :disabled="notePage === 0" @click="notePage--">Previous notes</button><button type="button" :disabled="(notePage + 1) * 80 >= candidateNotes.length" @click="notePage++">Next notes</button></div></details>
-          </template>
-          <button v-if="editorOrigin === 'direct'" class="review-primary" type="button" :disabled="busy || sourceLoading || !stored || !approved || !humanId.trim() || draftIsStale" @click="saveSection">Save section judgments</button>
-          <template v-if="editorOrigin === 'proposal'">
-            <p v-if="uncertainAcceptance" class="review-copy">This historical acceptance kept {{ finalObservation?.claim.assessment.presence }}. It did not decide whether this pattern is present.</p>
-            <p v-if="laterClarification" class="review-copy">Later direct human judgment: {{ assessmentLabel(laterClarification.claim) }} · {{ laterClarification.confirmedAt }}.<button type="button" @click="openObservation(laterClarification.claim)">View human clarification</button></p>
-            <p v-else-if="!finalDecision && !settled(originalProposal)" class="review-copy">This proposal does not decide presence. Choose present with salience or absent in the judgment editor, or defer the review.</p>
-            <template v-if="!finalDecision">
-            <label>Human decision rationale<textarea v-model="decisionNote" rows="3" placeholder="Optional for confirmation, rejection or deferral. Explain a modification."></textarea></label>
-            <div class="review-actions"><button v-if="settled(originalProposal)" type="button" :disabled="busy || sourceLoading || !approved || !humanId.trim() || handoffStatuses[activeHandoffId] === 'stale'" @click="decide('accepted')">Accept original</button><button v-if="remoteSource && !proposalEditing" type="button" @click="proposalEditing = true">{{ settled(originalProposal) ? 'Modify judgment' : 'Decide judgment' }}</button><button v-else type="button" :disabled="busy || sourceLoading || !approved || !humanId.trim() || !decisionNote.trim() || !settled(activeClaim) || handoffStatuses[activeHandoffId] === 'stale'" @click="decide('modified')">Save modified</button><button type="button" :disabled="busy || sourceLoading || !humanId.trim()" @click="decide('rejected')">Reject proposal</button><button type="button" :disabled="busy || sourceLoading || !humanId.trim()" @click="decide('deferred')">Defer</button></div>
-            </template>
-            <p v-for="decision in decisionsForClaim" :key="decision.id" class="review-decision">{{ decision.disposition }} · {{ decision.humanId }} · {{ decision.decidedAt }}<br>{{ decision.rationale }}</p>
-          </template>
-        </template>
       </template>
     </aside>
   </main>
@@ -902,13 +902,13 @@ dd { margin: 0; text-align: right; font-family: var(--font-data); overflow-wrap:
 .review-empty h2 { font-size: 24px; }
 .review-calibration { grid-column: 2 / 4; grid-row: 1; overflow: auto; padding: 24px; display: grid; align-content: start; gap: 16px; }
 .review-calibration > div { width: 100%; }
-button { padding: 8px 12px; border: 0; border-radius: 10px; color: var(--ink); background: var(--surface); box-shadow: var(--shadow-control); text-align: left; cursor: pointer; transition: transform 120ms, background-color 120ms; }
+button { min-height: 40px; padding: 8px 12px; border: 0; border-radius: 10px; color: var(--ink); background: var(--surface); box-shadow: var(--shadow-control); text-align: left; cursor: pointer; transition: transform 120ms, background-color 120ms; }
 button:hover { background: var(--surface-quiet); }
 button:active { transform: scale(.96); }
 button:disabled { opacity: .45; cursor: default; }
 button.review-primary { background: var(--ink); color: white; }
 input, select, textarea { width: 100%; min-width: 0; min-height: 40px; padding: 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-quiet); color: var(--ink); font: inherit; }
-input:focus-visible, select:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+button:focus-visible, summary:focus-visible, textarea:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
 input[type=file] { font-size: 11px; }
 label { display: grid; gap: 6px; font-size: 12px; }
 .review-section { border-top: 1px solid var(--line); padding-top: 16px; }
@@ -936,9 +936,14 @@ summary { min-height: 40px; cursor: pointer; }
 .review-list-row { display: flex; justify-content: space-between; width: 100%; gap: 8px; padding: 12px 0; border-radius: 0; box-shadow: none; border-bottom: 1px solid var(--line); font-size: 11px; }
 .review-list-row small { display: block; padding-top: 4px; color: var(--ink-secondary); font-size: 10px; }
 .review-question { padding: 12px 0; font-size: 12px; }
-.review-proposed-judgment { display: grid; gap: 12px; }
+.review-proposed-judgment { display: grid; gap: 8px; border: 0; padding-top: 0; }
+.review-proposed-judgment h2 { font-size: 22px; }
+.review-human-result { display: grid; gap: 8px; padding-block: 12px; border-block: 1px solid var(--line); }
+.review-judgment-status { display: grid; gap: 8px; }
+.review-audit-result { display: grid; gap: 8px; }
+.review-decision-note summary { font-size: 12px; color: var(--ink-secondary); }
+.review-rail > * { flex-shrink: 0; }
 .review-decision { padding: 12px 0; border-top: 1px solid var(--line); font-size: 12px; }
-.review-legacy { margin-top: auto; }
 .review-mobile-switch { display: none; }
 @media (max-width: 1160px) and (min-width: 921px) { .review-workspace { grid-template-columns: 220px minmax(0, 1fr) 56px 340px; } }
 @media (max-width: 920px) {

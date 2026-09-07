@@ -86,8 +86,8 @@ function mount() {
 }
 
 async function click(container: HTMLElement, label: string) {
-  const button = [...container.querySelectorAll("button")].find((button) =>
-    button.textContent?.includes(label),
+  const button = [...container.querySelectorAll("button")].find(
+    (button) => button.textContent?.includes(label) || button.getAttribute("aria-label") === label,
   );
   expect(button).toBeDefined();
   button?.click();
@@ -195,6 +195,9 @@ describe("machine review sampling", () => {
     );
     const button = container.querySelector(".inbox-history-list button") as HTMLButtonElement;
     expect(button.disabled).toBe(false);
+    expect(button.textContent).toContain("version aaaaaaaa");
+    expect(button.textContent).not.toContain("Labeler");
+    await click(container, "Show provenance");
     expect(button.textContent).toContain("same-name · aaaaaaaa");
     button.click();
     await vi.waitFor(() =>
@@ -206,6 +209,7 @@ describe("machine review sampling", () => {
       "b".repeat(64),
     );
     await click(container, "Sample machine-reviewed sections");
+    expect(container.querySelector("#review-history")).toBeNull();
     container
       .querySelector("form")
       ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
@@ -324,7 +328,7 @@ describe("machine review sampling", () => {
     const selects = container.querySelectorAll("form select");
     await change(selects[0] as HTMLSelectElement, "tech");
     await change(selects[1] as HTMLSelectElement, "prominent");
-    await change(container.querySelector("input") as HTMLInputElement, "2");
+    await change(container.querySelector("form input") as HTMLInputElement, "2");
     container
       .querySelector("form")
       ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));

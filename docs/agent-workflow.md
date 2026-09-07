@@ -300,6 +300,8 @@ and any saved human decision; offline `review-status` exposes the same routing. 
 | `superseded` | Follow `supersededBy` to the current reviewed replacement, which can itself need the expert; retain this row as history. |
 | `needs-revision` | Return the concrete defect to the labeler; submit a new immutable proposal and audit its new content. |
 | `needs-expert` | Present the specific unresolved choice, evidence, and reason to the expert. Conflicting audit outcomes also enter this queue. |
+| `stale` | Read current review state and obtain a fresh task; do not silently rebase an old packet. |
+| `accepted`, `modified`, `rejected`, `deferred` | Follow the recorded human disposition. |
 
 The human Review inbox has separate **Labeler version** and **Auditor version**
 filters for requests, sampling, and history. Each option identifies a frozen skill
@@ -308,7 +310,12 @@ different snapshots. Selecting an auditor finds claims it reviewed without
 recomputing their recorded status from only that auditor's findings. A current
 task base means compatibility with the human review state, not the latest skill.
 
-Use **Browse review history** to search by chart, difficulty, or producer and
+Requests, Sample, and History are separate views. A saved sample offers direct
+continuation, with new-sample settings collapsed. In chart review, the judgment,
+range, version, and decision controls precede expandable reasoning, audit findings,
+and reference material. Saved human judgments remain visible.
+
+Use the **History** view to search by chart, difficulty, or producer and
 filter by status and label. Stale, superseded, and human-decided proposals remain
 openable. A selected result shows the labeler version, individual auditor versions,
 and other judgments for overlapping ranges. Overlap does not imply a replacement;
@@ -318,8 +325,6 @@ Sampling deduplicates identical scoped judgments only within the same labeler an
 auditor version group. Saved samples retain their original version filters;
 changing a filter applies to the next draw. These controls expose existing
 provenance without retiring old claims or changing canonical human decisions.
-| `stale` | Read current review state and obtain a fresh task; do not silently rebase an old packet. |
-| `accepted`, `modified`, `rejected`, `deferred` | Follow the recorded human disposition. |
 
 Machine agreement does not create a human-confirmed observation, approve semantic
 changes, or fill unreviewed dimensions. All agreeing `supported` results produce

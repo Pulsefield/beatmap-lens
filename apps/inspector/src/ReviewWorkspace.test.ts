@@ -87,7 +87,7 @@ describe("ReviewWorkspace mounted workflow", () => {
     );
     (container.querySelector(".review-related-history button") as HTMLButtonElement).click();
     await vi.waitFor(() =>
-      expect(container.querySelector(".review-audit-result > p")?.textContent).toContain(
+      expect(container.querySelector(".review-audit-result details > p")?.textContent).toContain(
         "Labeler same-name · aaaaaaaa",
       ),
     );
@@ -714,8 +714,8 @@ describe("ReviewWorkspace mounted workflow", () => {
       '.claim-fields input[type="number"]',
     );
     await setValue(numberInputs[0], "1100");
-    const observationSection = [...container.querySelectorAll(".review-source section")].find(
-      (section) => section.querySelector("h2")?.textContent?.startsWith("Human observations"),
+    const observationSection = [...container.querySelectorAll(".review-source details")].find(
+      (section) => section.querySelector("summary")?.textContent?.startsWith("Human observations"),
     );
     observationSection?.querySelector<HTMLButtonElement>("button")?.click();
     await nextTick();
