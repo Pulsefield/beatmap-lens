@@ -138,12 +138,13 @@ export interface HandoffV2 {
   readonly createdAt: string;
   readonly agent: AgentProvenanceV2;
   readonly proposals: readonly ClaimV2[];
-  /** Explicit machine revision lineage; takes effect only after independent support. */
+  /** Revision lineage activated by an independent settled judgment or expert referral. */
   readonly supersedes?: readonly {
     readonly handoffId: string;
     readonly handoffSha256: string;
     readonly claimId: string;
     readonly replacementClaimId: string;
+    readonly scopeChangeReason?: string;
   }[];
   readonly audit: readonly {
     readonly id: string;

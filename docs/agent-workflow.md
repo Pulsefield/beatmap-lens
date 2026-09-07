@@ -232,10 +232,17 @@ Repeated imports of identical content do not create duplicates.
 
 A new machine review of an unresolved claim can include `supersedes`, with
 `handoffId`, `handoffSha256`, `claimId`, and `replacementClaimId` for each old/new
-claim pair. The source, Foundation, tag, and complete scope must match. Only one
+claim pair. The source, Foundation, and tag must match. Normally the complete scope
+also matches. A source-backed crop repair must supply `scopeChangeReason` on the
+link and overlap the original scope; the independent auditor reviews the corrected
+crop. Only the new range receives its assessment. Removed or added parts do not
+inherit a separate label, and the invalid original crop remains in history. Only one
 replacement may target a claim; further revisions continue from that replacement.
-The old task stays in the expert queue until the replacement receives consistent
-independent support. Original proposals and audits remain immutable, and the UI
+The old task remains active until independent review either supports the
+replacement or refers its concrete uncertainty to the expert. An audited unresolved
+revision can therefore reopen an earlier machine judgment without keeping that
+judgment eligible as settled supervision or duplicating the expert task.
+Original proposals and audits remain immutable, and the UI
 links their superseded rows to the new judgment. Feedback includes both the exact
 links and the effective `supersededBy` status; consumers follow the chain to its
 current judgment instead of treating `superseded` as a semantic label.
@@ -244,8 +251,8 @@ A recorded human decision cannot be superseded by importing a machine proposal.
 If the human responds while a replacement is being audited, that human decision
 still takes precedence. Human acceptance or modification of a replacement also
 keeps the prior machine task retired; rejection or deferral does not establish a
-settled replacement. A later conflicting audit restores the outstanding machine
-case unless a subsequent, independently supported revision resolves it.
+settled replacement. A later conflicting audit sends the current replacement to
+expert review; its superseded history remains available through the same lineage.
 
 New handoffs and independent audits require claims. A standalone semantic question
 belongs to the curator lane. Historical empty-proposal handoffs remain readable
@@ -285,7 +292,7 @@ and any saved human decision; offline `review-status` exposes the same routing. 
 | --- | --- |
 | `awaiting-audit` | An independent auditor must inspect the proposal. |
 | `agent-reviewed` | Current, settled claim with consistently supported independent audits; retain as machine-reviewed supervision. |
-| `superseded` | Follow `supersededBy` to the current independently supported replacement; retain this row as history. |
+| `superseded` | Follow `supersededBy` to the current reviewed replacement, which can itself need the expert; retain this row as history. |
 | `needs-revision` | Return the concrete defect to the labeler; submit a new immutable proposal and audit its new content. |
 | `needs-expert` | Present the specific unresolved choice, evidence, and reason to the expert. Conflicting audit outcomes also enter this queue. |
 | `stale` | Read current review state and obtain a fresh task; do not silently rebase an old packet. |

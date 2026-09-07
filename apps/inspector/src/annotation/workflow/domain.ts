@@ -288,11 +288,13 @@ export async function validateHandoffV2(input: unknown, task: TaskPacketV2): Pro
       const link = record(
         entry,
         ["handoffId", "handoffSha256", "claimId", "replacementClaimId"],
-        [],
+        ["scopeChangeReason"],
         "supersedes",
       );
       for (const key of ["handoffId", "claimId", "replacementClaimId"])
         nonempty(link[key], `supersedes.${key}`);
+      if ("scopeChangeReason" in link)
+        nonempty(link.scopeChangeReason, "supersedes.scopeChangeReason");
       if (typeof link.handoffSha256 !== "string" || !/^[a-f\d]{64}$/.test(link.handoffSha256))
         throw new Error("Superseded handoff needs its exact SHA-256.");
       if (!claimIds.has(link.replacementClaimId as string))
@@ -790,7 +792,9 @@ export async function readAgentReviewsV2(
         !original ||
         original.decision ||
         !replacement ||
-        !["agent-reviewed", "accepted", "modified", "superseded"].includes(replacement.status)
+        !["agent-reviewed", "needs-expert", "accepted", "modified", "superseded"].includes(
+          replacement.status,
+        )
       )
         continue;
       byKey.set(JSON.stringify([link.handoffId, link.claimId]), {
@@ -826,7 +830,17 @@ function assertSupersessionTargets(prior: ReviewDocumentV2["handoffs"], handoff:
     const next = handoff.proposals.find((claim) => claim.id === link.replacementClaimId);
     if (!previous || !next) throw new Error("Supersession must reference existing claims.");
     equal(previous.tagId, next.tagId, "Supersession must retain the target tag");
-    same(previous.scope, next.scope, "Supersession must judge the complete original scope.");
+    if (
+      previous.scope.startMs !== next.scope.startMs ||
+      previous.scope.endMs !== next.scope.endMs
+    ) {
+      nonempty(link.scopeChangeReason, "Changed scope requires supersedes.scopeChangeReason");
+      if (
+        Math.max(previous.scope.startMs, next.scope.startMs) >=
+        Math.min(previous.scope.endMs, next.scope.endMs)
+      )
+        throw new Error("A scope correction must overlap the original claim.");
+    }
   }
 }
 

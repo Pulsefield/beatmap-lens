@@ -108,9 +108,10 @@ describe("audited machine revisions", () => {
     });
     const conflict = await importAuditV2(audited.document, conflicted, f.sourceBytes);
     expect((await readAgentReviewsV2(conflict.document)).map((row) => row.status)).toEqual([
-      "needs-expert",
+      "superseded",
       "needs-expert",
     ]);
+    expect(await readExpertQueueV2(conflict.document)).toHaveLength(1);
   });
 
   it("does not let a new machine judgment supersede a human decision", async () => {
@@ -146,14 +147,61 @@ describe("audited machine revisions", () => {
     expect(await assertReviewDocumentV2(audited.document, f.sourceBytes)).toEqual(audited.document);
   });
 
-  it("requires the original hash and the complete same-target scope", async () => {
+  it("reopens a machine judgment after new calibration without retaining a second expert task", async () => {
+    const f = await fixture();
+    const imported = await importHandoffV2(f.reviewed, f.replacement, f.sourceBytes);
+    const supported = await importAuditV2(imported.document, f.replacementAudit, f.sourceBytes);
+    const uncertain = await sealHandoffV2(f.task, {
+      ...f.input,
+      handoffId: "reopened-handoff",
+      proposals: [{ ...f.claim, id: "reopened-claim", assessment: { presence: "unresolved" } }],
+      supersedes: [
+        {
+          handoffId: f.replacement.handoffId,
+          handoffSha256: await hashWorkflowValueV2(f.replacement),
+          claimId: "revised-claim",
+          replacementClaimId: "reopened-claim",
+        },
+      ],
+    });
+    const reopened = await importHandoffV2(supported.document, uncertain, f.sourceBytes);
+    expect((await readAgentReviewsV2(reopened.document))[1]?.status).toBe("agent-reviewed");
+    const audit = await sealAuditV2(f.task, uncertain, {
+      auditId: "reopening-audit",
+      createdAt: NOW,
+      agent: { producerId: "reopening-auditor", role: "auditor" },
+      claims: [
+        {
+          claimId: "reopened-claim",
+          outcome: "needs-expert",
+          rationale: "New expert calibration removes the earlier confident discriminator.",
+          expertReason: "semantic-boundary",
+          question: "Does the changing pace still express this target?",
+        },
+      ],
+      questions: [],
+    });
+    const reviewed = await importAuditV2(reopened.document, audit, f.sourceBytes);
+    expect((await readAgentReviewsV2(reviewed.document)).map((row) => row.status)).toEqual([
+      "superseded",
+      "superseded",
+      "needs-expert",
+    ]);
+    expect(await readExpertQueueV2(reviewed.document)).toHaveLength(1);
+    expect(await assertReviewDocumentV2(reviewed.document, f.sourceBytes)).toEqual(
+      reviewed.document,
+    );
+    expect(reviewed.document.observations).toEqual([]);
+  });
+
+  it("requires the original hash and an explicit reason for correcting the scope", async () => {
     const f = await fixture();
     const expanded = await sealHandoffV2(f.task, {
       ...f.input,
       proposals: [{ ...f.claim, id: "revised-claim", scope: { startMs: 900, endMs: 1800 } }],
     });
     await expect(importHandoffV2(f.reviewed, expanded, f.sourceBytes)).rejects.toThrow(
-      "complete original scope",
+      "scopeChangeReason",
     );
     const wrongHash = await sealHandoffV2(f.task, {
       ...f.input,
@@ -168,6 +216,23 @@ describe("audited machine revisions", () => {
     });
     await expect(importHandoffV2(f.reviewed, wrongHash, f.sourceBytes)).rejects.toThrow(
       "hash differs",
+    );
+    const correction = await sealHandoffV2(f.task, {
+      ...f.input,
+      proposals: expanded.proposals,
+      supersedes: f.input.supersedes.map((link) => ({
+        ...link,
+        scopeChangeReason: "Include the earlier attack and complete the described episode.",
+      })),
+    });
+    const imported = await importHandoffV2(f.reviewed, correction, f.sourceBytes);
+    expect(await readExpertQueueV2(imported.document)).toHaveLength(1);
+    expect(imported.document.handoffs.at(-1)?.handoff.proposals[0]?.scope).toEqual({
+      startMs: 900,
+      endMs: 1800,
+    });
+    expect(await assertReviewDocumentV2(imported.document, f.sourceBytes)).toEqual(
+      imported.document,
     );
   });
 
