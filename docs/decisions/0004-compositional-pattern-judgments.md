@@ -68,7 +68,7 @@ does not approve additions or remove existing records.
 | Jack, trill, roll | Temporal relationships | Expert examples supplied; no exhaustive subtype theory inferred |
 | Minijack, longjack | Extent-sensitive jack forms | Expert supplied two attacks and at least four fast even attacks respectively |
 | Jumpstream, jumptrill, long jump jack, chordjack | Distinguishable local organizations / compounds | Reviewed distinctions supplied; chordjack anchor boundary pending |
-| Stream organization | The later four-dimension calibration includes jumpstream and roll/burst and excludes the reviewed grouped jumpdrill | Local pilot interpretation approved; historical narrower criticism remains in its original record |
+| Stream organization | The later four-dimension calibration includes jumpstream and roll/burst and excludes the reviewed grouped jumptrill | Local pilot interpretation approved; historical narrower criticism remains in its original record |
 | Roll/burst | Four-note directional groups with equal adjacent spacing and no chord bridge between bursts; burst is the faster description | Three or more consecutive complete groups establish local prominent Stream organization; no numerical speed threshold supplied |
 | Tech | Tricky, expectation-disrupting organization | Four-dimension local definition and reviewed positive/negative approved |
 | LN coordination, LN release, LN inverse | Related, independently judged hold organizations | Preserve expert distinctions and weak examples |

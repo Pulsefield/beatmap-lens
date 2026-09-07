@@ -51,17 +51,17 @@ class SupersessionAcceptanceTest(unittest.TestCase):
     def setUp(self):
         self.chart = {"coverageReview": {"outcome": "supported"},
                       "questions": [{"questionId": "old-question", "disposition": "needs-expert"}]}
-        self.handoff = {"handoffId": "original", "proposals": [{"id": "drill"}, {"id": "ln"}],
-                        "questions": [{"id": "old-question", "claimIds": ["drill"]}]}
+        self.handoff = {"handoffId": "original", "proposals": [{"id": "trill"}, {"id": "ln"}],
+                        "questions": [{"id": "old-question", "claimIds": ["trill"]}]}
         self.feedback = {"handoffs": [{"handoffId": "original", "baseStatus": "current"},
                                       {"handoffId": "replacement", "baseStatus": "current"}],
                          "agentReviews": [
-                             {"handoffId": "original", "claimId": "drill", "status": "superseded",
+                             {"handoffId": "original", "claimId": "trill", "status": "superseded",
                               "summary": {"assessment": {"presence": "unresolved"}},
-                              "supersededBy": {"handoffId": "replacement", "claimId": "new-drill"}},
+                              "supersededBy": {"handoffId": "replacement", "claimId": "new-trill"}},
                              {"handoffId": "original", "claimId": "ln", "status": "agent-reviewed",
                               "summary": {"assessment": {"presence": "absent"}}},
-                             {"handoffId": "replacement", "claimId": "new-drill", "status": "agent-reviewed",
+                             {"handoffId": "replacement", "claimId": "new-trill", "status": "agent-reviewed",
                               "summary": {"assessment": {"presence": "present", "salience": "prominent"}}}]}
 
     def acceptance(self):
@@ -78,9 +78,9 @@ class SupersessionAcceptanceTest(unittest.TestCase):
         self.assertEqual(self.acceptance(), "needs-expert")
 
     def test_linear_chain_uses_the_terminal_review_and_keeps_coverage_requirement(self):
-        self.feedback["agentReviews"][2].update(status="superseded", supersededBy={"handoffId": "final", "claimId": "final-drill"})
+        self.feedback["agentReviews"][2].update(status="superseded", supersededBy={"handoffId": "final", "claimId": "final-trill"})
         self.feedback["handoffs"].append({"handoffId": "final", "baseStatus": "current"})
-        self.feedback["agentReviews"].append({"handoffId": "final", "claimId": "final-drill", "status": "agent-reviewed",
+        self.feedback["agentReviews"].append({"handoffId": "final", "claimId": "final-trill", "status": "agent-reviewed",
                                                "summary": {"assessment": {"presence": "absent"}}})
         self.assertEqual(self.acceptance(), "accepted-reviewed")
         self.chart["coverageReview"]["outcome"] = "needs-revision"
@@ -437,7 +437,7 @@ class QueryFirstJobTest(unittest.TestCase):
         self.skill = {"name": "fixture-skill", "version": "frozen-test",
                       "sha256": hashlib.sha256((self.common / "skill/manifest.json").read_bytes()).hexdigest()}
         campaign.write(self.common / "skill-provenance.json", self.skill)
-        campaign.write(self.common / "foundation.json", {"tags": [{"id": "drill"}]})
+        campaign.write(self.common / "foundation.json", {"tags": [{"id": "trill"}]})
         for role in ("labeler", "auditor"):
             (self.common / "roles" / f"{role}.md").write_text(f"Frozen {role} for current targets.\n")
         for name in campaign.QUERY_TOOLS:
@@ -465,7 +465,7 @@ class QueryFirstJobTest(unittest.TestCase):
                    "assessment": {"presence": "present", "salience": "prominent"},
                    "rationale": "Old machine conclusion must not anchor a new run."}
         self.decision = {"id": "human-rejection", "humanId": "expert", "disposition": "rejected",
-                         "rationale": "Typical drill; retain this exact human correction."}
+                         "rationale": "Typical trill; retain this exact human correction."}
         self.direct = {"id": "direct-expert", "foundationSha256": "a" * 64,
                        "humanId": "expert", "confirmedAt": "2026-09-05T01:00:00Z",
                        "origin": {"kind": "direct-human"}, "summary": summary}
@@ -605,7 +605,7 @@ class QueryFirstJobTest(unittest.TestCase):
         note = json.loads((campaign.REPO / "scripts/fixtures/pattern-queries-reviewed.json").read_text())["cases"][0]["notes"][0]
         reference = {"column": note["column"], "startMs": note["start_ms"], "endMs": note["end_ms"],
                      "sourceLine": note["source_line"], "kind": note["kind"]}
-        claim = {"id": "drill", "sectionId": "alternation", "tagId": "drill-organization",
+        claim = {"id": "trill", "sectionId": "alternation", "tagId": "trill-organization",
                  "scope": {"startMs": 259802, "endMs": 260766},
                  "reviewContext": {"startMs": 259802, "endMs": 260766},
                  "assessment": {"presence": "present", "salience": "prominent"},
@@ -669,7 +669,7 @@ class QueryFirstJobTest(unittest.TestCase):
         (job / "events.jsonl").write_text('{"type":"turn.completed"}\n')
         result = {"skill": self.skill, "charts": [{"sourceSha256": self.sha,
             "coverageReview": {"outcome": "needs-revision", "rationale": "Submitted declaration lacks sufficient representative evidence."},
-            "claims": [{"claimId": "drill", "outcome": "needs-revision", "rationale": "Provide the other alternating rows."}], "questions": []}]}
+            "claims": [{"claimId": "trill", "outcome": "needs-revision", "rationale": "Provide the other alternating rows."}], "questions": []}]}
         campaign.write(job / "result.json", result)
         with patch.object(campaign, "exchange") as exchange:
             campaign.complete(self.root, job, Mock(returncode=0))
@@ -699,7 +699,7 @@ class QueryFirstJobTest(unittest.TestCase):
         campaign.write(auditor / "run.json", run)
         chart_result = {"sourceSha256": self.sha,
                         "coverageReview": {"outcome": "supported", "rationale": "Submitted coverage reviewed."},
-                        "claims": [{"claimId": "drill", "outcome": "needs-revision", "rationale": "Add decisive rows."}],
+                        "claims": [{"claimId": "trill", "outcome": "needs-revision", "rationale": "Add decisive rows."}],
                         "questions": []}
         campaign.write(auditor / "result.json", {"skill": self.skill, "charts": [chart_result]})
         spec = importlib.util.spec_from_file_location("revision", campaign.REPO / "scripts/prepare-annotation-revision.py")
@@ -753,7 +753,7 @@ class QueryFirstJobTest(unittest.TestCase):
         (snapshot / "check-annotation-result.py").write_bytes(
             (campaign.REPO / "scripts/check-annotation-result.py").read_bytes())
         campaign.write(snapshot / "foundation.json", {"tags": [{"id": tag} for tag in
-            ("jack-organization", "stream-organization", "drill-organization", "tech", "ln-coordination")]})
+            ("jack-organization", "stream-organization", "trill-organization", "tech", "ln-coordination")]})
         self.config["workerCommonPath"] = snapshot.name
         campaign.write(self.root / "controller/config.json", self.config)
         job = self.setup()

@@ -8,7 +8,7 @@ that 500 charts have been annotated or accepted. Read the persisted campaign sta
 for completed work.
 
 The current five-target campaign collects source-backed sections under the approved
-Jack organization, Stream organization, Drill organization, Tech, and LN coordination
+Jack organization, Stream organization, Trill organization, Tech, and LN coordination
 Foundation. The original four-target campaign remains preserved separately.
 Labelers must perform full-chart structural discovery; representative section
 collection does not claim exhaustive semantic labeling of every instant or dimension.
@@ -182,7 +182,7 @@ but it does not become a new human-confirmed observation merely by being reused.
 selected existing source-backed human calibration examples and full provenance.
 Its separate `--approve` operation binds the exact prepared-file hash and explicit
 authorization before initializing the new workspace and exporting its seed task.
-It never overwrites the old workspace or invents a Drill salience example.
+It never overwrites the old workspace or invents a Trill salience example.
 
 For query-first jobs, freeze `annotation-facts.py`, `annotation-queries.py`,
 `prepare-query-evidence.py`, `check-annotation-result.py`, the skill tree/manifest, Foundation view and

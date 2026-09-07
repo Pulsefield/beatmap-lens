@@ -19,7 +19,7 @@ const tags: readonly FoundationTagV2[] = [
       ...sharedCues,
     ],
     exclusionCues: [
-      "Pure fixed, disjoint A/B Drill with no repeated columns between adjacent attack rows is broad Jack absent, even though each column returns two rows later.",
+      "Pure fixed, disjoint A/B Trill with no repeated columns between adjacent attack rows is broad Jack absent, even though each column returns two rows later.",
       "An isolated repetition does not automatically establish prominent Jack organization across a larger section.",
       "Density, chord size, or a gameplay difficulty estimate is insufficient by itself.",
     ],
@@ -40,13 +40,13 @@ const tags: readonly FoundationTagV2[] = [
     exclusionCues: [
       "A roll-group count does not automatically establish prominent Stream organization; no numerical count-to-salience rule is supplied for this pilot.",
       "Continuous activity, density, or fixed-group A/B alternation alone is insufficient to establish flowing Stream organization.",
-      "The reviewed pure left/right-pair and crossed-pair Drill episodes are Stream absent. Do not extend a Stream scope through them simply because the surrounding crop has continuous activity.",
+      "The reviewed pure left/right-pair and crossed-pair Trill episodes are Stream absent. Do not extend a Stream scope through them simply because the surrounding crop has continuous activity.",
     ],
     communityAlignments: [],
   },
   {
-    id: "drill-organization",
-    displayName: "Drill organization",
+    id: "trill-organization",
+    displayName: "Trill organization",
     definition:
       "Two fixed, disjoint column groups repeatedly alternate A/B/A/B within the local episode. Each group may be a single key or a chord; both same-hand and cross-hand alternation are included.",
     inclusionCues: [
@@ -55,9 +55,9 @@ const tags: readonly FoundationTagV2[] = [
       ...sharedCues,
     ],
     exclusionCues: [
-      "Four A/B/A/B attack rows alone are insufficient to establish Drill presence.",
+      "Four A/B/A/B attack rows alone are insufficient to establish Trill presence.",
       "Changing group membership, overlapping groups, or repeated attacks on only one group do not by themselves establish this fixed, disjoint A/B organization.",
-      "A hand switch alone does not establish Drill, and same-hand organization does not exclude it.",
+      "A hand switch alone does not establish Trill, and same-hand organization does not exclude it.",
     ],
     communityAlignments: [],
   },

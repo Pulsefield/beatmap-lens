@@ -41,7 +41,7 @@
       "exactObservationSha256": "3687cc9a060053aadf3764397f3bbb2890ca0750ec6e42ebe946792af053a8a5",
       "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
       "confirmedAt": "2026-09-07T03:43:40.566Z",
-      "humanRationale": "easy to read and play, highly recognizable drill+jack, not tech",
+      "humanRationale": "easy to read and play, highly recognizable trill+jack, not tech",
       "humanRationaleSource": "decision.rationale"
     },
     {
@@ -54,7 +54,7 @@
         "endMs": 360600,
         "startMs": 358900
       },
-      "tagId": "drill-organization",
+      "tagId": "trill-organization",
       "assessment": {
         "presence": "absent"
       },
@@ -62,7 +62,7 @@
       "exactObservationSha256": "cd36a047a928feb6300e36cddaf45e8a51400d821b9a6a02a8f713436383cc9a",
       "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
       "confirmedAt": "2026-09-07T02:14:03.414Z",
-      "humanRationale": "This is definitely not drill because context is highly stream.",
+      "humanRationale": "This is definitely not trill because context is highly stream.",
       "humanRationaleSource": "decision.rationale"
     },
     {
@@ -75,7 +75,7 @@
         "endMs": 49200,
         "startMs": 46800
       },
-      "tagId": "drill-organization",
+      "tagId": "trill-organization",
       "assessment": {
         "presence": "present",
         "salience": "supporting"
@@ -84,7 +84,7 @@
       "exactObservationSha256": "bdf2ca33399aa7ef2bd6f3ee2c224a9e83d6fe7e3d3a2a2b38fb45cfc15b4570",
       "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
       "confirmedAt": "2026-09-07T02:04:16.140Z",
-      "humanRationale": "not typical 1-1 2-2 drill but regular alternation supports weak drill",
+      "humanRationale": "not typical 1-1 2-2 trill but regular alternation supports weak trill",
       "humanRationaleSource": "decision.rationale"
     },
     {
@@ -97,7 +97,7 @@
         "endMs": 64017,
         "startMs": 61210
       },
-      "tagId": "drill-organization",
+      "tagId": "trill-organization",
       "assessment": {
         "presence": "absent"
       },
@@ -105,7 +105,7 @@
       "exactObservationSha256": "fbc5fc1c5eca888fcb6db90a04f818b2ed97256df95d50a33c9f5de6b95932c4",
       "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
       "confirmedAt": "2026-09-07T02:27:13.708Z",
-      "humanRationale": "slow rate compared to whole map + LN mixed, do not think it's drill",
+      "humanRationale": "slow rate compared to whole map + LN mixed, do not think it's trill",
       "humanRationaleSource": "decision.rationale"
     },
     {
@@ -118,7 +118,7 @@
         "endMs": 67274,
         "startMs": 65632
       },
-      "tagId": "drill-organization",
+      "tagId": "trill-organization",
       "assessment": {
         "presence": "absent"
       },
@@ -126,7 +126,7 @@
       "exactObservationSha256": "099b6750654cdc3dcdea27c51df6f7af6bb5fa800af5f0a1743561af30e2e209",
       "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
       "confirmedAt": "2026-09-07T03:24:35.139Z",
-      "humanRationale": "3 rows with even gap, not typical drill",
+      "humanRationale": "3 rows with even gap, not typical trill",
       "humanRationaleSource": "decision.rationale"
     },
     {
@@ -160,7 +160,7 @@
         "endMs": 49237,
         "startMs": 47661
       },
-      "tagId": "drill-organization",
+      "tagId": "trill-organization",
       "assessment": {
         "presence": "present",
         "salience": "supporting"
@@ -169,7 +169,7 @@
       "exactObservationSha256": "bdcedb58b738e06b77f716134690fee367fe7c9b92894a991a653b4a7de409bc",
       "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
       "confirmedAt": "2026-09-07T03:24:59.141Z",
-      "humanRationale": "weak drill",
+      "humanRationale": "weak trill",
       "humanRationaleSource": "decision.rationale"
     },
     {
@@ -182,7 +182,7 @@
         "endMs": 25480,
         "startMs": 23472
       },
-      "tagId": "drill-organization",
+      "tagId": "trill-organization",
       "assessment": {
         "presence": "present",
         "salience": "supporting"
@@ -191,7 +191,7 @@
       "exactObservationSha256": "d925bb4b996a9a015d3969b38729f3ff8ca352c17577bb959a6a95bddc8e3cfd",
       "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
       "confirmedAt": "2026-09-07T02:13:14.310Z",
-      "humanRationale": "This is weak drill, because LN randomly involved, this will affect gameplay experience a little.",
+      "humanRationale": "This is weak trill, because LN randomly involved, this will affect gameplay experience a little.",
       "humanRationaleSource": "decision.rationale"
     },
     {
@@ -204,7 +204,7 @@
         "endMs": 69402,
         "startMs": 68140
       },
-      "tagId": "drill-organization",
+      "tagId": "trill-organization",
       "assessment": {
         "presence": "present",
         "salience": "prominent"
@@ -213,7 +213,7 @@
       "exactObservationSha256": "7095b7193339b8a9fe330c429be1b69d2d7e620076e0803371adc699dd200e83",
       "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
       "confirmedAt": "2026-09-07T02:10:47.718Z",
-      "humanRationale": "this is a clearly seperated drill section with 5 rows.",
+      "humanRationale": "this is a clearly seperated trill section with 5 rows.",
       "humanRationaleSource": "decision.rationale"
     },
     {
@@ -226,7 +226,7 @@
         "endMs": 114400,
         "startMs": 112600
       },
-      "tagId": "drill-organization",
+      "tagId": "trill-organization",
       "assessment": {
         "presence": "present",
         "salience": "prominent"
@@ -235,7 +235,7 @@
       "exactObservationSha256": "4dd9812883aca1c35419f2c8acc13d625419d758d77a1eba4fa1c596df10b648",
       "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
       "confirmedAt": "2026-09-07T03:26:32.504Z",
-      "humanRationale": "according to context we can see 2-3 row alternation lasted for long, it's drill.",
+      "humanRationale": "according to context we can see 2-3 row alternation lasted for long, it's trill.",
       "humanRationaleSource": "decision.rationale"
     },
     {
@@ -248,7 +248,7 @@
         "endMs": 126785,
         "startMs": 125168
       },
-      "tagId": "drill-organization",
+      "tagId": "trill-organization",
       "assessment": {
         "presence": "present",
         "salience": "supporting"
@@ -257,7 +257,7 @@
       "exactObservationSha256": "b8ad83ca5096dd52b63df0d7b42234dadd42c750a875577b46d9dbd9d4fbdff3",
       "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
       "confirmedAt": "2026-09-07T02:24:14.755Z",
-      "humanRationale": "only 6 notes and starting by an end in stream, but still challenges drill ability.",
+      "humanRationale": "only 6 notes and starting by an end in stream, but still challenges trill ability.",
       "humanRationaleSource": "decision.rationale"
     },
     {
@@ -270,7 +270,7 @@
         "endMs": 79252,
         "startMs": 77725
       },
-      "tagId": "drill-organization",
+      "tagId": "trill-organization",
       "assessment": {
         "presence": "absent"
       },
@@ -278,7 +278,7 @@
       "exactObservationSha256": "99f56049b70825bfbbc5aace8c6cc9cbf382aad54c9fb4f8fc035f57fe2e1656",
       "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
       "confirmedAt": "2026-09-07T02:40:11.507Z",
-      "humanRationale": "notes in lane 2 plays like modifier, uneven gap, end of the section mixed style with stream. not drill.",
+      "humanRationale": "notes in lane 2 plays like modifier, uneven gap, end of the section mixed style with stream. not trill.",
       "humanRationaleSource": "decision.rationale"
     },
     {
@@ -291,7 +291,7 @@
         "endMs": 306114,
         "startMs": 304864
       },
-      "tagId": "drill-organization",
+      "tagId": "trill-organization",
       "assessment": {
         "presence": "present",
         "salience": "supporting"
@@ -300,7 +300,7 @@
       "exactObservationSha256": "c8ff73292a08b46a3f065389c9e4b5fe042586e4ce653299a2f86a10c86ed877",
       "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
       "confirmedAt": "2026-09-07T02:25:34.958Z",
-      "humanRationale": "breif drill",
+      "humanRationale": "breif trill",
       "humanRationaleSource": "decision.rationale"
     },
     {
@@ -313,7 +313,7 @@
         "endMs": 21200,
         "startMs": 19300
       },
-      "tagId": "drill-organization",
+      "tagId": "trill-organization",
       "assessment": {
         "presence": "present",
         "salience": "supporting"
@@ -322,7 +322,7 @@
       "exactObservationSha256": "dade58b8ef9c864f4eed4f3aca3cef782c39a78de3980b1a9a80aeb492df080d",
       "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
       "confirmedAt": "2026-09-07T02:29:17.732Z",
-      "humanRationale": "drill notes look sparse but difficulty is OK compared to whole map; clear start and end boundary with not other style mixed; weak drill",
+      "humanRationale": "trill notes look sparse but difficulty is OK compared to whole map; clear start and end boundary with not other style mixed; weak trill",
       "humanRationaleSource": "decision.rationale"
     },
     {
@@ -335,7 +335,7 @@
         "endMs": 102748,
         "startMs": 100073
       },
-      "tagId": "drill-organization",
+      "tagId": "trill-organization",
       "assessment": {
         "presence": "present",
         "salience": "prominent"
@@ -344,7 +344,7 @@
       "exactObservationSha256": "0ea4ef793af5e7649ef28951707f8b15da4cf84108615a2b3547e70eb31e20fb",
       "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
       "confirmedAt": "2026-09-07T02:21:44.660Z",
-      "humanRationale": "typical drill with inner/outer alternation",
+      "humanRationale": "typical trill with inner/outer alternation",
       "humanRationaleSource": "decision.rationale"
     },
     {
@@ -357,7 +357,7 @@
         "endMs": 162842,
         "startMs": 160671
       },
-      "tagId": "drill-organization",
+      "tagId": "trill-organization",
       "assessment": {
         "presence": "absent"
       },
@@ -365,7 +365,7 @@
       "exactObservationSha256": "fa0175687df2b24f7ede053126091df796eb9c6df3a1eef4f925e3f446571478",
       "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
       "confirmedAt": "2026-09-07T02:15:35.661Z",
-      "humanRationale": "interrupted rhythmic spacing, not drill",
+      "humanRationale": "interrupted rhythmic spacing, not trill",
       "humanRationaleSource": "decision.rationale"
     },
     {
@@ -378,7 +378,7 @@
         "endMs": 94396,
         "startMs": 92848
       },
-      "tagId": "drill-organization",
+      "tagId": "trill-organization",
       "assessment": {
         "presence": "present",
         "salience": "prominent"
@@ -387,7 +387,7 @@
       "exactObservationSha256": "0cb3da28e27705026872ae21fc6657d8db9c0da94a9d556175a30dac235cf7ca",
       "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
       "confirmedAt": "2026-09-07T02:14:41.391Z",
-      "humanRationale": "6 rows with regular alternation, typical drill",
+      "humanRationale": "6 rows with regular alternation, typical trill",
       "humanRationaleSource": "decision.rationale"
     },
     {
@@ -400,7 +400,7 @@
         "endMs": 84400,
         "startMs": 83600
       },
-      "tagId": "drill-organization",
+      "tagId": "trill-organization",
       "assessment": {
         "presence": "present",
         "salience": "supporting"
@@ -409,7 +409,7 @@
       "exactObservationSha256": "1a391c99d147e4d89c5d0fb5a2907483c5bfc23ecf1a024615ae9c6905895483",
       "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
       "confirmedAt": "2026-09-07T02:51:04.006Z",
-      "humanRationale": "small drill",
+      "humanRationale": "small trill",
       "humanRationaleSource": "decision.rationale"
     },
     {
@@ -422,7 +422,7 @@
         "endMs": 28602,
         "startMs": 27335
       },
-      "tagId": "drill-organization",
+      "tagId": "trill-organization",
       "assessment": {
         "presence": "present",
         "salience": "supporting"
@@ -431,7 +431,7 @@
       "exactObservationSha256": "9b1d56af333a051bdf40a1e789872db4967b79ad0c80f88c813f2b9c23900e06",
       "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
       "confirmedAt": "2026-09-07T02:38:16.461Z",
-      "humanRationale": "mini drill",
+      "humanRationale": "mini trill",
       "humanRationaleSource": "decision.rationale"
     },
     {
@@ -444,7 +444,7 @@
         "endMs": 29500,
         "startMs": 28600
       },
-      "tagId": "drill-organization",
+      "tagId": "trill-organization",
       "assessment": {
         "presence": "present",
         "salience": "supporting"
@@ -453,7 +453,7 @@
       "exactObservationSha256": "3a1f5c790926974cb1d661ecd00a44826c2a451857ef93c52ea364978f7dc288",
       "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
       "confirmedAt": "2026-09-07T02:25:06.374Z",
-      "humanRationale": "small brief drill.",
+      "humanRationale": "small brief trill.",
       "humanRationaleSource": "decision.rationale"
     },
     {
@@ -487,7 +487,7 @@
         "endMs": 196922,
         "startMs": 195559
       },
-      "tagId": "drill-organization",
+      "tagId": "trill-organization",
       "assessment": {
         "presence": "absent"
       },
@@ -495,7 +495,7 @@
       "exactObservationSha256": "e6b90c1e0a4280259b3311d3f1f567ffc5d1ce4018ab4ea18b19739e3fd7d7e3",
       "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
       "confirmedAt": "2026-09-07T02:37:40.930Z",
-      "humanRationale": "I don't think it's drill though drill-like LN start+TAP, the length is too short and LN plays like stream.",
+      "humanRationale": "I don't think it's trill though trill-like LN start+TAP, the length is too short and LN plays like stream.",
       "humanRationaleSource": "decision.rationale"
     },
     {
@@ -508,7 +508,7 @@
         "endMs": 123173,
         "startMs": 121806
       },
-      "tagId": "drill-organization",
+      "tagId": "trill-organization",
       "assessment": {
         "presence": "present",
         "salience": "prominent"
@@ -517,7 +517,7 @@
       "exactObservationSha256": "a526863ec98d8ff3fc426d954885173e8ed8a7f9586a12c90b1f92c38179a664",
       "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
       "confirmedAt": "2026-09-07T02:43:46.873Z",
-      "humanRationale": "gaps are same, typical drill",
+      "humanRationale": "gaps are same, typical trill",
       "humanRationaleSource": "decision.rationale"
     },
     {
@@ -551,7 +551,7 @@
         "endMs": 285150,
         "startMs": 284300
       },
-      "tagId": "drill-organization",
+      "tagId": "trill-organization",
       "assessment": {
         "presence": "present",
         "salience": "supporting"
@@ -560,7 +560,7 @@
       "exactObservationSha256": "211a9c9679533cdbc06b37fa8b1be315c885f09b157baf9b046b79ae373f66dc",
       "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
       "confirmedAt": "2026-09-07T02:19:53.181Z",
-      "humanRationale": "only 5 rows and 1-2 placement, weak drill",
+      "humanRationale": "only 5 rows and 1-2 placement, weak trill",
       "humanRationaleSource": "decision.rationale"
     },
     {
@@ -616,7 +616,7 @@
         "endMs": 1268962,
         "startMs": 1267400
       },
-      "tagId": "drill-organization",
+      "tagId": "trill-organization",
       "assessment": {
         "presence": "present",
         "salience": "prominent"
@@ -625,7 +625,7 @@
       "exactObservationSha256": "2f66b30c1890bb40838767b96f0fff1cb455283b810c8b4ae4ed9dde6ff1db9d",
       "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
       "confirmedAt": "2026-09-07T02:18:58.261Z",
-      "humanRationale": "typical drill",
+      "humanRationale": "typical trill",
       "humanRationaleSource": "decision.rationale"
     },
     {
@@ -681,7 +681,7 @@
         "endMs": 19478,
         "startMs": 13738
       },
-      "tagId": "drill-organization",
+      "tagId": "trill-organization",
       "assessment": {
         "presence": "present",
         "salience": "prominent"
@@ -690,7 +690,7 @@
       "exactObservationSha256": "0c48d551338fd69dc5671c0bafba6c4d175cd59842ae251837fef64c8fbbf0e6",
       "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
       "confirmedAt": "2026-09-07T03:53:20.482Z",
-      "humanRationale": "explicit drill, many rows.",
+      "humanRationale": "explicit trill, many rows.",
       "humanRationaleSource": "decision.rationale"
     },
     {
@@ -756,7 +756,7 @@
       "exactObservationSha256": "2022ecb38016469cf2883bb8fc53b37d47f62da98eb923fac109f17c53cc019e",
       "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
       "confirmedAt": "2026-09-07T03:49:38.968Z",
-      "humanRationale": "This is very typical drill, but LN coordination skill does play a part here, 2 lane occupied. Weak ln coordination perhaps.",
+      "humanRationale": "This is very typical trill, but LN coordination skill does play a part here, 2 lane occupied. Weak ln coordination perhaps.",
       "humanRationaleSource": "decision.rationale"
     },
     {
@@ -769,7 +769,7 @@
         "endMs": 462600,
         "startMs": 447900
       },
-      "tagId": "drill-organization",
+      "tagId": "trill-organization",
       "assessment": {
         "presence": "present",
         "salience": "supporting"
@@ -778,7 +778,7 @@
       "exactObservationSha256": "582707a1849df8893f8db39d1aacbef8e165e47d67652a58d72ebc54484e084d",
       "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
       "confirmedAt": "2026-09-07T03:57:00.017Z",
-      "humanRationale": "slow drill",
+      "humanRationale": "slow trill",
       "humanRationaleSource": "decision.rationale"
     },
     {
@@ -791,7 +791,7 @@
         "endMs": 128838,
         "startMs": 121438
       },
-      "tagId": "drill-organization",
+      "tagId": "trill-organization",
       "assessment": {
         "presence": "present",
         "salience": "prominent"
@@ -800,7 +800,7 @@
       "exactObservationSha256": "5769f11a71fc714ace8417d2cc87d9f30a71be4590a9ec4925bdb0e87c290c02",
       "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
       "confirmedAt": "2026-09-07T03:28:13.561Z",
-      "humanRationale": "typical drill, though gap is long but the pattern repeats very many times.",
+      "humanRationale": "typical trill, though gap is long but the pattern repeats very many times.",
       "humanRationaleSource": "decision.rationale"
     },
     {
@@ -813,7 +813,7 @@
         "endMs": 59824,
         "startMs": 58114
       },
-      "tagId": "drill-organization",
+      "tagId": "trill-organization",
       "assessment": {
         "presence": "present",
         "salience": "supporting"
@@ -822,7 +822,7 @@
       "exactObservationSha256": "536a7c7811b0bddd0186b203480b46a4458b4970e8cb8a002c583553ac637699",
       "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
       "confirmedAt": "2026-09-07T03:27:26.044Z",
-      "humanRationale": "minidrill, start boundary is clear.",
+      "humanRationale": "minitrill, start boundary is clear.",
       "humanRationaleSource": "decision.rationale"
     },
     {
@@ -877,7 +877,7 @@
         "endMs": 5402,
         "startMs": 3652
       },
-      "tagId": "drill-organization",
+      "tagId": "trill-organization",
       "assessment": {
         "presence": "absent"
       },
@@ -885,7 +885,7 @@
       "exactObservationSha256": "a7f102515e83fa69567a6132c9b116566930f02c31a2810fe5ec3c7707820746",
       "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
       "confirmedAt": "2026-09-07T02:41:08.226Z",
-      "humanRationale": "modifier like single note, uneven gap, not drill",
+      "humanRationale": "modifier like single note, uneven gap, not trill",
       "humanRationaleSource": "decision.rationale"
     },
     {

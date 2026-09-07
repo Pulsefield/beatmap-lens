@@ -107,7 +107,7 @@ class ResultPreflightTest(unittest.TestCase):
         second = self.add_parquet(next(case for case in CASES if case["id"] == "cyber-four-directional-groups"))
         write(self.job / "assignment.json", {"charts": [self.assigned, second]})
         self.result["skill"] = {**self.skill, "version": "different"}
-        self.claim.update(tagId="drill", noteLines=[], reviewContext={"startMs": 50804, "endMs": 51030})
+        self.claim.update(tagId="trill", noteLines=[], reviewContext={"startMs": 50804, "endMs": 51030})
         self.chart["inspectedRanges"] = [{"startMs": 49664, "endMs": 50500}, {"startMs": 50501, "endMs": 51254}]
         self.chart["questions"] = [{"id": "question", "claimIds": ["missing"], "text": "A concrete question."}]
         self.result["charts"] += [copy.deepcopy(self.chart), {"sourceSha256": "not-assigned"}]

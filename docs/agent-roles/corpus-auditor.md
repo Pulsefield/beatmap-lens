@@ -10,7 +10,7 @@ Read the frozen skill and check its version in `skill-provenance.json`. Independ
 inspect every claim's full scope and necessary context against the Parquet rows.
 Check the inference as well as source references. A shared column alone does not
 prove a chordjack episode; activity alone does not establish Stream organization;
-grouped left/right jumpdrill is Stream absent; Tech needs particular disruption;
+grouped left/right jumptrill is Stream absent; Tech needs particular disruption;
 LN coordination needs concrete independent occupancy/control relationships.
 
 Return ordinary source, scope, or reasoning defects as `needs-revision`, with an

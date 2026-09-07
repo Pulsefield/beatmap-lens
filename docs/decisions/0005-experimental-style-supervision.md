@@ -8,7 +8,7 @@
   `docs/formulation/notation.md` sections 8–9
 
 The subsequent corpus round was stopped for skill revision. See
-[decision 0006](0006-query-assisted-style-recognition.md) for the added Drill target
+[decision 0006](0006-query-assisted-style-recognition.md) for the added Trill target
 and the expert's updated separation of roll prominence from Stream strength.
 This document preserves the original four-dimension pilot and its approval history.
 
@@ -62,13 +62,13 @@ alignments are separate, unapproved decisions.
 | Section predicate | Approved local interpretation | Role in the experiment |
 | --- | --- | --- |
 | Jack organization | Repeated-column organization includes the reviewed fixed-group long jump jack and typical changing-chord jack/chordjack; the latter is not longjack. | Test recognizable reuse organization across different rates and densities without losing subtype distinctions in evidence. |
-| Stream organization | Includes reviewed jumpstream and roll/burst; excludes the reviewed left/right grouped jumpdrill. Preserve flow direction and episode changes. | Test sustained flow without treating all ongoing tapping as the same style. |
+| Stream organization | Includes reviewed jumpstream and roll/burst; excludes the reviewed left/right grouped jumptrill. Preserve flow direction and episode changes. | Test sustained flow without treating all ongoing tapping as the same style. |
 | Tech | Which locally understandable expectations are disrupted by timing, added/omitted attacks, or articulation? | Test a mapper concept that is not a residual class or density score. |
 | LN coordination | How do independent presses, releases, and taps interact with occupied columns? | Include a case where entering holds and event history can matter. |
 
 The expert accepted the fixed-group long jump jack as prominent broad Jack
 organization and its precise proposed scope. The reviewed no-jack interval remains
-absent. The jumpstream scope was accepted, the grouped jumpdrill was explicitly
+absent. The jumpstream scope was accepted, the grouped jumptrill was explicitly
 Stream absent ("salience 0"), and roll/burst was confirmed Stream present. The
 subsequent exact-four-notes and three-consecutive-groups criterion resolves the
 source-backed roll example to prominent. The Tech
@@ -88,7 +88,7 @@ that derivation without inventing a general timing tolerance. A direction change
 alone does not assign salience. A few recognized minijacks likewise do not by
 themselves establish a prominent jack-organized section.
 
-Jump, hand, minijack, long jump jack, chordjack, grouped jumpdrill, roll, burst, and LN
+Jump, hand, minijack, long jump jack, chordjack, grouped jumptrill, roll, burst, and LN
 release remain available in evidence explanations. Retaining a description does
 not require creating another manually supervised output coordinate. Conversely,
 existing reviewed observations are not deleted merely because an experiment omits

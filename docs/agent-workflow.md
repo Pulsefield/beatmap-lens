@@ -62,10 +62,10 @@ human-confirmed observations.
 The first pilot used Jack organization, Stream organization, Tech, and LN
 coordination. The user approved the four-dimension Foundation and the ten reviewed
 calibration cases with explicit corrections. Revision 2 includes roll/burst in
-Stream organization and excludes the reviewed grouped jumpdrill; three consecutive
+Stream organization and excludes the reviewed grouped jumptrill; three consecutive
 complete four-note directional roll groups establish prominent roll structure,
 without automatically establishing prominent Stream style. The current
-[V2 corpus campaign](corpus-annotation.md) adds approved Drill organization as its
+[V2 corpus campaign](corpus-annotation.md) adds approved Trill organization as its
 fifth section target. Each task retains its actual frozen Foundation. Community
 whole-difficulty target selection and alignments remain separate proposals. Its
 [`experimental-campaign.ts`](../apps/inspector/src/annotation/workflow/experimental-campaign.ts)

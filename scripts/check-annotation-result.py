@@ -15,7 +15,7 @@ import sys
 import pyarrow.parquet as pq
 
 
-TAGS = {"jack-organization", "stream-organization", "drill-organization", "tech", "ln-coordination"}
+TAGS = {"jack-organization", "stream-organization", "trill-organization", "tech", "ln-coordination"}
 NOTE_COLUMNS = ["source_line", "column", "kind", "start_ms", "end_ms"]
 
 

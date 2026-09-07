@@ -1,6 +1,6 @@
 # Query-assisted recognition after corpus feedback
 
-- Status: Campaign stopped; Drill scope and roll/Stream distinction approved;
+- Status: Campaign stopped; Trill scope and roll/Stream distinction approved;
   five-target Foundation and query-to-label mappings under calibration
 - Date: 2026-09-05
 
@@ -10,7 +10,7 @@ was over-interpreted, and rhythmic variation prompted too many Tech questions.
 Running a large-model labeler and auditor on every simple factual relationship
 did not resolve these semantic boundaries efficiently.
 
-The user stopped the annotation agents and requested a revised skill, Drill as
+The user stopped the annotation agents and requested a revised skill, Trill as
 an additional section target, and high-precision queries for simple patterns.
 The existing 500-chart inputs, submitted packets, human feedback, and worker
 provenance remain intact. The dispatcher and its scheduled continuation are
@@ -20,14 +20,14 @@ paused; this decision does not authorize an automatic restart.
 
 Use three distinct decisions: source structure, pattern interpretation, and the
 strength of each section-style target. The new experimental set is Jack, Stream,
-Drill, Tech, and LN coordination. Chord arity, rate, repeat count, and roll direction
+Trill, Tech, and LN coordination. Chord arity, rate, repeat count, and roll direction
 remain computed evidence instead of extra manually labeled coordinates.
 
-The expert approved Drill as continuing A↔B alternation of two fixed disjoint
+The expert approved Trill as continuing A↔B alternation of two fixed disjoint
 groups. A group may be a single key or chord; same-hand and cross-hand cases are
 included. This covers both the original left/right pairs and the crossed pairs
 reviewed in Memoria. Presence also depends on speed and sustained extent; four
-alternating attacks alone are insufficient. Pure disjoint Drill without adjacent
+alternating attacks alone are insufficient. Pure disjoint Trill without adjacent
 same-column repetition is Jack absent, despite every column's periodic return.
 Numerical sufficient conditions for query-only presence/strength need calibration.
 
@@ -68,7 +68,7 @@ editor, schema redesign, or new Inspector flow is needed.
 The intended cheapest annotation method is a deterministic rule that directly
 outputs supported presence/salience, with zero false positives as its acceptance
 requirement. Selected witnesses need not include every note in a crop, but unused
-notes must be checked for counterevidence: selecting A out of A↔B Drill cannot
+notes must be checked for counterevidence: selecting A out of A↔B Trill cannot
 manufacture Jack. Uncertain selection, scope, or salience goes to an agent; only
 remaining semantic uncertainty goes to the expert.
 

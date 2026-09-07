@@ -16,7 +16,7 @@ per-tag judgments. Read the [shared workflow](../agent-workflow.md) and
    tags suggest candidates but do not prove section labels. Discovery does not
    require human-selected windows or exhaustive labeling.
 2. Locate organization and changes before choosing scopes. Reviewed jumpstream and
-   roll/burst support Stream organization; grouped jumpdrill does not. Preserve
+   roll/burst support Stream organization; grouped jumptrill does not. Preserve
    those episodes, entering holds, and intervening rows. Bounded evidence exports
    can help inspect a neighborhood without changing the full task.
 3. Create at least one claim in `proposals`, with identity, scope, context,

@@ -8,7 +8,7 @@ import { createExperimentalFoundationV2 } from "./experimental-campaign";
 import { createQueryPilotFoundationV2 } from "./query-campaign";
 import { NOW } from "./test-fixtures";
 
-it("represents unresolved Drill in a separate proposed pilot without changing or inheriting the historical Foundation", async () => {
+it("represents unresolved Trill in a separate proposed pilot without changing or inheriting the historical Foundation", async () => {
   const historical = createExperimentalFoundationV2(NOW);
   const historicalBytes = serializeCanonicalJson(historical);
   const foundation = await assertFoundationV2(createQueryPilotFoundationV2(NOW));
@@ -19,7 +19,7 @@ it("represents unresolved Drill in a separate proposed pilot without changing or
   expect(foundation.tags.map((tag) => tag.id)).toEqual([
     "jack-organization",
     "stream-organization",
-    "drill-organization",
+    "trill-organization",
     "tech",
     "ln-coordination",
   ]);
@@ -51,7 +51,7 @@ CircleSize: 4
   const notes = createStableNoteRefsV1(chart);
   const claim: ClaimV2 = {
     id: "fixed-groups",
-    tagId: "drill-organization",
+    tagId: "trill-organization",
     scope: { startMs: 1000, endMs: 1601 },
     reviewContext: { startMs: 0, endMs: 1601 },
     assessment: { presence: "unresolved" },
@@ -59,7 +59,7 @@ CircleSize: 4
       noteRefs: notes,
       contextNoteRefs: [],
       rationale:
-        "Fixed disjoint groups {1,2} and {3,4} alternate A/B/A/B. These four rows alone do not settle Drill presence; speed and duration also require judgment.",
+        "Fixed disjoint groups {1,2} and {3,4} alternate A/B/A/B. These four rows alone do not settle Trill presence; speed and duration also require judgment.",
     },
   };
   expect(() => assertClaimV2(claim, notes, foundation)).not.toThrow();

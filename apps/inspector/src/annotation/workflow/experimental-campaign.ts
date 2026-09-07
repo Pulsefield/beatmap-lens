@@ -22,7 +22,7 @@ const tags: readonly FoundationTagV2[] = [
     id: "stream-organization",
     displayName: "Stream organization",
     definition:
-      "A local judgment of recognizable flowing note motion, including jumpstream and directional roll/burst organization. Interpret incorporated jumps and short-LN articulation within the flow, preserve changes of organization and direction, and exclude the reviewed left/right two-hand grouped alternation called jumpdrill by the expert.",
+      "A local judgment of recognizable flowing note motion, including jumpstream and directional roll/burst organization. Interpret incorporated jumps and short-LN articulation within the flow, preserve changes of organization and direction, and exclude the reviewed left/right two-hand grouped alternation called jumptrill by the expert.",
     inclusionCues: [
       "The reviewed jumpstream and directional roll/burst episodes are positive Stream organization examples; explain the flow rather than relying on continuous activity.",
       "Inspect continuation, chord placement, rhythm, and resets, retaining complete short-LN source occupancy.",
@@ -31,7 +31,7 @@ const tags: readonly FoundationTagV2[] = [
     ],
     exclusionCues: [
       "Continuous activity or a large note count alone does not establish the semantic organization.",
-      "The reviewed alternating left/right two-key groups are jumpdrill and explicitly Stream absent. The expert's salience 0 is represented as absence, not a new numerical salience level.",
+      "The reviewed alternating left/right two-key groups are jumptrill and explicitly Stream absent. The expert's salience 0 is represented as absence, not a new numerical salience level.",
       "Do not extend a reviewed stream scope across different episodes merely because the display crop includes them.",
       "This local concept is not automatically the catalogue's skillset/streams definition or a union of every tapping pattern.",
     ],

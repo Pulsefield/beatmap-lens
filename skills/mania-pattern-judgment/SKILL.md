@@ -8,7 +8,7 @@ description: Judge local osu!mania patterns from source structure and expert-cal
 Judge the arrangement before choosing a tag. This revision incorporates the
 2026-09-05 pilot and subsequent corpus reviews, primarily on 4K examples. It is local
 guidance, not a claim that every community uses these terms identically. The current
-V2 campaign uses Jack, Stream, Tech, LN coordination, and Drill organization. Read
+V2 campaign uses Jack, Stream, Tech, LN coordination, and Trill organization. Read
 the task's actual frozen Foundation; editing this skill does not change its approval
 or silently update old worker copies.
 
@@ -41,8 +41,8 @@ receive supporting Stream; detecting occupied columns does not establish LN coor
   lengths and intervals, complete hold occupancy, release order, and rhythm resets.
   Preserve short LNs as LNs even when their role feels like extended taps.
 - Locate changes in organization before assigning scope. Jumpstream, grouped
-  jumpdrill, and rolls are distinct episodes. In the approved four-dimension pilot,
-  the reviewed jumpdrill is Stream absent while jumpstream and roll/burst are
+  jumptrill, and rolls are distinct episodes. In the approved four-dimension pilot,
+  the reviewed jumptrill is Stream absent while jumpstream and roll/burst are
   Stream positives; continuous activity does not bridge the intervening negative.
 - Compose a description from chord size, temporal relationship, repetition extent,
   rhythm, and hold/release organization. Do not classify every repeated chord as

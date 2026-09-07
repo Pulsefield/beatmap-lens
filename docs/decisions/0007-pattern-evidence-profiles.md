@@ -26,7 +26,7 @@ uniform penalty for every note outside a selected core:
 
 - An extra simultaneous key can decorate a repeated two-key jack core without
   breaking it. Preserve both the core and the extra key.
-- Alternating disjoint groups are affirmative Drill evidence. Projecting onto
+- Alternating disjoint groups are affirmative Trill evidence. Projecting onto
   one group and treating the other as a small penalty would manufacture Jack.
 - A changed row can mark a new local episode instead of weakening the preceding
   one. Retain the alternative boundary; do not average successive patterns into
@@ -51,7 +51,7 @@ does not measure style expression. Preserve raw counts and timing rather than
 inventing a 0–100 strength scale or penalty weights before calibration.
 
 Targets are assessed independently; there is no softmax requiring their scores
-to sum to one. A fixed A/B explanation of a pure Drill episode can contradict
+to sum to one. A fixed A/B explanation of a pure Trill episode can contradict
 Jack or Stream there, while other independently sourced targets may coexist.
 Candidate boundaries and selected notes are part of the evidence, not a fixed
 window containing every note by definition.

@@ -91,7 +91,7 @@ that interruption instead of joining two runs through it.
 The expert corrected an extended candidate into initial jumpstream, later
 grouped alternation, and directional rolls with a reversal. The later Foundation
 review explicitly included roll/burst in Stream organization and excluded the
-grouped alternation, called jumpdrill in that review. Calling the entire crop
+grouped alternation, called jumptrill in that review. Calling the entire crop
 uniformly jumpstream or stream remains wrong because it crosses the excluded
 episode. Different local witnesses somewhere inside a crop do not prove that
 every label characterizes the whole crop.
@@ -111,7 +111,7 @@ A pattern's witnesses need not be every note in the time crop. The repeated
 two-key core of a long jump jack can remain intact when some rows add a third key.
 Select that core and retain the added notes as context. Selection is part of the
 query's declared meaning, not permission to hide contradictory events. In
-particular, projecting pure A↔B drill onto A alone must not manufacture a jack.
+particular, projecting pure A↔B trill onto A alone must not manufacture a jack.
 Check the unused notes and hand uncertain interference to an agent.
 
 The expert does not give blanket permission or prohibition for skipping an
@@ -136,26 +136,26 @@ The expert described them as taps held a little longer. This interprets their ro
 their source kind, duration, occupancy, and release remain LN facts. Do not erase
 them, replace them with taps, or assume that LN presence requires an LN-focused label.
 
-### Grouped jumpdrill (previously described as jumptrill)
+### Grouped jumptrill
 
 In the reviewed 4K example, left two keys and right two keys repeatedly alternate
-as groups. The expert called this jumpdrill in the final calibration and explicitly
+as groups. The expert called this jumptrill in the final calibration and explicitly
 judged Stream absent, using "salience 0". Record that as absence under the current
 contract, not as a numerical salience extension. The sequence
 `{1,2} → {3,4} → {1,2} → {3,4}` shows the distinction better than a note count.
-This example establishes grouped alternation; do not infer that jumpdrill and
-jumptrill are universal synonyms or invent every possible trill variant from it.
-Keep the older wording in historical proposals and identify the revised local term.
+This example establishes grouped alternation; do not infer every possible trill
+variant from it. The expert's terminology correction uses Trill for the local
+target and jumptrill for this grouped example.
 
 The later Memoria review extends the concrete counterexamples to crossed pairs:
 `{1,3} ↔ {0,2}` in **zero-based source columns**, at 259802–260766 ms, is
-Stream absent; the expert identifies clear alternation as drill evidence.
+Stream absent; the expert identifies clear alternation as trill evidence.
 The grouping need not be the two physical hands to produce this countercase.
-Panic's 75150–77354 ms alternation is also explicitly described as typical drill
+Panic's 75150–77354 ms alternation is also explicitly described as typical trill
 despite changing attack spacing. Do not require literally constant source-ms gaps
 just to recognize its alternating structure.
 
-The expert approved Drill organization for the V2 inventory: two fixed,
+The expert approved Trill organization for the V2 inventory: two fixed,
 non-overlapping key groups continuously alternate A↔B. Either group can be a
 single key or a chord, and same-hand and cross-hand arrangements are included.
 The expert explicitly requires both speed and sustained extent when deciding
@@ -165,7 +165,7 @@ rate or duration cutoff follows. Recognized
 alternation is not a universal veto on Stream or
 Tech in a larger mixed section. Keep the actual episode and both groups visible.
 
-Pure fixed disjoint A↔B Drill, without adjacent attack rows repeating a column,
+Pure fixed disjoint A↔B Trill, without adjacent attack rows repeating a column,
 is explicitly **broad Jack absent**. A key returning every second row does not
 establish jack organization in this arrangement. This negative requires the
 complete surrounding sequence; it cannot be inferred from a selected subset alone.
@@ -180,14 +180,14 @@ The [September 7 expert decisions](expert-review-20260907.json) distinguish:
   **supporting** in its chart context. A slow, LN-mixed passage
   (`078a8fc61280`, 61710–63517 ms) is **absent**. Do not extrapolate either
   decision into an absolute BPM cutoff or judge whole-map pace from an unseen chart.
-- A six-note drill at a stream ending (`226e157b7535`, 125768–126136 ms)
+- A six-note trill at a stream ending (`226e157b7535`, 125768–126136 ms)
   is **supporting**, while an embedded stream-like crop (`04c92e42f99b`,
-  359532–360380 ms) is **absent**. Context can reveal a separate brief drill or
+  359532–360380 ms) is **absent**. Context can reveal a separate brief trill or
   show that selected alternation is incidental; "next to stream" is not a veto.
 - Uneven spacing with modifier-like singletons and stream mixing
   (`2868257fc0e9`, 78075–78902 ms; `fdfabdf721d3`, 4152–4902 ms) is
   **absent**. Explain those roles using all rows. Uneven spacing alone is not a
-  veto, as the earlier Panic judgment shows. Short LNs can preserve a weak drill
+  veto, as the earlier Panic judgment shows. Short LNs can preserve a weak trill
   (`1cbae1c465a1`, 24072–24880 ms), but can also articulate a stream-like passage
   (`53a1d6a2186d`, 195959–196922 ms).
 
@@ -195,9 +195,9 @@ Five further decisions during the September 7 refinement sharpen these compariso
 
 - `e613eacc59db`, 122038–128238 ms, is **prominent**: the expert accepts the
   many repetitions despite long gaps. Its 16 fixed crossed-pair rows are 400 ms
-  apart. A slow pulse alone cannot veto Drill or restrict it to supporting.
+  apart. A slow pulse alone cannot veto Trill or restrict it to supporting.
 - `080a2de5d981`, 66132–66774 ms, is **absent**. The expert identifies only three
-  evenly spaced rows, rather than a typical drill across the whole crop. The
+  evenly spaced rows, rather than a typical trill across the whole crop. The
   source has 171/171/85/86/128-ms gaps; merely grouping its six alternating attack
   rows does not establish one coherent episode. Preserve this local decision
   alongside Panic; neither "any tempo change is absent" nor "fixed groups always
@@ -205,19 +205,19 @@ Five further decisions during the September 7 refinement sharpen these compariso
 - `1fe462e0773d` is **prominent** at the human's revised **112953–113968 ms** scope,
   with continuing alternation in context. This differs from the old proposal's
   112953–113656 ms scope. Use the actual human crop and continuation when comparing
-  LN transitions; do not automatically penalize every LN ending as weak Drill.
+  LN transitions; do not automatically penalize every LN ending as weak Trill.
 - The brief `0df03fb88f02` and `eb6636276d2b` cases remain **supporting**. Their exact
   ranges and rationales are in the ledger; these are additional scoped positives,
   not new minimum-count rules.
 
 The later `ab3460d1`, 14138–19078 ms, is **prominent**, described as explicit
-Drill with many rows. Its mixed single/chord groups do not impose a supporting
+Trill with many rows. Its mixed single/chord groups do not impose a supporting
 ceiling. Compare coherent sustained exchange with the shorter mixed positive;
 group arity alone does not choose salience.
-`d5dc4e0f`, 448389–460548 ms, is **supporting**, described as slow Drill, despite
+`d5dc4e0f`, 448389–460548 ms, is **supporting**, described as slow Trill, despite
 progressively increasing gaps. This resolves that previously open tail. Compare
 its continuing group exchange with the interrupted short-block negative; slowing
-does not itself erase Drill or establish its strength.
+does not itself erase Trill or establish its strength.
 
 ### Roll and burst
 
@@ -233,7 +233,7 @@ The initial clarification was: "一个roll/burst必须满足一组4个note, 两�
 三组以上连续出现即显著." Preserve that pilot's prominent judgment. The subsequent
 **Cyber Inductance**, 81521–82149 ms, has four descending groups and was explicitly
 judged **Stream present/supporting**: the expert calls it clear roll, but explains
-that it can play drill-like and Stream often has more variation. Therefore the
+that it can play trill-like and Stream often has more variation. Therefore the
 old group-count-to-Stream-prominent shortcut is not safe for new weak labels.
 The expert explicitly approved the revised distinction: three or more consecutive
 groups establish prominent **roll structure**, while Stream strength still depends
@@ -296,7 +296,7 @@ chordjack." It mislabeled the reviewed fixed-group long jump jacks.
 The expert's chordjack positive contains sustained three-key chord activity without
 one column forming a longjack anchor. Compare the chord-group sequence and each
 column's recurrence with the fixed repeated-group countercase. Alternating
-left/right pairs are the reviewed jumpdrill and supply no consecutive same-column
+left/right pairs are the reviewed jumptrill and supply no consecutive same-column
 jack relation. The later four-dimension review confirmed the changing-chord
 positive as typical jack/chordjack, explicitly not longjack, while accepting the
 fixed-group long jump jack as prominent broad Jack organization. The broad
@@ -325,10 +325,10 @@ remove the separate fast/even qualifications from the local longjack description
 ### Streams and limited evidence
 
 The approved four-dimension Stream organization includes reviewed jumpstream and
-roll/burst, and excludes the reviewed grouped jumpdrill. This supersedes treating
+roll/burst, and excludes the reviewed grouped jumptrill. This supersedes treating
 the earlier narrow streams critique as a blanket roll exclusion. Preserve all
 local episode boundaries: a broader positive interpretation of rolls does not
-make the intervening jumpdrill positive. Continuing activity and large note counts
+make the intervening jumptrill positive. Continuing activity and large note counts
 remain insufficient.
 
 A short example consisting mainly of jump jacks gave insufficient evidence for
@@ -384,9 +384,9 @@ counterweights to both shortcuts:
   contextual release challenge does not supply attacks under the held notes in
   the judged interval. Do not import a surrounding positive into a release-only crop.
 - `c8d03a3e`, 346070–351800 ms, is **supporting**: two occupied lanes under
-  tapping Drill still give LN coordination a weak role. Static holds are not an
+  tapping Trill still give LN coordination a weak role. Static holds are not an
   automatic negative, and repeated LN renewal is not an additional prerequisite.
-  The expert's descriptive Drill wording does not create a human Drill assessment.
+  The expert's descriptive Trill wording does not create a human Trill assessment.
 - `49fa8421`, 32420–34820 ms, is **absent**: the expert finds its coordination
   role too easy compared with the surrounding map. Compare the actual independent
   actions and their role in context; two occupied lanes alone do not settle it.
@@ -449,7 +449,7 @@ The corpus comparisons refine this judgment:
   progressive LN release organization and no obvious familiar tapping pattern;
   the weak judgment also reflects mapper usage, where full-LN passages more often
   emphasize reading/coordination. This is not a full-LN ban or a rule that
-  failure to recognize drill/jack/stream proves Tech.
+  failure to recognize trill/jack/stream proves Tech.
 - **Queen Aluett**, 93516–94931 ms: explicit follow-up clarified Tech
   present/supporting. The earlier accepted-unresolved record is historical.
 
@@ -462,7 +462,7 @@ Further September 7 decisions qualify the use of recovery cues:
 - `9b422f0f`, 103453–106630 ms, is **supporting**: changing rhythm and irregular,
   fragmented stream-like organization express Tech weakly in this map. Neither
   density nor absence of Jack proves that judgment by itself.
-- `02322a4a`, 193633–194937 ms, is **absent**: the expert finds the Drill/Jack
+- `02322a4a`, 193633–194937 ms, is **absent**: the expert finds the Trill/Jack
   mixture recognizable and easy to follow. `a68c5d4d`, 235339–235993 ms, is also
   **absent** for easily interpreted flow alternation. `f29d770e`, 97533–98106 ms,
   is **absent** for ordinary variation over a short section. These are scoped
@@ -532,7 +532,7 @@ a useful small subset. Broad control-facing concepts need their own calibration;
 they do not inherit the meaning of existing narrow concepts or community names.
 
 - Whether absence of a longjack anchor is necessary for chordjack in general.
-- Drill boundaries not settled by the reviewed examples; both steady slow and
+- Trill boundaries not settled by the reviewed examples; both steady slow and
   progressively slowing positives now exist. Use their coherent group exchange
   and the interrupted negative comparisons rather than invented cutoffs.
 - Concrete sufficient conditions for query-only supporting/prominent labels under
@@ -543,5 +543,5 @@ they do not inherit the meaning of existing narrow concepts or community names.
   taxonomy or selecting community whole-difficulty targets is a separate decision.
 
 For this next small experiment, keep speed/arity/run length as measured descriptors
-and retain the approved V2 Jack, Stream, Tech, LN coordination, and Drill targets. Speedjack is
+and retain the approved V2 Jack, Stream, Tech, LN coordination, and Trill targets. Speedjack is
 not an additional proposed target; its historical descriptions remain available.

@@ -19,7 +19,7 @@ order. Return the source identity, a half-open range, raw intervals, and witness
 | --- | --- | --- |
 | Fixed group | Consecutive complete attack rows use the same column set; report row count and gaps. | A useful Jack candidate. Extra chord keys break this narrow query even if a repeated subset remains a clear jack. Fast-only filtering would miss the reviewed 400 ms Jack positive. |
 | Repeated subset | Selected core columns recur on consecutive attack rows; extra simultaneous notes remain visible. | Keeps a long-jump-jack core through decorative chords. Pure disjoint A/B alternation cannot be projected onto one side to create Jack. |
-| Alternation | Two fixed disjoint sets repeat A–B–A–B, with any group arity; report all gaps. | Covers the approved Drill shape, including crossed pairs. Four rows are a query search minimum, not an approved presence or prominence threshold. |
+| Alternation | Two fixed disjoint sets repeat A–B–A–B, with any group arity; report all gaps. | Covers the approved Trill shape, including crossed pairs. Four rows are a query search minimum, not an approved presence or prominence threshold. |
 | Four-note direction | Four consecutive singleton rows traverse all four columns in one direction; report gaps and literal equality. | Direction alone is a candidate. Equal spacing completes the local roll shape; unequal integer gaps require a declared timing derivation or calibrated interpretation. Roll prominence does not imply Stream prominence. |
 | LN events | Presses/releases and complete holds continuing across each timestamp, including holds entering the window. | LN coordination requires at least two LN-occupied columns at some point, but that condition is not sufficient. Regular handoffs and tiny overlaps can be semantic negatives. |
 
@@ -68,8 +68,8 @@ negative semantic label.
 
 A positive witness search alone cannot meet the zero-false-positive requirement.
 Also check possible disqualifiers in the original sequence. Selecting only A out
-of A↔B Drill is the important countercase: the selected subsequence repeats, but
-the full arrangement is pure Drill and explicitly Jack absent. Entering LN holds,
+of A↔B Trill is the important countercase: the selected subsequence repeats, but
+the full arrangement is pure Trill and explicitly Jack absent. Entering LN holds,
 intervening rows, simultaneous extra keys, rhythm resets, and group changes must
 remain available. If the rule cannot establish whether unused notes change the
 pattern, abstain and pass the candidate plus counterevidence to an agent.
@@ -82,12 +82,12 @@ does not supply that meaning by itself.
 ## Small experimental target set
 
 Retain **Jack organization, Stream organization, Tech, LN coordination** and add
-**Drill organization**. The expert approved Drill as sustained alternation of two
+**Trill organization**. The expert approved Trill as sustained alternation of two
 fixed non-overlapping groups, with single keys or chords and same-hand or cross-hand
 arrangements. This does not create targets for every chord size or compound name.
 Keep roll direction/count, minijack extent, chord size, and attack rate as evidence.
-Drill presence requires consideration of speed and sustained extent; four alternating
-attacks are not a sufficient semantic rule. A pure fixed disjoint Drill episode
+Trill presence requires consideration of speed and sustained extent; four alternating
+attacks are not a sufficient semantic rule. A pure fixed disjoint Trill episode
 does not imply Jack from each column's periodic return. Three consecutive roll
 groups establish prominent roll structure, without automatically establishing
 prominent Stream.
@@ -124,7 +124,7 @@ prototype does not impersonate an agent or create `agent-reviewed` records.
 
 ## What must be measured before batch use
 
-First replay the reviewed counterexamples: crossed-pair Drill versus Stream,
+First replay the reviewed counterexamples: crossed-pair Trill versus Stream,
 slow Jack versus speedjack, roll presence versus Stream strength, and real LN
 occupancy versus rejected LN coordination. These are calibration regressions, not
 held-out accuracy results. Then evaluate new sections split by beatmapset, with

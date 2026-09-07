@@ -30,15 +30,15 @@ Do not manufacture an agent or human judgment in its place. If the rule abstains
 inspect the actual LN organization. Two occupied columns alone do not prove a positive.
 
 Inspect query-uncovered portions and changes of organization. Discover useful
-representative sections for **Jack, Stream, Drill, Tech, and LN coordination**.
+representative sections for **Jack, Stream, Trill, Tech, and LN coordination**.
 Continuous structural discovery is required; dense semantic annotation of every
 note is not. A source is not complete after looking at only its first crop.
 
 Select the notes that actually witness a pattern and preserve the remaining notes
 as context/counterevidence. A repeated core can survive extra chord keys, but
-selecting A out of pure disjoint A/B Drill cannot turn it into Jack. Intervening
+selecting A out of pure disjoint A/B Trill cannot turn it into Jack. Intervening
 rows can continue the main pattern or mark a reset; there is no universal skip rule.
-Drill presence depends on speed and extent, not four rows alone. Three complete
+Trill presence depends on speed and extent, not four rows alone. Three complete
 roll groups establish roll structure, not automatic Stream prominence. Harmless
 1 ms quantization does not require an expert question. Tech need not first match
 a perfect template, and LN coordination needs independent control beyond overlap.
@@ -71,7 +71,7 @@ Missing evidence goes back to you for revision; it is not an expert semantic que
 ## Use old work with its original provenance
 
 `prior-machine-candidates.json` contains old location hints, not accepted new labels.
-Check those scopes under the new definition; also discover missing/new Drill cases.
+Check those scopes under the new definition; also discover missing/new Trill cases.
 No old completion count transfers into this campaign.
 
 `prior-human-feedback.json` retains exact earlier human decisions and their old
@@ -81,7 +81,7 @@ the current target. A changed meaning or crop needs a new machine interpretation
 Do not copy an old observation into a new human-confirmed record. Use the human's
 decision rationale or later direct clarification, not a retained unresolved machine
 explanation. Rejection alone is not an absent observation; its concrete explanation
-can support your newly sourced proposal. Old Stream absence does not assign Drill
+can support your newly sourced proposal. Old Stream absence does not assign Trill
 strength. Preserve current reviewed claims in `bindings.json` without resubmission.
 
 ## Output
@@ -98,7 +98,7 @@ Write `result.json` with one entry per assigned chart:
     "claims": [{
       "id": "local-claim-id",
       "sectionId": "episode-id",
-      "tagId": "drill-organization",
+      "tagId": "trill-organization",
       "scope": { "startMs": 1000, "endMs": 3000 },
       "reviewContext": { "startMs": 500, "endMs": 3500 },
       "assessment": { "presence": "unresolved" },
@@ -112,7 +112,7 @@ Write `result.json` with one entry per assigned chart:
 ```
 
 Copy the exact skill descriptor. Tags are `jack-organization`, `stream-organization`,
-`drill-organization`, `tech`, and `ln-coordination`. Positive assessments have
+`trill-organization`, `tech`, and `ln-coordination`. Positive assessments have
 `presence: "present"` and `salience: "supporting"` or `"prominent"`; non-positives
 have only presence. Strength means expression of the target style, not confidence
 or selected-note fraction. Use half-open source-ms scopes and real source lines,
