@@ -155,12 +155,13 @@ Panic's 75150–77354 ms alternation is also explicitly described as typical dri
 despite changing attack spacing. Do not require literally constant source-ms gaps
 just to recognize its alternating structure.
 
-The expert approved Drill organization for the next inventory: two fixed,
+The expert approved Drill organization for the V2 inventory: two fixed,
 non-overlapping key groups continuously alternate A↔B. Either group can be a
 single key or a chord, and same-hand and cross-hand arrangements are included.
 The expert explicitly requires both speed and sustained extent when deciding
 presence: A–B–A–B alone does not settle it. No numerical threshold was supplied.
-Salience boundaries remain to be calibrated. Recognized
+The September 7 reviews calibrate several short and mixed cases below; no absolute
+rate or duration cutoff follows. Recognized
 alternation is not a universal veto on Stream or
 Tech in a larger mixed section. Keep the actual episode and both groups visible.
 
@@ -168,6 +169,27 @@ Pure fixed disjoint A↔B Drill, without adjacent attack rows repeating a column
 is explicitly **broad Jack absent**. A key returning every second row does not
 establish jack organization in this arrangement. This negative requires the
 complete surrounding sequence; it cannot be inferred from a selected subset alone.
+
+The [September 7 expert decisions](expert-review-20260907.json) distinguish:
+
+- A clearly separated five-row episode (source `1e7b2d44af5c`, 68640–68902 ms)
+  is **prominent**; a five-row mixed 1–2 group episode (`75a8e464f139`,
+  284609–284869 ms) is **supporting**. Briefness neither precludes presence nor
+  determines salience. Compare coherent group exchange, articulation, and boundaries.
+- Sparse but self-contained alternation (`3082250d6651`, 19733–20897 ms) is
+  **supporting** in its chart context. A slow, LN-mixed passage
+  (`078a8fc61280`, 61710–63517 ms) is **absent**. Do not extrapolate either
+  decision into an absolute BPM cutoff or judge whole-map pace from an unseen chart.
+- A six-note drill at a stream ending (`226e157b7535`, 125768–126136 ms)
+  is **supporting**, while an embedded stream-like crop (`04c92e42f99b`,
+  359532–360380 ms) is **absent**. Context can reveal a separate brief drill or
+  show that selected alternation is incidental; "next to stream" is not a veto.
+- Uneven spacing with modifier-like singletons and stream mixing
+  (`2868257fc0e9`, 78075–78902 ms; `fdfabdf721d3`, 4152–4902 ms) is
+  **absent**. Explain those roles using all rows. Uneven spacing alone is not a
+  veto, as the earlier Panic judgment shows. Short LNs can preserve a weak drill
+  (`1cbae1c465a1`, 24072–24880 ms), but can also articulate a stream-like passage
+  (`53a1d6a2186d`, 195959–196922 ms).
 
 ### Roll and burst
 
@@ -319,6 +341,25 @@ characterize independent coordination here. A true 1 ms overlap does not settle
 the style. Compare the approved Light It Up independent-hold example, rather
 than deriving a new minimum LN fraction or treating every regular LN pattern as absent.
 
+The [September 7 expert decisions](expert-review-20260907.json) add concrete
+counterweights to both shortcuts:
+
+- `7e7bf6375ac0`, 148412–149622 ms, is **supporting** despite regular entry and
+  release: the full-LN arrangement repeatedly requires LN timing beyond taps.
+  `acb300c9f8cc`, 103844–105844 ms, is **supporting** for different LN start timing.
+  Neither regularity nor common endings automatically erase the independent roles.
+- `76a29b55c83d`, 143225–144100 ms, is **absent**: the two LNs start/end with
+  other notes and add little coordination. `f49b6ee929aa`, 53160–53446 ms, and
+  `fe7690db513d`, 58811–59442 ms, are also **absent**, with sparse two-LN evidence.
+  These decisions do not establish a universal minimum LN count or density rule.
+- `0c60d6bd6e29`, 153281–153554 ms, is **absent** for LN coordination: the
+  contextual release challenge does not supply attacks under the held notes in
+  the judged interval. Do not import a surrounding positive into a release-only crop.
+
+For an analogy, state the recurring or isolated press/release/tap roles and explain
+which match the reviewed case. Merely having more than two LNs is not evidence of
+the relevant independent control.
+
 ### LN release
 
 The discriminating feature is staggered release timing: different fingers release
@@ -382,6 +423,31 @@ perfect repeated motif. The expert may identify trickiness in unfamiliar mixed
 organization, but an agent must still explain actual timing/articulation relations.
 Do not reduce Tech to a count of unusual gaps, pattern switches, or short LNs.
 
+Use these evidence checks, refined through a separate medium-labeler/high-auditor
+inspection of the Signicial pack. They are procedures, not new sufficient rules
+or expert-approved pack labels:
+
+1. Optionally locate shorter and longer intervals among actual columns and complete
+   chord rows. Describe repeated cells, changed cells, and their continuation.
+   Explain why the relationships are hard or easy to follow; moved compression,
+   short gaps, or unchanged cells alone settle neither outcome.
+2. At a chord or pause, show what organization actually resumes. A reset may recover
+   readable flow, or simply separate cells whose internal relations remain tricky.
+   "The chord does not predict every note" is not enough to establish Tech.
+   Keep recovered flow outside a positive scope unless it independently qualifies.
+3. For LNs, write event order: which fingers remain held, which release, and which
+   attack next. Compare aligned handoffs with independent articulation. Unequal
+   releases, overlap, or a change from the preceding pattern do not alone establish
+   Tech, and an LN coordination judgment does not transfer automatically.
+4. State what repeats at each level. A larger motif may repeat the **same** internally
+   tricky relationships; differences between repetitions are not required. Conversely,
+   varied columns may retain readable temporal organization. Explain those relations
+   before using repetition for either a positive or a negative.
+
+Machine examples and rejected inferences are summarized in
+[the Tech-pack calibration note](tech-pack-20260907.md). Retain their weaker
+authority than the expert cases above; this selected sample is not a precision test.
+
 This local concept is broader than a complex-snap-only catalogue description.
 External identity, local definition, and alignment scope stay separate. The skill
 does not authorize changing a task's frozen alignment metadata.
@@ -411,7 +477,8 @@ a useful small subset. Broad control-facing concepts need their own calibration;
 they do not inherit the meaning of existing narrow concepts or community names.
 
 - Whether absence of a longjack anchor is necessary for chordjack in general.
-- Minimum extent/rate requirements for Drill and when it becomes supporting/prominent.
+- Drill boundaries not settled by the reviewed examples, especially very slow
+  sustained alternation; use calibrated comparisons rather than invented cutoffs.
 - Concrete sufficient conditions for query-only supporting/prominent labels under
   the approved style-expression meaning; counts and coverage are not enough by default.
 - The final inventory and presentation of jumptrill, roll, burst, minijack, and
@@ -420,5 +487,5 @@ they do not inherit the meaning of existing narrow concepts or community names.
   taxonomy or selecting community whole-difficulty targets is a separate decision.
 
 For this next small experiment, keep speed/arity/run length as measured descriptors
-and retain Jack, Stream, Tech, LN coordination plus proposed Drill. Speedjack is
+and retain the approved V2 Jack, Stream, Tech, LN coordination, and Drill targets. Speedjack is
 not an additional proposed target; its historical descriptions remain available.

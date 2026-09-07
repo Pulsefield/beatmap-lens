@@ -53,6 +53,15 @@ work returns to agents; concrete expert cases and audit conflicts reach the fixe
 page. Self-checks and machine agreement never create human-confirmed observations.
 After human changes, fetch a fresh task for new work and preserve old packets.
 
+When revisiting a pending machine claim at the same source, Foundation, tag, and
+complete scope, the new handoff can explicitly link `supersedes` entries containing
+the old `handoffId`, `handoffSha256`, `claimId`, and new `replacementClaimId`.
+The old expert case retires only after the new conclusion receives independent
+support. Further revisions continue linearly from the replacement. Follow the
+feedback's `supersededBy` chain to the current assessment, keeping all old evidence.
+An existing human decision cannot be replaced this way. A human response arriving
+during the machine review still takes precedence.
+
 A supported batch need not invent a semantic expert case. For a small human sample,
 submit a delivery-only request with `requestId`, `sourceSha256`, original
 `handoffId`/`handoffSha256`, selected `claimIds`, `reason: "spot-check"`, `question`,

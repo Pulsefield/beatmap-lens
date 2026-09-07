@@ -1,0 +1,568 @@
+{
+  "authority": "exact recorded human judgments; examples are scoped, not universal thresholds",
+  "source": "persistent V2 corpus workspace, snapshot 2026-09-07",
+  "decisions": [
+    {
+      "sourceSha256": "04c92e42f99b42efbca4f9f1183e94e17199fde141ebbc6eafc3446b238e37f9",
+      "scope": {
+        "endMs": 360380,
+        "startMs": 359532
+      },
+      "reviewContext": {
+        "endMs": 360600,
+        "startMs": 358900
+      },
+      "tagId": "drill-organization",
+      "assessment": {
+        "presence": "absent"
+      },
+      "observationId": "ea86fbd1-72e8-4878-b061-3979c083cc30:observation",
+      "exactObservationSha256": "cd36a047a928feb6300e36cddaf45e8a51400d821b9a6a02a8f713436383cc9a",
+      "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
+      "confirmedAt": "2026-09-07T02:14:03.414Z",
+      "humanRationale": "This is definitely not drill because context is highly stream.",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "0607e9981126b7955de112ce64ae9dd347c0c6edaaf20712649a1f0e65ab0e07",
+      "scope": {
+        "endMs": 48640,
+        "startMs": 47414
+      },
+      "reviewContext": {
+        "endMs": 49200,
+        "startMs": 46800
+      },
+      "tagId": "drill-organization",
+      "assessment": {
+        "presence": "present",
+        "salience": "supporting"
+      },
+      "observationId": "d5fc2cf3-c5be-4cf6-87bf-3f2ed53dfb64:observation",
+      "exactObservationSha256": "bdf2ca33399aa7ef2bd6f3ee2c224a9e83d6fe7e3d3a2a2b38fb45cfc15b4570",
+      "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
+      "confirmedAt": "2026-09-07T02:04:16.140Z",
+      "humanRationale": "not typical 1-1 2-2 drill but regular alternation supports weak drill",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "078a8fc61280a4de72abb325b865ea0af2b28bcacf0c55a9f552f5e05b5a3368",
+      "scope": {
+        "endMs": 63517,
+        "startMs": 61710
+      },
+      "reviewContext": {
+        "endMs": 64017,
+        "startMs": 61210
+      },
+      "tagId": "drill-organization",
+      "assessment": {
+        "presence": "absent"
+      },
+      "observationId": "3a6a8e13-ddc6-4a5f-beed-1b99e3fa5190:observation",
+      "exactObservationSha256": "fbc5fc1c5eca888fcb6db90a04f818b2ed97256df95d50a33c9f5de6b95932c4",
+      "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
+      "confirmedAt": "2026-09-07T02:27:13.708Z",
+      "humanRationale": "slow rate compared to whole map + LN mixed, do not think it's drill",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "0c60d6bd6e29c842ad526878a5ca6e008876cd7d89a4af131f76c47a34c3c31a",
+      "scope": {
+        "endMs": 153554,
+        "startMs": 153281
+      },
+      "reviewContext": {
+        "endMs": 154054,
+        "startMs": 152781
+      },
+      "tagId": "ln-coordination",
+      "assessment": {
+        "presence": "absent"
+      },
+      "observationId": "63b0d5d6-4a65-4e92-90dc-acae354df5be:observation",
+      "exactObservationSha256": "3b339739bd0ff07727648de8d142c09cdb15c67de5f1267e9292518c907b3f03",
+      "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
+      "confirmedAt": "2026-09-07T02:08:17.942Z",
+      "humanRationale": "this is not LN coordination. the context area challenges LN release timing, the selected area when hold is occupied we do not see an attack.",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "1cbae1c465a1e25d64463997ba00e7fa3f89951ec441f83012498cad270ef685",
+      "scope": {
+        "endMs": 24880,
+        "startMs": 24072
+      },
+      "reviewContext": {
+        "endMs": 25480,
+        "startMs": 23472
+      },
+      "tagId": "drill-organization",
+      "assessment": {
+        "presence": "present",
+        "salience": "supporting"
+      },
+      "observationId": "c3c4870e-c26b-4a5b-b937-3f2792aeb016:observation",
+      "exactObservationSha256": "d925bb4b996a9a015d3969b38729f3ff8ca352c17577bb959a6a95bddc8e3cfd",
+      "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
+      "confirmedAt": "2026-09-07T02:13:14.310Z",
+      "humanRationale": "This is weak drill, because LN randomly involved, this will affect gameplay experience a little.",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "1e7b2d44af5ceef3051874b791f976cf89953f915c835f6acc61c567e11bea90",
+      "scope": {
+        "endMs": 68902,
+        "startMs": 68640
+      },
+      "reviewContext": {
+        "endMs": 69402,
+        "startMs": 68140
+      },
+      "tagId": "drill-organization",
+      "assessment": {
+        "presence": "present",
+        "salience": "prominent"
+      },
+      "observationId": "af57df97-32a8-4071-a400-b91e5cd7841c:observation",
+      "exactObservationSha256": "7095b7193339b8a9fe330c429be1b69d2d7e620076e0803371adc699dd200e83",
+      "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
+      "confirmedAt": "2026-09-07T02:10:47.718Z",
+      "humanRationale": "this is a clearly seperated drill section with 5 rows.",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "226e157b7535c3f007cc65a0490bc4c63cef6abf8f774384d9620c368bda1cda",
+      "scope": {
+        "endMs": 126136,
+        "startMs": 125768
+      },
+      "reviewContext": {
+        "endMs": 126785,
+        "startMs": 125168
+      },
+      "tagId": "drill-organization",
+      "assessment": {
+        "presence": "present",
+        "salience": "supporting"
+      },
+      "observationId": "8bd39164-bd5d-40fb-b8a0-e053532df37d:observation",
+      "exactObservationSha256": "b8ad83ca5096dd52b63df0d7b42234dadd42c750a875577b46d9dbd9d4fbdff3",
+      "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
+      "confirmedAt": "2026-09-07T02:24:14.755Z",
+      "humanRationale": "only 6 notes and starting by an end in stream, but still challenges drill ability.",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "2868257fc0e95d263e5eb370a2b597f94bafb6ac46ccda12e54cefaeeadbd52c",
+      "scope": {
+        "endMs": 78902,
+        "startMs": 78075
+      },
+      "reviewContext": {
+        "endMs": 79252,
+        "startMs": 77725
+      },
+      "tagId": "drill-organization",
+      "assessment": {
+        "presence": "absent"
+      },
+      "observationId": "e51f175c-fd6a-4a9a-bc21-63cdacbeb250:observation",
+      "exactObservationSha256": "99f56049b70825bfbbc5aace8c6cc9cbf382aad54c9fb4f8fc035f57fe2e1656",
+      "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
+      "confirmedAt": "2026-09-07T02:40:11.507Z",
+      "humanRationale": "notes in lane 2 plays like modifier, uneven gap, end of the section mixed style with stream. not drill.",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "2d4720a783bc89740ecd12493183e6a2352ad29a3d58873c8c77f36040494bbb",
+      "scope": {
+        "endMs": 305714,
+        "startMs": 305264
+      },
+      "reviewContext": {
+        "endMs": 306114,
+        "startMs": 304864
+      },
+      "tagId": "drill-organization",
+      "assessment": {
+        "presence": "present",
+        "salience": "supporting"
+      },
+      "observationId": "e388e2ac-b7db-44e9-b1c5-f41de8c33015:observation",
+      "exactObservationSha256": "c8ff73292a08b46a3f065389c9e4b5fe042586e4ce653299a2f86a10c86ed877",
+      "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
+      "confirmedAt": "2026-09-07T02:25:34.958Z",
+      "humanRationale": "breif drill",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "3082250d66511279acb849ca35b44e1d1b2ed7162befe1a7e3a8feff0508dce2",
+      "scope": {
+        "endMs": 20897,
+        "startMs": 19733
+      },
+      "reviewContext": {
+        "endMs": 21200,
+        "startMs": 19300
+      },
+      "tagId": "drill-organization",
+      "assessment": {
+        "presence": "present",
+        "salience": "supporting"
+      },
+      "observationId": "37b67427-14c1-4919-97fd-630ef5fc26bd:observation",
+      "exactObservationSha256": "dade58b8ef9c864f4eed4f3aca3cef782c39a78de3980b1a9a80aeb492df080d",
+      "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
+      "confirmedAt": "2026-09-07T02:29:17.732Z",
+      "humanRationale": "drill notes look sparse but difficulty is OK compared to whole map; clear start and end boundary with not other style mixed; weak drill",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "31381fc85d58994c15ca949917fab1cf83090ff96fe07d887d78861e0e33b041",
+      "scope": {
+        "endMs": 102348,
+        "startMs": 100473
+      },
+      "reviewContext": {
+        "endMs": 102748,
+        "startMs": 100073
+      },
+      "tagId": "drill-organization",
+      "assessment": {
+        "presence": "present",
+        "salience": "prominent"
+      },
+      "observationId": "b888e6a9-47fb-420f-9b23-ff4c76382d0e:observation",
+      "exactObservationSha256": "0ea4ef793af5e7649ef28951707f8b15da4cf84108615a2b3547e70eb31e20fb",
+      "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
+      "confirmedAt": "2026-09-07T02:21:44.660Z",
+      "humanRationale": "typical drill with inner/outer alternation",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "39cd93188111a51a3723b4d141e9ac898ae3289035580179419abacf6d8f1498",
+      "scope": {
+        "endMs": 162242,
+        "startMs": 161271
+      },
+      "reviewContext": {
+        "endMs": 162842,
+        "startMs": 160671
+      },
+      "tagId": "drill-organization",
+      "assessment": {
+        "presence": "absent"
+      },
+      "observationId": "2bc8c191-9ecd-4548-9b0e-d10dab5adb3c:observation",
+      "exactObservationSha256": "fa0175687df2b24f7ede053126091df796eb9c6df3a1eef4f925e3f446571478",
+      "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
+      "confirmedAt": "2026-09-07T02:15:35.661Z",
+      "humanRationale": "interrupted rhythmic spacing, not drill",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "3e92b29795bd89e3b3ea1146070a1c5aeb4a440f7f336723dc8e8f0fde151553",
+      "scope": {
+        "endMs": 93896,
+        "startMs": 93348
+      },
+      "reviewContext": {
+        "endMs": 94396,
+        "startMs": 92848
+      },
+      "tagId": "drill-organization",
+      "assessment": {
+        "presence": "present",
+        "salience": "prominent"
+      },
+      "observationId": "dfec693d-8791-4bce-bab5-35415f8b656e:observation",
+      "exactObservationSha256": "0cb3da28e27705026872ae21fc6657d8db9c0da94a9d556175a30dac235cf7ca",
+      "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
+      "confirmedAt": "2026-09-07T02:14:41.391Z",
+      "humanRationale": "6 rows with regular alternation, typical drill",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "3ee9d30e1ec94e16358a383f0fd4a316d8aeac3b1f7da64a929ae2416dc9576b",
+      "scope": {
+        "endMs": 84240,
+        "startMs": 83822
+      },
+      "reviewContext": {
+        "endMs": 84400,
+        "startMs": 83600
+      },
+      "tagId": "drill-organization",
+      "assessment": {
+        "presence": "present",
+        "salience": "supporting"
+      },
+      "observationId": "1606a154-8f38-48c4-889f-6aef0e41a719:observation",
+      "exactObservationSha256": "1a391c99d147e4d89c5d0fb5a2907483c5bfc23ecf1a024615ae9c6905895483",
+      "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
+      "confirmedAt": "2026-09-07T02:51:04.006Z",
+      "humanRationale": "small drill",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "42c93844e915f0f269714d9eb1ec5d8582417d110b779a9a7113e5708a96cf5d",
+      "scope": {
+        "endMs": 28102,
+        "startMs": 27835
+      },
+      "reviewContext": {
+        "endMs": 28602,
+        "startMs": 27335
+      },
+      "tagId": "drill-organization",
+      "assessment": {
+        "presence": "present",
+        "salience": "supporting"
+      },
+      "observationId": "d2f6a25e-6785-4c9b-a6c2-bde24ee12ece:observation",
+      "exactObservationSha256": "9b1d56af333a051bdf40a1e789872db4967b79ad0c80f88c813f2b9c23900e06",
+      "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
+      "confirmedAt": "2026-09-07T02:38:16.461Z",
+      "humanRationale": "mini drill",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "49e1bdbb0122b135aa205318606be6957e732eba84e8ffe497fe602b7d0b3ff5",
+      "scope": {
+        "endMs": 29206,
+        "startMs": 28824
+      },
+      "reviewContext": {
+        "endMs": 29500,
+        "startMs": 28600
+      },
+      "tagId": "drill-organization",
+      "assessment": {
+        "presence": "present",
+        "salience": "supporting"
+      },
+      "observationId": "456965e9-0522-4d8a-90ed-d1d8563c1e17:observation",
+      "exactObservationSha256": "3a1f5c790926974cb1d661ecd00a44826c2a451857ef93c52ea364978f7dc288",
+      "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
+      "confirmedAt": "2026-09-07T02:25:06.374Z",
+      "humanRationale": "small brief drill.",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "53a1d6a2186dbf08beea006a78bdcc2b8270c52e67e05a3fa8991d05763d70ce",
+      "scope": {
+        "endMs": 196922,
+        "startMs": 195959
+      },
+      "reviewContext": {
+        "endMs": 196922,
+        "startMs": 195559
+      },
+      "tagId": "drill-organization",
+      "assessment": {
+        "presence": "absent"
+      },
+      "observationId": "8803bf98-9272-4797-a4f5-853b725b4bba:observation",
+      "exactObservationSha256": "e6b90c1e0a4280259b3311d3f1f567ffc5d1ce4018ab4ea18b19739e3fd7d7e3",
+      "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
+      "confirmedAt": "2026-09-07T02:37:40.930Z",
+      "humanRationale": "I don't think it's drill though drill-like LN start+TAP, the length is too short and LN plays like stream.",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "695912784d1bf650c2dba3aeca3c4ad21a77d533ff8c306129f324d56a875c4b",
+      "scope": {
+        "endMs": 122673,
+        "startMs": 122306
+      },
+      "reviewContext": {
+        "endMs": 123173,
+        "startMs": 121806
+      },
+      "tagId": "drill-organization",
+      "assessment": {
+        "presence": "present",
+        "salience": "prominent"
+      },
+      "observationId": "cd36ef20-256a-497d-8d25-8c9eae13cdc6:observation",
+      "exactObservationSha256": "a526863ec98d8ff3fc426d954885173e8ed8a7f9586a12c90b1f92c38179a664",
+      "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
+      "confirmedAt": "2026-09-07T02:43:46.873Z",
+      "humanRationale": "gaps are same, typical drill",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "75a8e464f139c186493acab0dff592296012a45564d48c4ded20c77fd8014f1d",
+      "scope": {
+        "endMs": 284869,
+        "startMs": 284609
+      },
+      "reviewContext": {
+        "endMs": 285150,
+        "startMs": 284300
+      },
+      "tagId": "drill-organization",
+      "assessment": {
+        "presence": "present",
+        "salience": "supporting"
+      },
+      "observationId": "09a76a72-e2d8-44d6-8f14-a1ead94ddcc2:observation",
+      "exactObservationSha256": "211a9c9679533cdbc06b37fa8b1be315c885f09b157baf9b046b79ae373f66dc",
+      "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
+      "confirmedAt": "2026-09-07T02:19:53.181Z",
+      "humanRationale": "only 5 rows and 1-2 placement, weak drill",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "76a29b55c83dd3e533cdf800fccb7659edcfe4cba28336f006d0fa3a2a67c09d",
+      "scope": {
+        "endMs": 144100,
+        "startMs": 143225
+      },
+      "reviewContext": {
+        "endMs": 144500,
+        "startMs": 142825
+      },
+      "tagId": "ln-coordination",
+      "assessment": {
+        "presence": "absent"
+      },
+      "observationId": "c0194594-7921-41e7-a911-b297a5e2f1ed:observation",
+      "exactObservationSha256": "904d3346e78b23d18d5f26d663baba3aab78f0a13a92fc5e741f6aab8453a4f9",
+      "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
+      "confirmedAt": "2026-09-07T02:33:27.725Z",
+      "humanRationale": "LN coordination challenges in independently press/release multiple LNs/TAPs with different timings. in the section, 2 LN start with other notes, and end with other notes, coordination is not very challenged here, and only 2 ln plays in.",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "7e7bf6375ac04b56b5d1b0635241a4cf59ed7a924f6068451406406a8e45abed",
+      "scope": {
+        "endMs": 149622,
+        "startMs": 148412
+      },
+      "reviewContext": {
+        "endMs": 150122,
+        "startMs": 147912
+      },
+      "tagId": "ln-coordination",
+      "assessment": {
+        "presence": "present",
+        "salience": "supporting"
+      },
+      "observationId": "95a4b46f-ec03-44d7-a595-a616ff6b06f6:observation",
+      "exactObservationSha256": "cea33c9414b15b0a55220dc5fc87efdc95959feca6e1dac31c7b36de04c66e99",
+      "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
+      "confirmedAt": "2026-09-07T02:52:28.079Z",
+      "humanRationale": "entry and release timing are regular, but it's full of LN and its demand for entry/release timing is significantly higher than TAPs, so it's weak LN coordination.",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "997e705a9bdc17c8fbd86036f4bb261c71fdc208e79f741051056ccc3262e268",
+      "scope": {
+        "endMs": 1268053,
+        "startMs": 1267667
+      },
+      "reviewContext": {
+        "endMs": 1268962,
+        "startMs": 1267400
+      },
+      "tagId": "drill-organization",
+      "assessment": {
+        "presence": "present",
+        "salience": "prominent"
+      },
+      "observationId": "e84a9066-4764-49a7-920d-b27eef62e4bb:observation",
+      "exactObservationSha256": "2f66b30c1890bb40838767b96f0fff1cb455283b810c8b4ae4ed9dde6ff1db9d",
+      "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
+      "confirmedAt": "2026-09-07T02:18:58.261Z",
+      "humanRationale": "typical drill",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "acb300c9f8cc4390d2e2aa1d163bdbb4dd5eea08ebad9834f6b6d5a6955a2793",
+      "scope": {
+        "endMs": 105844,
+        "startMs": 103844
+      },
+      "reviewContext": {
+        "endMs": 106344,
+        "startMs": 103344
+      },
+      "tagId": "ln-coordination",
+      "assessment": {
+        "presence": "present",
+        "salience": "supporting"
+      },
+      "observationId": "51e9ee5b-be1f-41a4-b00a-0ac67edd12ac:observation",
+      "exactObservationSha256": "1ec05377097cf2e8c0c0580a97899f9365455e2261e322c6aa102bdab189fb71",
+      "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
+      "confirmedAt": "2026-09-07T02:34:11.890Z",
+      "humanRationale": "has different ln start timing",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "f49b6ee929aae15a4b2623b16450acf2de6563d489955d0993f88496529408e1",
+      "scope": {
+        "endMs": 53446,
+        "startMs": 53160
+      },
+      "reviewContext": {
+        "endMs": 53946,
+        "startMs": 52660
+      },
+      "tagId": "ln-coordination",
+      "assessment": {
+        "presence": "absent"
+      },
+      "observationId": "87c2e6af-f8c2-4f9e-8cb3-c75ac8ead93b:observation",
+      "exactObservationSha256": "4fce70eeee4e434e235e08a0fb7de0ca0a5bae25f49ea9f4282b2ee83fa6fe00",
+      "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
+      "confirmedAt": "2026-09-07T02:35:57.712Z",
+      "humanRationale": "only 2 LN, too few to judge it to LN coordination",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "fdfabdf721d344e20f6ebb91c4c2f3a84348e14e7a918fbfdaac4c8f865f3cfa",
+      "scope": {
+        "endMs": 4902,
+        "startMs": 4152
+      },
+      "reviewContext": {
+        "endMs": 5402,
+        "startMs": 3652
+      },
+      "tagId": "drill-organization",
+      "assessment": {
+        "presence": "absent"
+      },
+      "observationId": "33507757-1bf9-4fea-ba2d-b662eb5fda2e:observation",
+      "exactObservationSha256": "a7f102515e83fa69567a6132c9b116566930f02c31a2810fe5ec3c7707820746",
+      "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
+      "confirmedAt": "2026-09-07T02:41:08.226Z",
+      "humanRationale": "modifier like single note, uneven gap, not drill",
+      "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "sourceSha256": "fe7690db513d3212af83df09cf47b1ee1e0f7da9cdd674dd7eed95ac81caf927",
+      "scope": {
+        "endMs": 59442,
+        "startMs": 58811
+      },
+      "reviewContext": {
+        "endMs": 59842,
+        "startMs": 58411
+      },
+      "tagId": "ln-coordination",
+      "assessment": {
+        "presence": "absent"
+      },
+      "observationId": "1a154931-9fad-4ab3-90f6-0339b54dc84b:observation",
+      "exactObservationSha256": "d151fb65e4f42eef86e2463a78dabd0adb82bf5a94999f35849394372b17a1ba",
+      "foundationSha256": "cb6987ec084258860efd59281b7dcda862299d4273e330957e72099698ee9583",
+      "confirmedAt": "2026-09-07T02:42:10.367Z",
+      "humanRationale": "too weak to say it's LN coordination. only 2 ln, ln density not high, and end simutaneously.",
+      "humanRationaleSource": "decision.rationale"
+    }
+  ]
+}

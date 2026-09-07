@@ -1,15 +1,16 @@
 ---
 name: mania-pattern-judgment
-description: Recognize local osu!mania patterns from exact structural queries and expert-calibrated context. Use for section annotation, pattern review, or calibration; distinguish query evidence from style salience and human judgments.
+description: Judge local osu!mania patterns from source structure and expert-calibrated context. Use for section annotation, pattern review, or calibration; distinguish structural evidence, style salience, and human judgments.
 ---
 
 # Mania pattern judgment
 
 Judge the arrangement before choosing a tag. This revision incorporates the
-2026-09-05 pilot and corpus reviews, primarily on 4K examples. It is local guidance,
-not a claim that every community uses these terms identically. The corpus campaign
-was stopped by the user to revise recognition and add drill. Editing this skill
-does not resume it, change its frozen worker copies, or approve a new Foundation.
+2026-09-05 pilot and subsequent corpus reviews, primarily on 4K examples. It is local
+guidance, not a claim that every community uses these terms identically. The current
+V2 campaign uses Jack, Stream, Tech, LN coordination, and Drill organization. Read
+the task's actual frozen Foundation; editing this skill does not change its approval
+or silently update old worker copies.
 
 Keep the consumer's experimental section vocabulary separate from whole-difficulty
 community targets. For learning-oriented campaigns, use the learning boundary in
@@ -25,9 +26,11 @@ receive supporting Stream; detecting occupied columns does not establish LN coor
 
 ## Working method
 
-- Read the exact difficulty and the task's frozen Foundation. Use structural
-  queries to discover candidates, then inspect candidate neighborhoods at a
-  readable scale. Community tags and votes select candidates; they do not prove labels.
+- Read the exact difficulty and the task's frozen Foundation. Inspect source
+  organization and its neighborhoods at a readable scale. Structural queries are
+  optional factual aids; the current campaign pauses the pattern analyzer and uses
+  Astra medium labelers with independent Astra high auditors. Community tags, votes,
+  and a pack's advertised style select candidates; they do not prove labels.
   A detector miss is unreviewed, not absent. Exhaustive discovery still requires
   inspecting query-uncovered portions when the task requests whole-chart coverage.
 - Stay within chart, causal-history, and canonical-profile evidence. Do not infer
@@ -51,9 +54,9 @@ receive supporting Stream; detecting occupied columns does not establish LN coor
 - Distinguish presence, prominence, example typicality, and confidence. A weak
   example can be a certain positive. Too little evidence does not justify an
   explicit negative. Rejecting an example does not negate every pattern in its context.
-- Reuse deterministic query evidence for simple facts; do not send every row-count
-  check through a large-model labeler and a second large-model auditor. Query-to-tag
-  rules need their own held-out precision and coverage check before batch use.
+- Reuse deterministic calculations for simple source facts. They do not replace
+  the requested independent semantic audit. A query-to-tag rule needs its own
+  held-out precision and coverage check before batch use.
 - Audit contextual inference using the guide's discriminating checks. Ask the expert a concrete question
   when a necessary semantic choice remains open. Do not invent speed/tolerance
   thresholds or silently settle an open definition to make an answer decidable.
