@@ -93,6 +93,64 @@ class HarnessInspectionTest(unittest.TestCase):
         self.assertEqual(events[1][0], 50)
         self.assertEqual(events[1][3], [[11, 1, "long", 0, 100]])
 
+    def test_articulation_keeps_mixed_rows_and_describes_ln_head_tail_relationships(self):
+        # A short-LN chord releases around tap rows and a same-column renewal.
+        source = chart([note(10, 0, 0, 100), note(11, 0, 1, 40), note(12, 0, 2, 125),
+                        note(13, 50, 1), note(14, 75, 3), note(15, 100, 0, 200),
+                        note(16, 125, 2), note(17, 150, 1, 225), note(18, 200, 0),
+                        note(19, 250, 3), note(20, 300, 2, 350)])
+        plain = inspect(source, 0, 351)
+        result = inspect(source, 0, 351, view="articulation")
+        self.assertEqual([row[:2] for row in result["rows"]], plain["rows"])
+        self.assertEqual(result["coverage"], plain["coverage"])
+        self.assertEqual([row[2] for row in result["rows"]], [50, 25, 25, 25, 25, 50, 50, 50, None])
+        facts = {item[0]: item for row in result["rows"] for item in row[3]}
+        self.assertEqual(facts[10], [10, 100, 0.2, 2, "at-attack", [0], [2]])
+        self.assertEqual(facts[11], [11, 40, 0.08, 0, "between-attacks", [], [0, 2]])
+        self.assertEqual(facts[12], [12, 125, 0.25, 3, "at-attack", [2], [0]])
+        self.assertEqual(facts[15], [15, 100, 0.2, 2, "at-attack", [0], [1]])
+        self.assertEqual(facts[17], [17, 75, 0.15, 1, "between-attacks", [], []])
+        self.assertEqual(facts[20], [20, 50, 0.1, 0, "after-last-attack", [], []])
+        self.assertEqual(set(facts), {n["sourceLine"] for n in source["notes"] if n["kind"] == "long"})
+
+    def test_articulation_integrates_tempo_and_keeps_source_facts_across_scope_and_pages(self):
+        timing = [
+            {"sourceLine": 1, "fields": ["0", "500", "4", "2", "0", "100", "1", "0"]},
+            {"sourceLine": 2, "fields": ["50", "-25", "4", "2", "0", "100", "0", "0"]},
+            {"sourceLine": 3, "fields": ["100", "250", "4", "2", "0", "100", "1", "0"]},
+        ]
+        source = chart([note(10, 0, 0, 200), note(11, 0, 1, 50), note(12, 50, 1, 125),
+                        note(13, 100, 2), note(14, 125, 3), note(15, 200, 0)], timing)
+        first = inspect(source, 50, 125, view="articulation", limit=1)
+        self.assertEqual(first["enteringHolds"], [[10, 0, "long", 0, 200]])
+        self.assertEqual(first["enteringHoldArticulation"], [[10, 200, 0.6, 3, "at-attack", [0], []]])
+        self.assertEqual(first["rows"][0][3], [[12, 75, 0.2, 1, "at-attack", [3], [0]]])
+        second = inspect(source, 50, 125, view="articulation", offset=first["pagination"]["nextOffset"], limit=1)
+        self.assertEqual(second["pageEnteringHolds"], [[10, 0, "long", 0, 200], [12, 1, "long", 50, 125]])
+        self.assertEqual(second["pageEnteringHoldArticulation"], [first["enteringHoldArticulation"][0], first["rows"][0][3][0]])
+        # The next row and both tails remain source facts beyond the half-open crop.
+        self.assertEqual(second["rows"], [[100, [[13, 2, "normal", 100, 100]], 25, []]])
+        self.assertIsNone(second["pagination"]["nextOffset"])
+        release_crop = inspect(source, 125, 126, view="articulation")
+        self.assertEqual(release_crop["enteringHolds"], [[10, 0, "long", 0, 200]])
+        self.assertEqual(release_crop["rows"][0][1], [[14, 3, "normal", 125, 125]])
+        between = inspect(source, 175, 180, view="articulation")
+        self.assertEqual(between["rows"], [])
+        self.assertEqual(between["enteringHoldArticulation"], first["enteringHoldArticulation"])
+
+    def test_articulation_pages_complete_groups_with_the_same_64_row_limit(self):
+        notes = [n for i in range(70) for n in (note(100 + i * 2, i * 100, 0, i * 100 + 40),
+                                               note(101 + i * 2, i * 100, 1))]
+        source = chart(list(reversed(notes)))
+        first = inspect(source, 0, 7000, view="articulation", limit=1000)
+        self.assertEqual(first["pagination"]["returned"], 64)
+        self.assertEqual(first["pagination"]["nextOffset"], 64)
+        second = inspect(source, 0, 7000, view="articulation", offset=64)
+        self.assertIsNone(second["pagination"]["nextOffset"])
+        self.assertEqual([ref[0] for page in (first, second) for row in page["rows"] for ref in row[1]],
+                         list(range(100, 240)))
+        self.assertTrue(all(len(row[1]) == 2 and len(row[3]) == 1 for page in (first, second) for row in page["rows"]))
+
     def test_tempo_changes_integrate_beats_and_inherited_sv_does_not(self):
         timing = [
             {"sourceLine": 1, "fields": ["0", "500", "4", "2", "0", "100", "1", "0"]},

@@ -437,7 +437,8 @@ class QueryFirstJobTest(unittest.TestCase):
         self.skill = {"name": "fixture-skill", "version": "frozen-test",
                       "sha256": hashlib.sha256((self.common / "skill/manifest.json").read_bytes()).hexdigest()}
         campaign.write(self.common / "skill-provenance.json", self.skill)
-        campaign.write(self.common / "foundation.json", {"tags": [{"id": "trill"}]})
+        campaign.write(self.common / "foundation.json", {"tags": [{"id": "trill"}], "foundationSha256": "f" * 64,
+                                                        "calibrationExamples": [{"claim": {"evidence": "AGENT-CALIBRATION"}}]})
         for role in ("labeler", "auditor"):
             (self.common / "roles" / f"{role}.md").write_text(f"Frozen {role} for current targets.\n")
         for name in campaign.QUERY_TOOLS:
@@ -468,7 +469,7 @@ class QueryFirstJobTest(unittest.TestCase):
                          "rationale": "Typical trill; retain this exact human correction."}
         self.direct = {"id": "direct-expert", "foundationSha256": "a" * 64,
                        "humanId": "expert", "confirmedAt": "2026-09-05T01:00:00Z",
-                       "origin": {"kind": "direct-human"}, "summary": summary}
+                       "origin": {"kind": "direct-human"}, "summary": {**summary, "rationale": "Direct human explanation."}}
         feedback = {"sourceSha256": self.sha, "documentVersion": {"revision": 3, "sha256": "b" * 64},
                     "reviewBase": {"revision": 2, "sha256": "c" * 64},
                     "handoffs": [{"handoffId": "old", "foundationSha256": "a" * 64},
@@ -477,11 +478,20 @@ class QueryFirstJobTest(unittest.TestCase):
                         {"handoffId": "old", "claimId": "m1", "status": "agent-reviewed", "summary": summary},
                         {"handoffId": "later", "claimId": "m2", "status": "agent-reviewed", "summary": summary},
                         {"handoffId": "old", "claimId": "rejected", "status": "rejected", "summary": summary,
-                         "decision": self.decision}],
+                         "decision": self.decision},
+                        {"handoffId": "old", "claimId": "accepted", "status": "accepted", "summary": summary,
+                         "decision": {"id": "accepted-human", "rationale": "Human confirmed the original proposal."}},
+                        {"handoffId": "old", "claimId": "modified", "status": "modified", "summary": summary,
+                         "modifiedClaim": {**summary, "assessment": {"presence": "absent"},
+                                           "evidence": {"rationale": "AGENT-INHERITED-EVIDENCE"}},
+                         "decision": {"id": "modified-human", "rationale": "Exact final human correction."}},
+                        {"handoffId": "old", "claimId": "deferred", "status": "deferred", "summary": summary,
+                         "decision": {"id": "deferred-human", "rationale": "Human asks to review this later."}}],
                     "directObservations": [self.direct]}
         path = self.root / "controller/prior-feedback" / f"{self.sha}.json.gz"
         path.parent.mkdir()
         path.write_bytes(gzip.compress(json.dumps(feedback).encode(), mtime=0))
+        self.prior_feedback = feedback
 
     def setup(self, role="labeler"):
         with patch.object(campaign.subprocess, "check_output", return_value="codex-test\n"):
@@ -511,9 +521,20 @@ class QueryFirstJobTest(unittest.TestCase):
         self.assertEqual(evidence.read_bytes(), original)
         self.assertEqual(campaign.read(job / "query-index.json"), index)
         human = campaign.read(job / "prior-human-feedback.json")["charts"][0]
-        self.assertEqual(human["agentReviews"][0]["decision"], self.decision)
-        self.assertEqual(human["directObservations"], [self.direct])
-        self.assertEqual(human["handoffs"][0]["foundationSha256"], "a" * 64)
+        judgments = {row["id"]: row for row in human["humanJudgments"]}
+        self.assertEqual(judgments["modified-human"]["assessment"], {"presence": "absent"})
+        self.assertEqual(judgments["modified-human"]["humanComment"], "Exact final human correction.")
+        self.assertNotIn("humanComment", judgments["accepted-human"])
+        self.assertEqual(judgments["direct-expert"]["humanComment"], "Direct human explanation.")
+        self.assertEqual([row["disposition"] for row in human["humanDecisions"]], ["rejected", "deferred"])
+        self.assertEqual(human["humanDecisions"][0]["humanComment"], self.decision["rationale"])
+        self.assertTrue(all("assessment" not in row for row in human["humanDecisions"]))
+        self.assertNotIn("Old machine conclusion", json.dumps(human))
+        self.assertNotIn("AGENT-INHERITED", json.dumps(human))
+        self.assertNotIn("handoffs", human)
+        self.assertNotIn("calibrationExamples", campaign.read(job / "foundation.json"))
+        self.assertIn("calibrationExamples", campaign.read(self.common / "foundation.json"))
+        self.assertEqual(run["foundationInput"]["sourceSha256"], hashlib.sha256((self.common / "foundation.json").read_bytes()).hexdigest())
         candidates = campaign.read(job / "prior-machine-candidates.json")["candidates"]
         self.assertEqual(len(candidates), 1)
         self.assertEqual(candidates[0]["originalClaimId"], "m2")
@@ -628,6 +649,78 @@ class QueryFirstJobTest(unittest.TestCase):
             "humanObservations": [self.direct]}])
         return job
 
+    def test_launch_exports_human_only_bindings_and_keeps_administrative_original(self):
+        job = self.prepare_labeler_submission()
+        original = (job / "bindings.json").read_bytes()
+        handoff = (job / "packets" / f"{self.sha}.json").read_bytes()
+        process = Mock(pid=12345)
+        with patch.object(campaign.subprocess, "check_output", return_value="codex-test"), \
+                patch.object(campaign.subprocess, "Popen", return_value=process):
+            _, out, err = campaign.launch(self.root, job)
+            out.close()
+            err.close()
+        binding, = campaign.read(job / "bindings.json")
+        self.assertEqual(binding["taskId"], "frozen-task")
+        self.assertEqual(binding["humanJudgments"][0]["humanComment"], "Direct human explanation.")
+        self.assertEqual(binding["humanDecisions"][0]["humanComment"], self.decision["rationale"])
+        self.assertNotIn("Submitted crossed-pair", json.dumps(binding))
+        self.assertNotIn("existingReviews", binding)
+        self.assertEqual((self.root / "controller/worker-bindings" / f"{job.name}.json").read_bytes(), original)
+        self.assertEqual((job / "packets" / f"{self.sha}.json").read_bytes(), handoff)
+        self.assertEqual(campaign.read(job / "run.json")["inputHashes"]["bindings.json"],
+                         hashlib.sha256((job / "bindings.json").read_bytes()).hexdigest())
+
+    def test_launch_does_not_rewrite_already_pinned_legacy_bindings(self):
+        job = self.prepare_labeler_submission()
+        original = (job / "bindings.json").read_bytes()
+        run = campaign.read(job / "run.json")
+        run["inputHashes"]["bindings.json"] = hashlib.sha256(original).hexdigest()
+        campaign.write(job / "run.json", run)
+        with self.assertRaisesRegex(ValueError, "Frozen legacy human inputs require a fresh worker"):
+            campaign.launch(self.root, job)
+        self.assertEqual((job / "bindings.json").read_bytes(), original)
+        self.assertFalse((self.root / "controller/worker-bindings" / f"{job.name}.json").exists())
+
+    def test_launch_refuses_legacy_golden_inputs_without_rewriting_frozen_files(self):
+        for name, value in (
+                ("foundation.json", campaign.read(self.common / "foundation.json")),
+                ("prior-human-feedback.json", {"charts": [self.prior_feedback]}),
+                ("prior-review.json", {"charts": [{"feedback": self.prior_feedback}]})):
+            with self.subTest(input=name), TemporaryDirectory() as directory:
+                job = Path(directory)
+                campaign.write(job / name, value)
+                campaign.write(job / "bindings.json", [])
+                original = (job / name).read_bytes()
+                campaign.write(job / "run.json", {"role": "labeler", "skill": self.skill,
+                                                   "inputHashes": {name: hashlib.sha256(original).hexdigest()}})
+                with patch.object(campaign, "verify_skill"), self.assertRaisesRegex(ValueError, "require a fresh worker"):
+                    campaign.launch(self.root, job)
+                self.assertEqual((job / name).read_bytes(), original)
+
+    def test_revision_export_projects_human_sections_without_changing_submitted_reasoning(self):
+        binding = {"sourceSha256": self.sha, "taskId": "task", "taskSha256": "task-sha",
+                   "foundationSha256": "foundation-sha", "base": {"revision": 1, "sha256": "base"},
+                   "existingReviews": self.prior_feedback["agentReviews"], "humanObservations": [self.direct]}
+        original = {"charts": [{"sourceSha256": self.sha, "feedback": self.prior_feedback, "taskBinding": binding,
+                                "currentTask": {"feedback": self.prior_feedback, "taskBinding": binding},
+                                "handoff": {"evidence": "Actual submitted machine evidence."},
+                                "audit": {"rationale": "Actual independent machine audit."},
+                                "reasons": [{"kind": "human-rejection", "claimId": "rejected", "decision": self.decision}]}]}
+        before = json.dumps(original, sort_keys=True)
+        projected = campaign.public_prior_review(original)
+        chart, = projected["charts"]
+        for entry in (chart, chart["currentTask"]):
+            for key in ("feedback", "taskBinding"):
+                self.assertNotIn("Old machine conclusion", json.dumps(entry[key]))
+                self.assertNotIn("AGENT-INHERITED", json.dumps(entry[key]))
+                self.assertEqual(entry[key]["humanDecisions"][0]["humanComment"], self.decision["rationale"])
+        self.assertEqual(chart["handoff"], original["charts"][0]["handoff"])
+        self.assertEqual(chart["audit"], original["charts"][0]["audit"])
+        self.assertEqual(chart["reasons"][0]["humanDecision"]["humanComment"], self.decision["rationale"])
+        self.assertNotIn("decision", chart["reasons"][0])
+        self.assertEqual(json.dumps(original, sort_keys=True), before)
+        self.assertEqual(campaign.public_prior_review(projected), projected)
+
     def test_evidence_only_auditor_retains_submissions_and_expert_judgments_without_source_inputs(self):
         labeler = self.prepare_labeler_submission()
         self.config.update(auditorContextMode="labeler-evidence", models={"labeler": "gpt-6-astra", "auditor": "gpt-6-astra"},
@@ -654,9 +747,12 @@ class QueryFirstJobTest(unittest.TestCase):
         self.assertEqual(package["discovery"], [{key: campaign.read(labeler / "result.json")["charts"][0][key]
                                                 for key in ("sourceSha256", "inspectedRanges", "discoverySummary")}])
         current = package["expertJudgments"]["current"][0]
-        self.assertEqual(len(current["existingReviews"]), 1)
-        self.assertEqual(current["existingReviews"][0]["decision"], self.decision)
-        self.assertEqual(current["humanObservations"], [self.direct])
+        self.assertEqual(len(current["humanDecisions"]), 1)
+        self.assertEqual(current["humanDecisions"][0]["humanComment"], self.decision["rationale"])
+        self.assertNotIn("assessment", current["humanDecisions"][0])
+        self.assertEqual(current["humanJudgments"][0]["humanComment"], "Direct human explanation.")
+        self.assertNotIn("Submitted crossed-pair", json.dumps(package["expertJudgments"]))
+        self.assertNotIn("Old machine conclusion", json.dumps(package["expertJudgments"]))
         self.assertEqual(package["expertJudgments"]["prior"], campaign.read(labeler / "prior-human-feedback.json"))
         self.assertEqual(package["labelerBindingsSha256"], hashlib.sha256((labeler / "bindings.json").read_bytes()).hexdigest())
         self.assertNotIn("existingReviews", campaign.read(job / "bindings.json")[0])
@@ -779,6 +875,46 @@ class QueryFirstJobTest(unittest.TestCase):
         self.assertTrue((job / "result-check.json").exists())
         self.assertEqual([e["code"] for e in campaign.read(job / "result-check.json")["errors"]],
                          ["inspected-ranges-required"])
+
+
+class RecoveryFoundationViewTest(unittest.TestCase):
+    def test_projected_foundation_requires_exact_common_pin_and_exact_derived_definitions(self):
+        spec = importlib.util.spec_from_file_location("recovery", Path(__file__).with_name("prepare-annotation-recovery.py"))
+        recovery = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(recovery)
+        with TemporaryDirectory() as directory:
+            common, job = Path(directory) / "common", Path(directory) / "job"
+            foundation = {"foundationSha256": "pin", "tags": [{"id": "tech"}],
+                          "calibrationExamples": [{"evidence": "original machine calibration"}]}
+            campaign.write(common / "foundation.json", foundation)
+            campaign.write(job / "foundation.json", {key: value for key, value in foundation.items() if key != "calibrationExamples"})
+            run = {"inputHashes": {"foundation.json": recovery.digest((job / "foundation.json").read_bytes())},
+                   "foundationInput": {"view": "definitions-only", "sourceSha256": recovery.digest((common / "foundation.json").read_bytes())}}
+            recovery.verify_foundation(common, job, run, "pin")
+            campaign.write(common / "foundation.json", {**foundation, "calibrationExamples": []})
+            with self.assertRaisesRegex(ValueError, "Recovery Foundation changed"):
+                recovery.verify_foundation(common, job, run, "pin")
+            campaign.write(common / "foundation.json", foundation)
+            campaign.write(job / "foundation.json", {"foundationSha256": "pin", "tags": [{"id": "changed"}]})
+            run["inputHashes"]["foundation.json"] = recovery.digest((job / "foundation.json").read_bytes())
+            with self.assertRaisesRegex(ValueError, "Recovery Foundation changed"):
+                recovery.verify_foundation(common, job, run, "pin")
+
+    def test_historical_foundation_binding_still_requires_original_bytes(self):
+        spec = importlib.util.spec_from_file_location("recovery", Path(__file__).with_name("prepare-annotation-recovery.py"))
+        recovery = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(recovery)
+        with TemporaryDirectory() as directory:
+            common, job = Path(directory) / "common", Path(directory) / "job"
+            foundation = {"foundationSha256": "pin", "tags": [], "calibrationExamples": []}
+            for folder in (common, job):
+                campaign.write(folder / "foundation.json", foundation)
+            run = {"inputHashes": {"foundation.json": recovery.digest((job / "foundation.json").read_bytes())}}
+            recovery.verify_foundation(common, job, run, "pin")
+            campaign.write(job / "foundation.json", {key: value for key, value in foundation.items() if key != "calibrationExamples"})
+            run["inputHashes"]["foundation.json"] = recovery.digest((job / "foundation.json").read_bytes())
+            with self.assertRaisesRegex(ValueError, "Recovery Foundation changed"):
+                recovery.verify_foundation(common, job, run, "pin")
 
 
 class NecessaryConditionRuleTest(unittest.TestCase):

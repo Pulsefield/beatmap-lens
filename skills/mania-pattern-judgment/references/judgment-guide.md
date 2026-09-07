@@ -4,7 +4,7 @@ These distinctions summarize local human calibration, primarily 4K. Exact scoped
 human decisions take precedence for their examples. They do not define universal
 community terminology or replace the task's frozen Foundation.
 
-## Learning-oriented campaigns
+## Style judgments
 
 Judge realized section style. Supporting/prominent means how strongly the section
 expresses that style; typicality matters, and duration or note coverage alone does
@@ -14,19 +14,20 @@ is possible. Rejecting an example is not an absent label; deferral is not a labe
 
 Use chart actions, causal history, and the declared canonical gameplay profile.
 Chart-only evidence does not establish audio-dependent style, mapper intent,
-presentation, or player-specific response. Community votes concern whole
-difficulties and may select candidates; they do not prove local labels. Named
-patterns need not become additional supervised dimensions or independent controls.
+presentation, or player-specific response. Community tags convey human experience
+of whole difficulties and guide reading; they do not prove local labels. Natural
+chart organization remains worth studying without labels. Named patterns need not
+become supervised dimensions or independent controls.
 
 ## Read the organization
 
 - Inspect simultaneous attack groups, column order, intervals, repetition extent,
   complete occupancy, and release order together. Explain what the player follows
   before deciding which detail changes its character.
-- Locate changes and resets. A crop can contain jumpstream, grouped alternation,
-  and rolls as distinct episodes. A positive somewhere in the crop does not label
-  intervening negatives. Preserve approximate human cuts as approximate; precise
-  source-row refinements are separate proposals.
+- Read overlapping scales: jumps, bursts, stream, and trill can organize local
+  material inside a Tech passage. Explain each range and its role in the larger
+  arrangement. Distinguish coexistence from successive episodes. Preserve
+  approximate human cuts; source-row refinements are separate proposals.
 - Select a repeated core only while retaining extra notes and intervening rows
   as context. A decorative third key can preserve a two-key jack core. Projecting
   one side out of disjoint A↔B alternation cannot manufacture a jack.
@@ -36,6 +37,9 @@ patterns need not become additional supervised dimensions or independent control
 - Preserve exact source milliseconds. Harmless 1 ms osu rounding does not require
   another human question or perfect timing-grid proof; do not merge attacks or
   introduce an arbitrary tolerance. Literal equality remains a separate fact.
+- Separate the human verdict, original comment, exact source facts, and reconstructed
+  explanation. Comments can describe the dominant body or perceived grouping;
+  preserve literal exceptions and unresolved causal discrepancies.
 
 ## Jack
 
@@ -81,6 +85,10 @@ key or chord, within or across hands, including crossed pairs. Inspect coherent
 exchange, rate, extent, articulation, and surrounding flow together. Four
 alternating rows are a query minimum, not sufficient semantic evidence.
 
+*Tear Rain* preserves an inner alternating core as outer heads become holds.
+Complete head-group equality is unnecessary; account for every extra event and
+background role. Do not manufacture continuity by deleting intervening rows.
+
 Slow, progressively slowing, brief, and LN-mixed positives exist. None gives an
 absolute duration, count, or rate cutoff. Uneven timing may preserve an exchange
 or interrupt it; inspect the complete episode. A brief trill at a stream ending
@@ -91,61 +99,87 @@ veto on Stream or Tech in a larger mixed scope.
 ## LN coordination
 
 At some point, LNs must occupy **at least two columns simultaneously**. Preserve
-entering holds and source half-open occupancy. This condition is necessary, not
-sufficient: explain the independent press, hold, release, and tap roles. One held
-column with taps elsewhere generally does not qualify; a tiny real overlap alone
-does not establish the style.
+full endpoints and entering holds. This is necessary, not sufficient: separately
+encoded presses/releases need not be separately organized playing actions.
 
-Regular full-LN timing, different starts with common endings, and static held
-columns under tapping can be supporting. Sparse LNs aligned with surrounding
-attacks can be absent. Compare the actual independent actions and their role in
-the chart; regularity, density, renewal count, and occupancy alone settle neither
-outcome. A release-only crop cannot import surrounding attack-under-hold evidence.
+Explain whether holding and releasing carry their own roles, or short tails mainly
+follow brief attacks. Compare note lengths with surrounding attack rhythm, the
+order of tails and heads, and other continuing holds. No fixed milliseconds, beat
+fraction, duration ratio, or event count defines tap-like reading. Keep source LNs
+as LNs even when explaining that reading.
+
+Human contrasts:
+
+- *Who?*, 97595–98913 ms, **absent**: brief, similar-length LN cascades read as
+  taps despite real overlap and staggered releases.
+- *Materialize Anything*, 48104–48904 ms, **absent**: ordered short LNs below one
+  long anchor remain tap-like; the anchor does not turn their tails into a second
+  independent hold layer.
+- *End Time*, 21425–22592 ms, **prominent**: beneath a long anchor, intermediate
+  holds persist into further mixed attacks, with retained and newly pressed roles.
+- *Your Soulmate*, 1404510–1405260 ms, **supporting**: some short LNs read as taps,
+  while another length and staggered release require deliberate control.
+
+*Seraphim*, 148412–149622 ms, is supporting despite regular full-LN timing;
+*DiSANiMATE*, 224100–227884 ms, is prominent with interwoven retained holds,
+new attacks and releases. Thus shortness, regularity or a long anchor alone cannot
+settle the label. Static paired holds under taps can be supporting. Sparse aligned
+holds can be absent. Judge expression separately from confidence or event counts.
 
 LN release describes staggered endings; synchronized endings weaken that role.
-A display edge is not a release. LN inverse describes patterned gaps and renewals
-inside a sustained hold field, not ordinary successive handoffs. These descriptions
-do not automatically add targets or transfer salience to LN coordination or Tech.
+A display edge is not a release. LN inverse describes patterned gaps/renewals in
+a sustained hold field, not ordinary handoffs. Neither automatically establishes
+LN coordination or Tech.
+
+*Highscore* has an initial paired onset, then separated tails, yet is absent.
+*Nibelungen*'s single onset and three long staged releases are supporting;
+*Eviternity* repeats grouped starts and split releases. Later attacks during holds
+are not necessary. *Overkill* is prominent despite few, slow events: inspect its
+four-head decomposition and reentries under a retained lane. These cases supply
+no duration/count cutoff.
 
 ## Tech
 
-Judge how sequence, rhythm, and articulation make familiar patterns harder to
-anticipate. Compare the complete episode, including relationships inside repeated
-cells.
+Describe ordered rhythm and articulation, then explain what makes the construction
+tricky to anticipate or follow through familiar patterns. Subdivisions, accents,
+breathing and direction changes can articulate ordinary flow; listing them is not
+yet a Tech explanation. The expressive relation may occur inside a repeated cell,
+without an extra disruption. Recognizable constituents do not settle the whole.
 
-Human **prominent** comparators:
+Scoped human contrasts:
 
-- *Goodbye*, 94361–96602 ms: close tap-to-paired-LN attacks with staggered releases
-  interleave with jumps and faster tapping. The human calls this typical Tech.
-- *GHOST VIP*, 193499–195455 ms: LN handoffs, tap/LN chords, delayed starts with
-  shared releases, tapping resets, and pulse changes coexist.
+- *SYSTEM ERROR*, 170400–174300 ms, **supporting**: repeated three-LN starts,
+  staggered releases, then chords form an expressive cell. Its construction,
+  repetition, and extension matter, not solely later disruptions. Expressive
+  does not imply prominent.
+- *Pentiment*, 97007–98360 ms, **absent**: LN flow, two chords, then an LN block
+  remain straightforward. Enumerating changing hold roles did not justify Tech.
+- *Palace of Melancholia*, 220649–222368 ms, **prominent**: uneven tap-fill gaps,
+  faster LN handoffs, and mixed tapping change the flow. Recognizable motion
+  and closing repeated jumps impose no supporting ceiling. This human revision
+  replaces its earlier supporting assessment.
 
-These scoped positives show that recognizable larger motifs and chord punctuation
-do not impose a supporting ceiling. Typicality informs strength. For an analogy,
-explain matching and differing source relationships; mixed LNs alone are not a
-positive rule. Do not substitute an earlier machine downgrade for the human assessment.
+Compare how relationships shape the episode, not component counts. Typicality
+informs strength; assess the whole episode's expression rather than its least
+technical constituent. A noticeable feature need not
+be prominent; a definite restrained expression can remain supporting.
+*Goodbye*, 94361–96602 ms, and *GHOST VIP*, 193499–195455 ms, remain prominent
+comparators. Pure-tap contrasts are *Kanjou no Matenrou*, 389914–392610 ms, absent despite
+varied handstream; *d e a t h p i a n o*, 103453–106630 ms, supporting rhythmic
+expression; and *davay rasskazhem*, 75142–77828 ms, prominent. Compare their
+construction, not a density/jack rule. Mixed LNs are neither required nor sufficient.
 
-Check what actually resumes after a chord or pause. Familiar burst, jack, or
-handstream flow can remain easy to follow despite varied gaps. Density,
-unfamiliarity, and failure to name another pattern are insufficient. Distinguish
-independent LN control from tricky tapping/articulation relationships; assess both
-when supported.
+For a negative, explain why complete rhythm/articulation remain ordinary;
+"readable", "regular", or a familiar pattern name alone cannot establish this.
+Inspect continuations after pauses. Density, gap variety, LN duties, unfamiliarity,
+or unnamed patterns cannot decide Tech. Judge LN coordination independently:
+*GHOST VIP*, 192977–195194 ms, is LN coordination absent—short, aligned,
+expressive taps—with a different scope from its overlapping Tech positive.
+Do not infer mapper intent or invent difficulty, duration, or irregularity thresholds.
 
-Several brief or full-LN crops express LN coordination/release and are Tech absent;
-the earlier *BEYOND* supporting positive prevents an all-LN ban. Do not inflate
-an isolated unusual event or invent a minimum duration. Descriptive mention of
-another style does not approve its salience. Escalate the concrete boundary when
-comparisons remain insufficient.
+## Calibration
 
-## Calibration and audit
-
-Retrieve relevant cases from [recorded September 7 judgments](expert-review-20260907.json)
-and [later human corrections](feedback-calibration.json), or current canonical
-feedback. Read both positive and counterexample when testing a shortcut. The
-[Tech-pack note](tech-pack-20260907.md) contains weaker machine evidence, not human gold.
-
-An independent audit checks scope, complete relationships, inspected negatives,
-independent salience, and the inference connecting facts to style. Mechanical
-agreement is not semantic review. Replay exposed cases for regressions; evaluate
-accuracy on separate beatmapsets, keeping related crops and calibration exposure
-together. These labels do not establish numerical demand or a gameplay frontier.
+Retrieve current canonical examples, [recorded judgments](expert-review-20260907.json),
+[corrections](feedback-calibration.json), and [contrast identities](human-contrast-sets.json).
+Reopen positives and counterexamples before generalizing. Check complete scope,
+independent salience, and explanatory inference; exposed replay is not held-out accuracy.

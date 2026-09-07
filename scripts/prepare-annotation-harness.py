@@ -7,9 +7,10 @@ import shutil
 
 import pyarrow.parquet as pq
 
-from harness_examples import extract_examples
+from harness_examples import extract_examples, filter_contrast_sets, public_example
 
 REPO = Path(__file__).resolve().parents[1]
+CONTRAST_SETS = REPO / 'skills/mania-pattern-judgment/references/human-contrast-sets.json'
 TOOL_FILES = ('annotation-harness.py', 'harness_examples.py', 'harness_inspection.py',
               'harness_render.py', 'annotation-queries.py', 'annotation-facts.py')
 
@@ -27,7 +28,8 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def prepare(campaign, section_file, feedback_dir, out, mode='annotation', source_groups=None):
+def prepare(campaign, section_file, feedback_dir, out, mode='annotation', source_groups=None,
+            contrast_sets_path=CONTRAST_SETS):
     campaign, section_file, feedback_dir, out = map(Path, (campaign, section_file, feedback_dir, out))
     sources = {c['source']['sha256']: c for c in read(campaign / 'admin/source-map.json')}
     groups = source_groups or {sha: f"mapset:{c['source'].get('beatmapSetId', sha)}" for sha, c in sources.items()}
@@ -46,10 +48,13 @@ def prepare(campaign, section_file, feedback_dir, out, mode='annotation', source
     # Held-out labels never enter the worker bundle, including other difficulties in its group.
     examples = [e for e in examples if e['sourceSha256'] in sources
                 and e['sourceSha256'] not in excluded_sources and e['groupId'] not in excluded_groups]
+    examples = [public_example(e) | {'groupId': e['groupId']} for e in examples]
     for example in examples:
         source = sources[example['sourceSha256']]['source']
         example.update({k: source[k] for k in ('title', 'difficulty') if k in source})
     save(out / 'examples.json', examples)
+    contrast_sets_path = Path(contrast_sets_path)
+    save(out / 'contrast-sets.json', {'sets': filter_contrast_sets(read(contrast_sets_path)['sets'], examples)})
     chart_refs = {}
     for sha in sorted({c['sourceSha256'] for c in sections} | {e['sourceSha256'] for e in examples}):
         original = sources[sha]
@@ -79,11 +84,13 @@ def prepare(campaign, section_file, feedback_dir, out, mode='annotation', source
                 'provenance': {'sectionInputSha256': digest(section_file),
                                'sourceMapSha256': digest(campaign / 'admin/source-map.json'),
                                'feedbackFiles': {p.name: digest(p) for p in feedback_paths},
+                               'contrastSetsSha256': digest(contrast_sets_path),
                                'grouping': 'provided-song-groups' if source_groups else 'mapset',
                                'preparerSha256': digest(Path(__file__))},
                 'limits': ['Read-only snapshot, not live canonical decisions.',
                            'Player-action perspective and structural queries do not assign semantic labels.',
-                           'Example ordering is deterministic label balance/keyword filtering, not relevance ranking.']}
+                           'Example ordering interleaves matching labels; keyword filters may be one-sided.',
+                           'Contrast sets are curated comparisons, not structural or semantic relevance rankings.']}
     save(out / 'manifest.json', manifest)
     return {'output': str(out.resolve()), 'sections': len(sections), 'examples': len(examples),
             'charts': len(chart_refs), 'manifestSha256': digest(out / 'manifest.json')}
@@ -97,9 +104,11 @@ def main():
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--mode', choices=['annotation', 'evaluation'], default='annotation')
     parser.add_argument('--song-groups', type=Path, help='Complete source SHA to curated song ID mapping.')
+    parser.add_argument('--contrast-sets', type=Path, default=CONTRAST_SETS,
+                        help='Curated example memberships; defaults to the repository human contrast sets.')
     args = parser.parse_args()
     print(json.dumps(prepare(args.campaign, args.sections, args.feedback_dir, args.out, args.mode,
-                             read(args.song_groups) if args.song_groups else None)))
+                             read(args.song_groups) if args.song_groups else None, args.contrast_sets)))
 
 
 if __name__ == '__main__':

@@ -100,7 +100,7 @@ def prepare_job(job, cases, skill_files, foundation, config, role='labeler', ext
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(content)
     save(job / 'cases.json', {'cases': cases})
-    save(job / 'foundation.json', foundation)
+    save(job / 'foundation.json', {key: value for key, value in foundation.items() if key != 'calibrationExamples'})
     save(job / 'response-schema.json', response_schema())
     (job / 'AGENTS.md').write_text('Use only this job directory. The supplied frozen skill is authoritative for this evaluation. Do not inspect other jobs, global skill files, parent repositories, feedback stores, or network sources. Do not spawn agents. No canonical submissions.\n')
     prompt = '''Apply the frozen skill at ./skill/SKILL.md and ./skill/references/judgment-guide.md to every case in cases.json. Read foundation.json for definitions. These are exact local source sections with complete supplied context and entering holds; all columns are zero-based and times are source milliseconds. Judge the entire selected episode across ALL FIVE dimensions independently. Keep the supplied scope for this comparison, using context only to explain entry/exit. Do not infer any style from metadata or from another target. Full note arrays are factual inputs; no target gold or original machine labels are supplied. A source missing from context cannot be invented. Use only supplied files. Do not read globally installed skills, other jobs, repositories, canonical feedback, or network sources. Do not spawn agents.

@@ -11,7 +11,7 @@ from pathlib import Path
 import time
 from typing import Literal
 
-from harness_examples import get_example, search_examples
+from harness_examples import get_example, public_example, search_examples
 from harness_inspection import chart_context, inspect, perspective
 from harness_render import render_section
 
@@ -38,6 +38,7 @@ class Harness:
             if name.startswith('tools/') and digest(self.bundle / name) != self.manifest['files'][name]:
                 raise ValueError(f'Frozen harness tool changed: {name}')
         self.examples = self.load('examples.json')
+        self.contrast_sets = self.load('contrast-sets.json')['sets']
         self.exclusions = {'excluded_sources': self.manifest['excludedSources'],
                            'excluded_groups': self.manifest['excludedGroups']}
         self.calls = Counter()
@@ -74,12 +75,11 @@ class Harness:
     def context(self, section_id, start_ms=None, end_ms=None, timing_offset=0, timing_limit=12):
         section, chart, start, end = self.bounds(section_id, start_ms, end_ms)
         result = chart_context(chart, start, end, timing_offset, timing_limit)
-        result['reviewContext'] = section['reviewContext']
+        result['reviewContext'] = {key: section['reviewContext'][key] for key in ('startMs', 'endMs')}
         result['sectionId'] = section_id
         if self.manifest['mode'] == 'annotation':
             result['existingHumanJudgments'] = [
-                {'id': e['id'], 'tagId': e['tagId'], 'scope': e['scope'], 'assessment': e['assessment'],
-                 'rationale': e['rationale'], 'rationaleOrigin': e['rationaleOrigin']}
+                public_example(e)
                 for e in self.examples if e['sourceSha256'] == section['sourceSha256']
                 and max(start, e['scope']['startMs']) < min(end, e['scope']['endMs'])]
         return result
@@ -92,12 +92,12 @@ class Harness:
         _, chart, start, end = self.bounds(section_id, start_ms, end_ms)
         return perspective(chart, start, end)
 
-    def search(self, tag_id='tech', assessment=None, text='', offset=0, limit=3):
-        result = search_examples(self.examples, tag_id, assessment, text, offset, limit, **self.exclusions)
-        # Keep long provenance and source IDs behind the stable example handle.
+    def search(self, tag_id='tech', assessment=None, text='', offset=0, limit=3, contrast_set=None):
+        result = search_examples(self.examples, tag_id, assessment, text, offset, limit,
+                                 contrast_sets=self.contrast_sets, contrast_set=contrast_set, **self.exclusions)
+        # Keep long source IDs behind the stable example handle.
         for card in result['cards']:
             source = self.manifest['charts'][card.pop('sourceSha256')]['source']
-            card.pop('groupId', None)
             card['title'] = source.get('title', '')
             card['sectionId'] = 'example:' + card['id']
         return result
@@ -106,10 +106,11 @@ class Harness:
         result = get_example(self.examples, example_id, **self.exclusions)
         if result is None:
             raise ValueError('Example is unavailable in this job. Use find_human_examples for allowed IDs.')
-        return {key: value for key, value in result.items() if key != 'sourceEvidence'} | {
+        source = self.manifest['charts'][result['sourceSha256']]['source']
+        return public_example(result) | {
             'sectionId': 'example:' + result['id'],
-            'source': self.manifest['charts'][result['sourceSha256']]['source'],
-            'next': 'Use this sectionId with inspect_section, section_perspective or render_section only if needed.'}
+            'source': {key: source[key] for key in ('sha256', 'title', 'artist', 'difficulty', 'creator',
+                                                    'keyCount', 'beatmapId', 'beatmapSetId') if key in source}}
 
     def query(self, section_id, query, start_ms=None, end_ms=None, columns=None, offset=0, limit=3):
         _, chart, start, end = self.bounds(section_id, start_ms, end_ms)
@@ -200,8 +201,8 @@ def create_server(harness):
 
     @server.tool(annotations=annotations, structured_output=False)
     def inspect_section(section_id: str, start_ms: int | None = None, end_ms: int | None = None,
-                        view: Literal['rows', 'actions'] = 'rows', offset: int = 0, limit: int = 32) -> CallToolResult:
-        """Inspect a bounded page of exact rows or press/hold/release actions. Expand context with source-ms bounds; follow nextOffset if needed."""
+                        view: Literal['rows', 'actions', 'articulation'] = 'rows', offset: int = 0, limit: int = 32) -> CallToolResult:
+        """Inspect exact rows, press/hold/release actions, or articulation: complete attack rows plus neutral LN duration, interior-attack and release relationships. Full refs and entering holds remain intact; no playable-role or style verdict. Follow nextOffset if needed."""
         return result('inspect_section', {'section_id': section_id, 'start_ms': start_ms, 'end_ms': end_ms,
                                          'view': view, 'offset': offset, 'limit': limit})
 
@@ -212,14 +213,14 @@ def create_server(harness):
 
     @server.tool(annotations=annotations, structured_output=False)
     def find_human_examples(tag_id: str = 'tech', assessment: Literal['absent', 'supporting', 'prominent', 'present'] | None = None,
-                            text: str = '', offset: int = 0, limit: int = 3) -> CallToolResult:
-        """Find brief expert cards by target, strength and optional words. Default balances absent/supporting/prominent. Simple ordering, not semantic relevance ranking."""
+                            text: str = '', offset: int = 0, limit: int = 3, contrast_set: str | None = None) -> CallToolResult:
+        """Find final human judgments with optional humanComment by tag, assessment, literal human-comment/title/difficulty words or a contrast_set ID. No agent reasoning/evidence. Check matchedAssessmentCounts/missingContrastLabels: filters can be one-sided. availableContrastSets lists IDs/counts, never relevance rankings."""
         return result('find_human_examples', {'tag_id': tag_id, 'assessment': assessment, 'text': text,
-                                            'offset': offset, 'limit': limit})
+                                            'offset': offset, 'limit': limit, 'contrast_set': contrast_set})
 
     @server.tool(annotations=annotations, structured_output=False)
     def get_human_example(example_id: str) -> CallToolResult:
-        """Open one useful card's exact human rationale, scope and provenance. Returned sectionId works with the same inspection/visual tools."""
+        """Open one final human judgment, source/scope, and optional exact humanComment. No agent reasoning/evidence; generic confirmations have no comment. Returned sectionId works with source inspection tools."""
         return result('get_human_example', {'example_id': example_id})
 
     @server.tool(annotations=annotations, structured_output=False)

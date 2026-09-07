@@ -1,73 +1,50 @@
 ---
 name: mania-pattern-judgment
-description: Judge osu!mania section styles across multiple dimensions using source structure and human calibration. Use for annotation, pattern review, and feedback-driven calibration.
+description: Read osu!mania organization through time, action, and multiple scales; learn from real beatmaps, community tags, and confirmed human sections. Use for corpus learning, pattern review, annotation, and calibration.
 ---
 
 # Mania pattern judgment
 
-Recognize the organization a player follows and explain its source relationships.
-Read the frozen Foundation and [judgment guide](references/judgment-guide.md).
-V2 covers Jack, Stream, Tech, LN coordination, and Trill; the task's pinned meanings
-remain authoritative.
+Understand the organization a player follows through concurrent **time, action,
+and organization** views. Natural beatmaps supply structures and variants;
+community difficulty tags and confirmed human sections supply human experience.
+Machine-only labels, audits, and explanations supply no learning authority.
 
-When an annotation harness is supplied, start from its section brief. Invoke tools
-only for missing evidence, another viewing perspective, or a useful human comparison.
-Expand relevant example cards individually; do not dump ledgers or run every tool.
-Reuse visible evidence. Evaluation jobs restrict calibration access; respect their
-allowed pool.
+For study or experience-building, read [corpus learning](references/corpus-learning.md).
+Learning produces revisable source-backed explanations, without requiring section
+labels, five-dimensional reviews, proposals, or new human annotations.
 
-## One section, several judgments
+For style interpretation, read the [judgment guide](references/judgment-guide.md)
+and supplied frozen Foundation. Its pinned meanings remain authoritative.
+V2 covers Jack, Stream, Tech, LN coordination, and Trill. Learning does not revise
+these meanings or establish numerical demand.
 
-1. Read supplied human feedback at its exact scope, including revised boundaries.
-   Use the human decision's rationale instead of unresolved wording retained from
-   an older machine proposal. Inspect the exact difficulty, complete entering
-   holds, and neighboring rows needed to see entry, continuation, and exit.
-2. Describe the episode in familiar terms: repeated chords, alternating groups,
-   flowing singles, a direction change, or independent hold/release roles. Check
-   complete attack rows and timing; keep short LNs as LNs. Do not select notes
-   first and classify a cleaned sequence that hides interruptions.
-3. Review **every active Foundation dimension in the same pass**. Give each its
-   own witnesses, scope, presence, and salience. Share a `sectionId` for the same
-   episode; use a common scope when valid and separate justified cuts when the
-   organizations change. Several prominent dimensions are allowed; successive
-   episodes alone do not establish co-occurrence.
-4. Use `present` with `supporting`/`prominent`, an evidence-backed `absent`,
-   `unresolved` for an inspected semantic uncertainty, or `unreviewed` for a
-   dimension not actually inspected. Missing evidence and query misses are not
-   negatives. Inspect query-uncovered regions when whole-chart coverage is asked.
-5. Compare the closest human positive and counterexample when a distinction is
-   difficult. Explain the relevant similarity or difference, rather than copying
-   a verdict. Escalate only the concrete semantic choice that remains open.
+## When annotation is requested
 
-## Human-readable notes
+Start with the supplied brief and exact human feedback. Inspect complete attack
+rows, entering holds, and the neighborhood needed for entry, continuation, and
+exit. Preserve short LNs and interruptions. Use tools for missing evidence or a
+useful perspective; retrieve relevant human examples individually. Respect any
+evaluation pool restrictions.
 
-Write `evidence.rationale` as **2–4 brief Markdown bullets**, normally at most
-80 words. Lead with recognizable organization; explain the decisive relation and
-its role in this section. Add a comparison, boundary, or uncertainty only when it
-changes the judgment. Keep spaces between words, numbers, and units.
+Review every active dimension independently: scope, witnesses, presence, and
+salience. Share `sectionId` for one episode; justify separate cuts where needed.
+Several prominent dimensions may coexist; successive episodes alone do not prove
+co-occurrence. Use evidence-backed `absent`, `unresolved` for inspected semantic
+uncertainty, and `unreviewed` for uninspected dimensions. Query misses are not
+negatives; whole-chart annotation includes uncovered regions.
 
-For example, an inspected Tech negative might read:
+Write `evidence.rationale` as 2–4 brief Markdown bullets, normally at most 80 words:
+recognizable organization, decisive relationship, and section role. Put detailed
+timestamps, source lines, calculations, and hashes in structured evidence.
 
-- Chord minijacks lead into a short, readable stream.
-- The change follows a familiar flow; it does not create a tricky rhythm here.
+## References and boundaries
 
-Keep full timestamps, source lines, arrays, calculations, and hashes in structured
-evidence or the analysis sidecar. Brief prose must still explain each claim; a
-tag name, density count, or copied Foundation definition is not a rationale.
+- Delivery/audit: [exchange](references/beatmap-lens-exchange.md).
+- Factual queries: [structural queries](references/structural-queries.md).
+- Guidance updates: [feedback maintenance](references/feedback-maintenance.md).
 
-## References and provenance
-
-- For Beatmap Lens delivery and independent audit, read
-  [exchange](references/beatmap-lens-exchange.md).
-- For deterministic source queries, read
-  [structural queries](references/structural-queries.md).
-- To update this skill from feedback, follow
-  [feedback maintenance](references/feedback-maintenance.md), including its length
-  budget. Retrieve only the relevant calibration records, not every past example.
-
-Submit proposals and audits; do not write canonical human decisions or approve
-Foundation semantics for the expert. Preserve original proposals, human corrections,
-and frozen task/skill hashes. Explicit human decisions need no repeat confirmation.
-Keep old packets and worker copies frozen. Identify guidance/Foundation conflicts
-without silently changing meanings.
-Without a frozen task, label source-backed analysis unsealed and leave pins unset.
+Do not author canonical human decisions or approve Foundation semantics. Preserve
+human corrections, original proposals, and frozen packets/pins. Explicit human
+decisions need no repeat confirmation. Report guidance/Foundation conflicts.
+Without a frozen task, keep analysis unsealed and pins unset.

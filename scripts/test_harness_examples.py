@@ -76,8 +76,7 @@ class ExtractionTest(unittest.TestCase):
         self.assertEqual(record['provenance']['foundationSha256'], 'stored-human-foundation')
         self.assertEqual(record['provenance']['decisionId'], row['decision']['id'])
         self.assertEqual(record['provenance']['handoffSha256'], 'handoff-sha')
-        self.assertEqual(record['sourceEvidence']['noteRefs'], corrected['evidence']['noteRefs'])
-        self.assertNotIn('rationale', record['sourceEvidence'])
+        self.assertNotIn('sourceEvidence', record)
         self.assertEqual(data, before)
 
     def test_confirmation_is_literal_even_when_machine_base_is_now_stale(self):
@@ -85,7 +84,7 @@ class ExtractionTest(unittest.TestCase):
         data['agentReviews'] = [review(claim())]
         record, = examples.extract_examples([data], {})
         self.assertEqual(record['rationale'], 'Human confirmed the original proposal.')
-        self.assertEqual(record['sourceEvidence'], {'witnessCount': 43, 'contextNoteCount': 11})
+        self.assertNotIn('sourceEvidence', record)
         self.assertEqual(record['groupId'], data['sourceSha256'])
         self.assertNotIn('Old machine uncertainty', str(record))
 
@@ -117,6 +116,60 @@ class ExtractionTest(unittest.TestCase):
         self.assertTrue(all(row['provenance']['foundationSha256'] == 'direct-foundation' for row in result.values()))
 
 
+class PublicExampleTest(unittest.TestCase):
+    def test_public_judgment_allowlist_excludes_machine_fields_and_preserves_exact_human_comment(self):
+        record = pool()[0]
+        record['rationale'] = '  Human explanation.\nExact wording.  '
+        record.update(agentComment='machine-only-comment', evidence={'text': 'machine-only-evidence'},
+                      proposal={'text': 'machine-only-proposal'}, audit='machine-only-audit',
+                      arbitraryFutureField={'text': 'machine-only-future'})
+        record['sourceEvidence'] = {'agentRationale': 'machine-only-source-evidence'}
+        record['assessment']['agentRationale'] = 'machine-only-assessment'
+        record['scope']['agentRationale'] = 'machine-only-scope'
+        record['reviewContext']['agentRationale'] = 'machine-only-context'
+        before = deepcopy(record)
+        value = examples.public_example(record)
+        self.assertEqual(value['humanComment'], record['rationale'])
+        self.assertEqual(set(value), {'id', 'sourceSha256', 'tagId', 'assessment', 'scope', 'reviewContext', 'humanComment'})
+        self.assertNotIn('machine-only', str(value))
+        self.assertEqual(examples.public_example(value), value)
+        self.assertEqual(record, before)
+        card, = examples.search_examples([record])['cards']
+        self.assertNotIn('machine-only', str(card))
+        self.assertNotIn('provenance', card)
+        self.assertNotIn('rationale', card)
+        self.assertEqual(examples.search_examples([record], text='machine-only')['total'], 0)
+        value['scope']['startMs'] = 0
+        self.assertEqual(record, before)
+
+    def test_unattributed_rationale_is_never_promoted_to_a_human_comment(self):
+        record = pool()[0]
+        record.pop('rationaleOrigin')
+        record['rationale'] = 'Unattributed machine explanation.'
+        for value in (examples.public_example(record), examples.get_example([record], record['id']),
+                      examples.search_examples([record])['cards'][0]):
+            self.assertNotIn('humanComment', value)
+            self.assertNotIn('Unattributed', str(value))
+        self.assertEqual(examples.search_examples([record], text='Unattributed')['total'], 0)
+
+    def test_no_comment_judgments_remain_visible_without_substituting_machine_rationale(self):
+        for comment in ('Human confirmed the original proposal.', '/', ' / /\n', '', ' \t\n'):
+            with self.subTest(comment=comment):
+                data = feedback()
+                data['agentReviews'] = [review(claim(), rationale=comment)]
+                record, = examples.extract_examples([data], {})
+                self.assertEqual(record['rationale'], comment)
+                value = examples.public_example(record)
+                card, = examples.search_examples([record])['cards']
+                for public in (value, card):
+                    self.assertEqual(public['assessment'], {'presence': 'present', 'salience': 'supporting'})
+                    self.assertNotIn('humanComment', public)
+                    self.assertNotIn('humanCommentTruncated', public)
+                    self.assertNotIn('Old machine uncertainty', str(public))
+                self.assertEqual(examples.search_examples([record], text='confirmed')['total'], 0)
+                self.assertEqual(examples.public_example(value), value)
+
+
 class SearchTest(unittest.TestCase):
     def test_first_page_balances_labels_and_pagination_visits_each_record_once(self):
         records = pool()
@@ -124,6 +177,8 @@ class SearchTest(unittest.TestCase):
         self.assertEqual([examples._label(row) for row in first['cards']], list(examples.LABELS))
         self.assertEqual(first['nextOffset'], 3)
         self.assertEqual(first['total'], 9)
+        self.assertEqual(first['matchedAssessmentCounts'], {'absent': 3, 'supporting': 3, 'prominent': 3})
+        self.assertEqual(first['missingContrastLabels'], [])
         second = examples.search_examples(records, offset=first['nextOffset'])
         third = examples.search_examples(records, offset=second['nextOffset'])
         visited = [row['id'] for page in (first, second, third) for row in page['cards']]
@@ -140,14 +195,17 @@ class SearchTest(unittest.TestCase):
         self.assertEqual(len(first['cards']), examples.MAX_CARDS)
         self.assertEqual(first['limit'], examples.MAX_CARDS)
         card, = examples.search_examples(records, text='区域中的节奏关系')['cards']
-        self.assertEqual(card['rationale'], target['rationale'][:examples.RATIONALE_CHARS])
-        self.assertTrue(card['rationaleTruncated'])
+        self.assertEqual(card['humanComment'], target['rationale'][:examples.RATIONALE_CHARS])
+        self.assertTrue(card['humanCommentTruncated'])
+        full = examples.public_example(target)
+        self.assertEqual(full['humanComment'], target['rationale'])
+        self.assertNotIn('humanCommentTruncated', full)
         self.assertNotIn('sourceEvidence', card)
         self.assertNotIn('provenance', card)
         retrieved = examples.get_example(records, target['id'])
-        self.assertEqual(retrieved, target)
-        retrieved['rationale'] = 'Must not mutate the frozen library.'
-        self.assertNotEqual(retrieved, target)
+        self.assertEqual(retrieved, full)
+        retrieved['humanComment'] = 'Must not mutate the frozen library.'
+        self.assertEqual(target['rationale'], '区域中的节奏关系 ' * 100)
 
     def test_filters_are_literal_and_do_not_infer_other_dimension_labels(self):
         records = pool()
@@ -157,6 +215,43 @@ class SearchTest(unittest.TestCase):
         self.assertEqual(examples.search_examples(records, assessment='present')['total'], 6)
         self.assertEqual(examples.search_examples(records, text='familiar displaced')['total'], 0)
         self.assertEqual(examples.search_examples(records, tag_id='trill-organization')['total'], 0)
+        records[0].update(title='Identity Title', difficulty='Identity Difficulty', rationale='/')
+        self.assertEqual(examples.search_examples(records, text='Identity Title Difficulty')['total'], 1)
+
+    def test_one_sided_keyword_results_expose_missing_labels_without_adding_unmatched_cards(self):
+        result = examples.search_examples(pool(), text='absent', limit=1)
+        self.assertEqual(result['total'], 3)
+        self.assertEqual(len(result['cards']), 1)
+        self.assertEqual(result['matchedAssessmentCounts'], {'absent': 3, 'supporting': 0, 'prominent': 0})
+        self.assertEqual(result['missingContrastLabels'], ['supporting', 'prominent'])
+        self.assertEqual(result['order'], 'label-interleaved-then-id')
+        self.assertIn('one-sided', result['contrastCaveat'])
+        empty = examples.search_examples(pool(), text='no matching human words')
+        self.assertEqual(empty['cards'], [])
+        self.assertEqual(empty['missingContrastLabels'], list(examples.LABELS))
+
+    def test_curated_membership_intersects_filters_and_discovery_preserves_exact_rationale(self):
+        records = pool()
+        members = [record for record in records if record['sourceSha256'].endswith('-0')]
+        sets = [{'id': 'flow-comparison', 'description': 'Compare familiar flow expression.',
+                 'exampleIds': [record['id'] for record in members]}]
+        selected = examples.search_examples(records, contrast_sets=sets, contrast_set='flow-comparison')
+        self.assertEqual({card['id'] for card in selected['cards']}, set(sets[0]['exampleIds']))
+        self.assertEqual(selected['matchedAssessmentCounts'], dict.fromkeys(examples.LABELS, 1))
+        filtered = examples.search_examples(records, contrast_sets=sets, contrast_set='flow-comparison',
+                                             assessment='supporting', text='familiar')
+        card, = filtered['cards']
+        original = next(record for record in members if record['id'] == card['id'])
+        self.assertEqual(card['humanComment'], original['rationale'])
+        self.assertEqual(filtered['matchedAssessmentCounts'], {'absent': 0, 'supporting': 1, 'prominent': 0})
+        self.assertEqual(filtered['availableContrastSets'], selected['availableContrastSets'])
+        self.assertNotIn('exampleIds', str(selected['availableContrastSets']))
+        self.assertNotIn('description', str(selected['availableContrastSets']))
+        missed = examples.search_examples(records, contrast_sets=sets, text='unmatched words')
+        self.assertEqual(missed['cards'], [])
+        self.assertEqual(missed['availableContrastSets'], selected['availableContrastSets'])
+        self.assertEqual(examples.search_examples(records, contrast_sets=sets,
+                                                 tag_id='ln-coordination')['availableContrastSets'], [])
 
     def test_exclusions_hold_out_entire_sources_and_song_groups_in_search_and_get(self):
         records = pool()
@@ -171,8 +266,27 @@ class SearchTest(unittest.TestCase):
             if record['groupId'] == 'song-a' or record['sourceSha256'] == 'prominent-1':
                 self.assertIsNone(value)
             else:
-                self.assertEqual(value, record)
+                self.assertEqual(value, examples.public_example(record))
         self.assertIsNone(examples.get_example(records, 'unknown-example'))
+
+    def test_set_discovery_and_selection_apply_exclusions_before_counts_and_memberships(self):
+        records = pool()
+        held_out = [record for record in records if record['groupId'] == 'song-a'
+                    or record['sourceSha256'] == 'prominent-1']
+        sets = [{'id': 'mixed', 'description': 'A mixed comparison.',
+                 'exampleIds': [record['id'] for record in records]},
+                {'id': 'held-out-only', 'description': 'An unavailable comparison.',
+                 'exampleIds': [record['id'] for record in held_out]}]
+        options = {'contrast_sets': sets, 'excluded_sources': ('prominent-1',), 'excluded_groups': ('song-a',)}
+        result = examples.search_examples(records, contrast_set='mixed', limit=6, **options)
+        descriptor, = result['availableContrastSets']
+        self.assertEqual(descriptor['id'], 'mixed')
+        self.assertEqual(descriptor['assessmentCounts'], dict.fromkeys(examples.LABELS, 2))
+        self.assertEqual(result['matchedAssessmentCounts'], descriptor['assessmentCounts'])
+        for record in held_out:
+            self.assertNotIn(record['id'], str(result))
+        with self.assertRaisesRegex(ValueError, 'unavailable'):
+            examples.search_examples(records, contrast_set='held-out-only', **options)
 
 
 if __name__ == '__main__':

@@ -56,6 +56,19 @@ class SectionBenchmarkTest(unittest.TestCase):
             (self.job / name).write_text(json.dumps(value))
         return benchmark.metrics(self.job, self.gold)
 
+    def test_direct_job_omits_inherited_calibration_from_worker_foundation(self):
+        foundation = {'foundationSha256': 'canonical-foundation', 'targets': [{'id': 'tech'}],
+                      'calibrationExamples': [{'claim': {'evidence': {'rationale': 'Old agent rationale.'}}}]}
+        before = deepcopy(foundation)
+        job = Path(self.temp.name) / 'prepared'
+        config = {'models': {'labeler': 'fixture-model'}, 'reasoningEfforts': {'labeler': 'medium'}}
+        benchmark.prepare_job(job, self.cases, {}, foundation, config)
+        self.assertEqual(benchmark.read(job / 'foundation.json'),
+                         {'foundationSha256': 'canonical-foundation', 'targets': [{'id': 'tech'}]})
+        self.assertEqual(foundation, before)
+        run = benchmark.read(job / 'run.json')
+        self.assertEqual(run['inputHashes']['foundation.json'], benchmark.sha(job / 'foundation.json'))
+
     def test_only_known_labels_count_and_average_cost_uses_cache_breakdown(self):
         self.response[0]['judgments'][0].update(presence='present', salience='prominent')
         self.gold['another-job:tech'] = {'presence': 'absent'}

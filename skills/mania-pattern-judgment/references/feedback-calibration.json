@@ -2,9 +2,9 @@
   "authority": "Scoped canonical human decisions; descriptive mentions of other styles do not create additional assessments.",
   "source": ".local/corpus-500-v2/workspace/workflow/*.v2.json",
   "snapshotDate": "2026-09-07",
-  "observationsInspected": 104,
-  "selection": "Fourteen later decisions with substantive human rationale, plus the GHOST VIP prominent salience correction. The 42 historical records remain in expert-review-20260907.json. Generic confirmations and other slash-only explanations are omitted.",
-  "provenance": "Stored Foundation pins are copied verbatim from current observations. Historical ledger pins remain unchanged. snapshotObservationSha256 hashes sorted-key compact UTF-8 JSON of the current complete observation, without ASCII escaping.",
+  "observationsInspected": 122,
+  "selection": "Selected scoped human corrections and contrast cases, including September 7 Tech articulation/strength, pure taps, and tap-like LN versus independent held-control judgments. Generic confirmations and slash-only revisions establish exact labels, not independent reasoning. Historical records remain in expert-review-20260907.json.",
+  "provenance": "Stored Foundation pins are copied verbatim from current observations. Historical ledger pins remain unchanged. snapshotObservationSha256 hashes sorted-key compact UTF-8 JSON of the current complete observation, without ASCII escaping. Later snapshotFeedbackSha256 values hash the complete canonical API feedback bytes; they are not observation hashes.",
   "decisions": [
     {
       "sourceSha256": "122e1251a8c1bb923592859630fe58ff6270f048c43e01e494f90d4138185d8a",
@@ -369,6 +369,435 @@
       "confirmedAt": "2026-09-07T06:28:37.973Z",
       "humanRationale": "the area length is too limited to confirm it's tech. Rather, it's more LN coordination",
       "humanRationaleSource": "decision.rationale"
+    },
+    {
+      "exampleId": "human-2bc2bb80374f8bf685b61dd7",
+      "sourceSha256": "8360f386c8663ab23591965cf697840eb5f33f7a6a9d8cdf2681f850c7e0cea0",
+      "title": "Pentiment",
+      "difficulty": "Regret",
+      "scope": {
+        "endMs": 98360,
+        "startMs": 97007
+      },
+      "reviewContext": {
+        "endMs": 98700,
+        "startMs": 96602
+      },
+      "tagId": "tech",
+      "assessment": {
+        "presence": "absent"
+      },
+      "decisionId": "97e50dc3-91b2-4e36-9df2-918506be7cf3",
+      "disposition": "modified",
+      "observationId": "97e50dc3-91b2-4e36-9df2-918506be7cf3:observation",
+      "storedFoundationSha256": "15fa68913bdb2bf395a189df7ab433f6d5b126fc35c46c1dbc8e607ce2182e97",
+      "documentCanonicalSha256": "754224d22edb5072f77b7788d489e1ece18d28adfe22a192cc53fc7d6117d74f",
+      "snapshotFeedbackSha256": "faeabd6c6e5b14f433d49d9808c6f05d3b05f958a2109186a11345385d5fb979",
+      "confirmedAt": "2026-09-07T11:50:07.073Z",
+      "humanRationale": "section starts with chordstream like ln, followed by 2 chords, then a LN block. there is no flow changing and it's not tricky to play, nor does it supply an irregular feeling when playing.",
+      "humanRationaleSource": "decision.rationale",
+      "handoffId": "corpus-500-labeler-14afaf57-231c-44b1-a8be-cc8f6a63d3d9-8360f386c866",
+      "handoffSha256": "7c27d18c2f2299a263a2e937285abdf185a25a386f811f39e2ce4830b91dc2cf",
+      "claimId": "c06-07"
+    },
+    {
+      "exampleId": "human-8d902a4670afe83e8795a188",
+      "sourceSha256": "cd0ebcdab7f01cd32099eb1da13528ce0ce60cede42e95543e9df773dd37ad85",
+      "title": "Palace of Melancholia",
+      "difficulty": "Desolation",
+      "scope": {
+        "endMs": 222368,
+        "startMs": 220649
+      },
+      "reviewContext": {
+        "endMs": 223161,
+        "startMs": 219724
+      },
+      "tagId": "tech",
+      "assessment": {
+        "presence": "present",
+        "salience": "prominent"
+      },
+      "decisionId": "19e6e4d7-c783-4dab-bfca-ff61b732c8e6",
+      "disposition": "modified",
+      "observationId": "19e6e4d7-c783-4dab-bfca-ff61b732c8e6:observation",
+      "storedFoundationSha256": "15fa68913bdb2bf395a189df7ab433f6d5b126fc35c46c1dbc8e607ce2182e97",
+      "documentCanonicalSha256": "556d7de615f7353aa8da558cf7f2e15e63f87077fa8016705e5355429524272d",
+      "snapshotFeedbackSha256": "78debd5dea69301d94c11e0d512d1673141dc7dfb9f4b31b61b622cdfffc9ea3",
+      "confirmedAt": "2026-09-07T11:47:16.445Z",
+      "humanRationale": "uneven row gap, changing flow, mix of patterns, it's clearly tech.",
+      "humanRationaleSource": "decision.rationale",
+      "handoffId": "corpus-500-labeler-dc0f46fd-c50d-4575-a90d-6cad545b8751-cd0ebcdab7f0",
+      "handoffSha256": "f64aee5fc52ad6bcf8410621338aa2ff4be3af7dbe6ec76b68b5ccef63f563f6",
+      "claimId": "c7-6-tech"
+    },
+    {
+      "exampleId": "human-ccb78d9094c6fa7014ea37c6",
+      "sourceSha256": "c8d03a3e7626bff318e7b0d4677989193f6fd5cb030a7bc339cbe82bee6a296b",
+      "title": "Operation: Zenithfall",
+      "difficulty": "Final Rhythm Showdown",
+      "scope": {
+        "endMs": 151512,
+        "startMs": 150078
+      },
+      "reviewContext": {
+        "endMs": 151962,
+        "startMs": 149628
+      },
+      "tagId": "tech",
+      "assessment": {
+        "presence": "present",
+        "salience": "prominent"
+      },
+      "decisionId": "0f6a2574-6caa-44d1-afc1-57cab5026a1d",
+      "disposition": "modified",
+      "observationId": "0f6a2574-6caa-44d1-afc1-57cab5026a1d:observation",
+      "storedFoundationSha256": "15fa68913bdb2bf395a189df7ab433f6d5b126fc35c46c1dbc8e607ce2182e97",
+      "documentCanonicalSha256": "b47e2f532b627a91a517f96e3c443234a1c21d17dcfa7765128fa7e3738c436f",
+      "snapshotFeedbackSha256": "23ce41375a694f63966f73ec7bee7947d74aeec2df2d5581bc029c7887cdc256",
+      "confirmedAt": "2026-09-07T11:46:03.847Z",
+      "humanRationale": "/",
+      "humanRationaleSource": "decision.rationale",
+      "handoffId": "corpus-500-labeler-0c8b311e-1fbc-4b41-b0de-0ac8cd204ae3-c8d03a3e7626",
+      "handoffSha256": "c56fc2ca833ad22a020e5ae3c13bf0cd33b4ee05003a1dfcb16de9e1f9d3102a",
+      "claimId": "mixed-hold-rhythm--tech"
+    },
+    {
+      "exampleId": "human-1d6f0054606443ea17155364",
+      "sourceSha256": "a11269b098ccd65e3b54435cab48b829631394f0e3742912538152247f2639a6",
+      "title": "GHOST (2020 Halloween+++++++++ VIP)",
+      "difficulty": "Undead // Extra",
+      "scope": {
+        "endMs": 195194,
+        "startMs": 192977
+      },
+      "reviewContext": {
+        "endMs": 197194,
+        "startMs": 190977
+      },
+      "tagId": "ln-coordination",
+      "assessment": {
+        "presence": "absent"
+      },
+      "decisionId": "500f230b-d9b5-489c-9220-a72a0737ab21",
+      "disposition": "modified",
+      "observationId": "500f230b-d9b5-489c-9220-a72a0737ab21:observation",
+      "storedFoundationSha256": "15fa68913bdb2bf395a189df7ab433f6d5b126fc35c46c1dbc8e607ce2182e97",
+      "documentCanonicalSha256": "f15b93bba0007bd754daffef04a7ffd260126910946c60fecedad256a97e9bfb",
+      "snapshotFeedbackSha256": "519638e22f0a790e427b192c1cc54a33a1b25cd5aa26d745954e3724fb5b8e9a",
+      "confirmedAt": "2026-09-07T11:34:52.128Z",
+      "humanRationale": "mostly short LNs with highly aligned entry/release, not LN coordination. long note here is mostly expressive TAPs.",
+      "humanRationaleSource": "decision.rationale",
+      "handoffId": "fine-annotation-labeler-3f93b73f-9483-46d7-86f9-96f4f0626bbb-section-010-lineage-repair",
+      "handoffSha256": "9073bf49cfe21b74ccf1a71f1b61272c12951458d6fcf56d6c1500747b39037c",
+      "claimId": "section-010-ln-coordination"
+    },
+    {
+      "exampleId": "human-bea2d1eb6e012ed027f5c952",
+      "sourceSha256": "a923f00d1e6dfa4fb1ff84483456dc92daffe8a7918a47e3bbb690ca616c1e92",
+      "title": "SYSTEM ERROR",
+      "difficulty": "NETWORK FAILURE | EXTREME",
+      "scope": {
+        "endMs": 174300,
+        "startMs": 170400
+      },
+      "reviewContext": {
+        "endMs": 176300,
+        "startMs": 168400
+      },
+      "tagId": "tech",
+      "assessment": {
+        "presence": "present",
+        "salience": "supporting"
+      },
+      "decisionId": "08a7935e-7dee-4d57-971e-4bbcf0c72484",
+      "disposition": "accepted",
+      "observationId": "08a7935e-7dee-4d57-971e-4bbcf0c72484:observation",
+      "storedFoundationSha256": "15fa68913bdb2bf395a189df7ab433f6d5b126fc35c46c1dbc8e607ce2182e97",
+      "documentCanonicalSha256": "42bf5751e1af1e9bc5b68637157ac6bd069bd19dc56e26a6d79e9c69ce01bf63",
+      "snapshotFeedbackSha256": "d8b4041ba4dc2c8a2d4590a570ff2334a4b1fb7e1ad5daef564e7db2d47d1bcb",
+      "confirmedAt": "2026-09-07T11:29:21.432Z",
+      "humanRationale": "Tech的一大特点是有呼吸感, 变动的节奏分拍, burst LN chord jack 键型穿插, 往往pattern具有mapper自己的独特想法进行构筑, 重复和扩展, expressive. 这段中我们常见三个LN同时start分批release 结尾加chord的情形, 这是mapper的独特语言. context前段也是较明显的tech.",
+      "humanRationaleSource": "decision.rationale",
+      "handoffId": "fine-annotation-labeler-7a874df1-cde2-4039-84b9-bdc31089f7f7-section-004",
+      "handoffSha256": "d922a9fc79617f98612f1b895d486628805164be36d13a6933fb7aa8c97759d6",
+      "claimId": "section-004-tech"
+    },
+    {
+      "exampleId": "human-e11e45033dc64b58e854aea2",
+      "sourceSha256": "01e47b5f654875fce19ec204fb0975cbe8f4703b3d234fb2e8adeb0e2fb8c0f2",
+      "title": "Kanjou no Matenrou ~ World's End",
+      "difficulty": "Brilliance of Mahavairocana",
+      "scope": {
+        "endMs": 392610,
+        "startMs": 389914
+      },
+      "reviewContext": {
+        "endMs": 392900,
+        "startMs": 389600
+      },
+      "tagId": "tech",
+      "assessment": {
+        "presence": "absent"
+      },
+      "decisionId": "b1d7c360-0af8-4ba7-a632-a2f8dd936863",
+      "disposition": "modified",
+      "observationId": "b1d7c360-0af8-4ba7-a632-a2f8dd936863:observation",
+      "storedFoundationSha256": "15fa68913bdb2bf395a189df7ab433f6d5b126fc35c46c1dbc8e607ce2182e97",
+      "documentCanonicalSha256": "b4f95d254fb98f9cab19834f458bb4e127aea2da313ce0c7877de609398feda2",
+      "snapshotFeedbackSha256": "460049a5ec6d3c1237d9b17a21e7d651923d01b88589ae7c57a1f32962c424f8",
+      "confirmedAt": "2026-09-07T03:55:55.143Z",
+      "humanRationale": "it's handstream with direction/flow alternation.",
+      "humanRationaleSource": "decision.rationale",
+      "handoffId": "refinement-3871bfa483b92b4af237c6b7",
+      "handoffSha256": "bcda11e8077adf3961f8fa75f71c8196c9fa799cb1850a18b25f28b7352808d6",
+      "claimId": "late-rhythm-tech"
+    },
+    {
+      "exampleId": "human-8fe89408b676054b4186f2a6",
+      "sourceSha256": "9b422f0fbca360721bf1d9811095fbfe5b130bd3a7f8f739e4a4fbddb3b7a191",
+      "title": "d e a t h  p i a n o ~for four pianos~",
+      "difficulty": "i n s a n e",
+      "scope": {
+        "endMs": 106630,
+        "startMs": 103453
+      },
+      "reviewContext": {
+        "endMs": 107130,
+        "startMs": 102953
+      },
+      "tagId": "tech",
+      "assessment": {
+        "presence": "present",
+        "salience": "supporting"
+      },
+      "decisionId": "e5d27c3d-f886-4663-85ad-f03620ee2c60",
+      "disposition": "modified",
+      "observationId": "e5d27c3d-f886-4663-85ad-f03620ee2c60:observation",
+      "storedFoundationSha256": "15fa68913bdb2bf395a189df7ab433f6d5b126fc35c46c1dbc8e607ce2182e97",
+      "documentCanonicalSha256": "636d0b9f9e71f41dd2686f4ee1bf1a9c0696246f322236c4096cf4a334735376",
+      "snapshotFeedbackSha256": "0da7ab86cfbe0cd1bf5027571b9cad95393e48a87954f3349e6e574f7a4feafd",
+      "confirmedAt": "2026-09-07T03:52:52.125Z",
+      "humanRationale": "changing rhythm and irregular style gives it tech, but it's not so dense compared to other part in this map so I give a weak tech, also a lack in jack makes it a little stream like but fragmented.",
+      "humanRationaleSource": "decision.rationale",
+      "handoffId": "refinement-ea0d560c8b48047685b9b042",
+      "handoffSha256": "bb7d96d9bce3fb7151e9a088fdc5df3dd7f5407278be6b47e80e25c6f1644275",
+      "claimId": "c08-02"
+    },
+    {
+      "exampleId": "human-2fa6e77aed2b10aa554dd06c",
+      "sourceSha256": "c379b92031d2283486944e5095d6e89dd5757d5f0afbc140a8c66b3f75a2f650",
+      "title": "davay rasskazhem (ily Frenchcore Remix) (Sped Up Ver.)",
+      "difficulty": "d-_-b",
+      "scope": {
+        "endMs": 77828,
+        "startMs": 75142
+      },
+      "reviewContext": {
+        "endMs": 78500,
+        "startMs": 74342
+      },
+      "tagId": "tech",
+      "assessment": {
+        "presence": "present",
+        "salience": "prominent"
+      },
+      "decisionId": "12a9821c-b501-4b3e-be1a-7d0fa3841cb9",
+      "disposition": "modified",
+      "observationId": "12a9821c-b501-4b3e-be1a-7d0fa3841cb9:observation",
+      "storedFoundationSha256": "15fa68913bdb2bf395a189df7ab433f6d5b126fc35c46c1dbc8e607ce2182e97",
+      "documentCanonicalSha256": "16546f486ee5daf8efcf8812f73551f2dd66846a27dd0ad52e965ebcf6a68c0f",
+      "snapshotFeedbackSha256": "4369593c31ee11dfcbb555d916529b65f64f91d79e93ef9af82c57ce21c24397",
+      "confirmedAt": "2026-09-07T03:47:33.741Z",
+      "humanRationale": "expressive irregular pattern, it's tech",
+      "humanRationaleSource": "decision.rationale",
+      "handoffId": "corpus-500-labeler-9f816174-6036-4478-a44e-ab021cf53639-c379b92031d2",
+      "handoffSha256": "29837129b00df90e6ad993789b271f4ac4c05da282598379f3142ee88206b97f",
+      "claimId": "c14-2"
+    },
+    {
+      "exampleId": "human-d0a1a8ff370dda82b2aa60d5",
+      "sourceSha256": "7fa91b695ae55c53391094e8eb7cdeabbe8bf12a94946d29d3ec9a1da0addb54",
+      "title": "End Time",
+      "difficulty": "Every END is a new BEGINNING",
+      "scope": {
+        "endMs": 22592,
+        "startMs": 21425
+      },
+      "reviewContext": {
+        "endMs": 22942,
+        "startMs": 21075
+      },
+      "tagId": "ln-coordination",
+      "assessment": {
+        "presence": "present",
+        "salience": "prominent"
+      },
+      "decisionId": "2653d1ab-def1-44e7-82fc-76948c0efa9b",
+      "disposition": "accepted",
+      "observationId": "2653d1ab-def1-44e7-82fc-76948c0efa9b:observation",
+      "storedFoundationSha256": "15fa68913bdb2bf395a189df7ab433f6d5b126fc35c46c1dbc8e607ce2182e97",
+      "documentCanonicalSha256": "b82b8de13f1f77c7ad084c854dae9225c118b0e952af5e4657d1cb18bd29cb42",
+      "snapshotFeedbackSha256": "b2a515bb2c1ddf3b320103fb492755ab6e04b5341f981250cf6c455a046718b9",
+      "confirmedAt": "2026-09-07T12:11:49.199Z",
+      "humanRationale": "Human confirmed the original proposal.",
+      "humanRationaleSource": "decision.rationale",
+      "handoffId": "corpus-500-labeler-33127768-a30c-4884-8217-fec60afd17ef-7fa91b695ae5",
+      "handoffSha256": "6e30cd8a0dc1341f5a7237113ce94f089a33d71b34141ea13c5e5bb5f28f759b",
+      "claimId": "c9-0-ln-coordination"
+    },
+    {
+      "exampleId": "human-98da916e4af8466b4715d79f",
+      "sourceSha256": "07a5f9448345e50ed2e9282851b3423898327c488e1e8e28ceefe239f27be8f3",
+      "title": "Who?",
+      "difficulty": "Continual Knocks? Reminders of Past Transgressions",
+      "scope": {
+        "endMs": 98913,
+        "startMs": 97595
+      },
+      "reviewContext": {
+        "endMs": 99413,
+        "startMs": 97095
+      },
+      "tagId": "ln-coordination",
+      "assessment": {
+        "presence": "absent"
+      },
+      "decisionId": "585e8766-17c1-40d7-9264-b15b66ce8817",
+      "disposition": "modified",
+      "observationId": "585e8766-17c1-40d7-9264-b15b66ce8817:observation",
+      "storedFoundationSha256": "15fa68913bdb2bf395a189df7ab433f6d5b126fc35c46c1dbc8e607ce2182e97",
+      "documentCanonicalSha256": "c8f84557f4dc97a3a602391cc81b9dd3e9c8d2e4c568653b110066665eadb1c7",
+      "snapshotFeedbackSha256": "556a543853f97c637a399617714888ce5cfa966e5934161a6f25e33bc68150ab",
+      "confirmedAt": "2026-09-07T12:10:33.057Z",
+      "humanRationale": "LN 过短, 并且长度一致, 体感像玩TAP. 这段tech味很重.",
+      "humanRationaleSource": "decision.rationale",
+      "handoffId": "corpus-500-labeler-17216d58-5f60-4e55-9566-7bd14ba6c903-07a5f9448345",
+      "handoffSha256": "b50cbd8f12c1f450fcba0229cacd50b3124a1aeda830a025a8b1676811df98aa",
+      "claimId": "c02-02"
+    },
+    {
+      "exampleId": "human-c9a999fc37bb9ac9327c9064",
+      "sourceSha256": "75a8e464f139c186493acab0dff592296012a45564d48c4ded20c77fd8014f1d",
+      "title": "DiSANiMATE",
+      "difficulty": "JiNSEi",
+      "scope": {
+        "endMs": 227884,
+        "startMs": 224100
+      },
+      "reviewContext": {
+        "endMs": 228087,
+        "startMs": 223965
+      },
+      "tagId": "ln-coordination",
+      "assessment": {
+        "presence": "present",
+        "salience": "prominent"
+      },
+      "decisionId": "9656c9a3-a358-4e2b-8559-3ee74fbc6d70",
+      "disposition": "accepted",
+      "observationId": "9656c9a3-a358-4e2b-8559-3ee74fbc6d70:observation",
+      "storedFoundationSha256": "15fa68913bdb2bf395a189df7ab433f6d5b126fc35c46c1dbc8e607ce2182e97",
+      "documentCanonicalSha256": "4ede2008d72a29f3b827dcb329867fd145b8ed57c507d13509cf1150e3ff5b4a",
+      "snapshotFeedbackSha256": "526f4d141ab582a0803cadb4d6467a886c19c6d987b73db3c7b7e2c4573f5249",
+      "confirmedAt": "2026-09-07T12:08:18.732Z",
+      "humanRationale": "Human confirmed the original proposal.",
+      "humanRationaleSource": "decision.rationale",
+      "handoffId": "corpus-500-labeler-9fe9a57f-468b-4310-8c53-208aa71510db-75a8e464f139",
+      "handoffSha256": "89315dbaaf7d2dbbdd2aac1cbe6338ddaa28809d1bb75576acde5cf96e3320f1",
+      "claimId": "c3-ln-control"
+    },
+    {
+      "exampleId": "human-ee828f6e6a8fed945491740e",
+      "sourceSha256": "7179b6a3c8cd35c8d0d353f8f83a3fd2750044cc6ee6a75a37680c89182cd9eb",
+      "title": "Materialize Anything",
+      "difficulty": "Manifestation",
+      "scope": {
+        "endMs": 48904,
+        "startMs": 48104
+      },
+      "reviewContext": {
+        "endMs": 49254,
+        "startMs": 47754
+      },
+      "tagId": "ln-coordination",
+      "assessment": {
+        "presence": "absent"
+      },
+      "decisionId": "55578c6b-2ff3-4b76-8aff-e330e7f89c65",
+      "disposition": "modified",
+      "observationId": "55578c6b-2ff3-4b76-8aff-e330e7f89c65:observation",
+      "storedFoundationSha256": "15fa68913bdb2bf395a189df7ab433f6d5b126fc35c46c1dbc8e607ce2182e97",
+      "documentCanonicalSha256": "77956c5f538bbf929c951897ce2bd2a0ad46b4fe8a71fc8109c09681370ff9d9",
+      "snapshotFeedbackSha256": "2789b60cbef712c73e5f40416bc7e4eedfba7dcd296b62af17ccb94b7ba49a60",
+      "confirmedAt": "2026-09-07T12:07:34.289Z",
+      "humanRationale": "in the section the short-LN are read as TAPs, their ordered placement invalidates LN coordination.",
+      "humanRationaleSource": "decision.rationale",
+      "handoffId": "corpus-500-labeler-33127768-a30c-4884-8217-fec60afd17ef-7179b6a3c8cd",
+      "handoffSha256": "9e5294c0e166c7e7900dd21daa551852c631f814a8a221379aa5896b58500846",
+      "claimId": "c7-0-ln-coordination"
+    },
+    {
+      "exampleId": "human-49179e2c08057235bcc1d933",
+      "sourceSha256": "6f39948cc58ddce760488db2b0543fb395690a6ca18159c9ba9dc906ce1ee6ce",
+      "title": "Your Soulmate -Undertale first anniversary medley-",
+      "difficulty": "Determination",
+      "scope": {
+        "endMs": 1405260,
+        "startMs": 1404510
+      },
+      "reviewContext": {
+        "endMs": 1407260,
+        "startMs": 1402510
+      },
+      "tagId": "ln-coordination",
+      "assessment": {
+        "presence": "present",
+        "salience": "supporting"
+      },
+      "decisionId": "603c31ca-98be-49c4-b3ae-250c0f722986",
+      "disposition": "modified",
+      "observationId": "603c31ca-98be-49c4-b3ae-250c0f722986:observation",
+      "storedFoundationSha256": "15fa68913bdb2bf395a189df7ab433f6d5b126fc35c46c1dbc8e607ce2182e97",
+      "documentCanonicalSha256": "5565cb4ef9d81a7d4265810dc02bfc5669e4317f5216c97d7222fe8eed8807e5",
+      "snapshotFeedbackSha256": "fd5e8220054fe5cc06d628edbad3599d54f156cd1627d689abd8b1d4116963f6",
+      "confirmedAt": "2026-09-07T11:08:04.655Z",
+      "humanRationale": "lane 4's very brief ln usually played as tap, but lane 2's note length clearly demands players' deliberate control of entry & release timing. lane 1,2 slightly different in release timing, chllenges precise coordination. LN density is low, coordination happens mainly in left hand, so it's supporting.",
+      "humanRationaleSource": "decision.rationale",
+      "handoffId": "fine-annotation-labeler-78102b2a-9e22-4340-a8af-a99e2ddbc5df-section-005-lineage-repair",
+      "handoffSha256": "6554485d5e79adb928157d6a99a453c2fd9419ca59529921c5ff264cc26edcd6",
+      "claimId": "section-005-ln-coordination"
+    },
+    {
+      "exampleId": "human-fcee9f975a9dd5936efe389d",
+      "sourceSha256": "7e7bf6375ac04b56b5d1b0635241a4cf59ed7a924f6068451406406a8e45abed",
+      "title": "Seraphim (Long Ver.)",
+      "difficulty": "Angelic",
+      "scope": {
+        "endMs": 149622,
+        "startMs": 148412
+      },
+      "reviewContext": {
+        "endMs": 150122,
+        "startMs": 147912
+      },
+      "tagId": "ln-coordination",
+      "assessment": {
+        "presence": "present",
+        "salience": "supporting"
+      },
+      "decisionId": "95a4b46f-ec03-44d7-a595-a616ff6b06f6",
+      "disposition": "modified",
+      "observationId": "95a4b46f-ec03-44d7-a595-a616ff6b06f6:observation",
+      "storedFoundationSha256": "15fa68913bdb2bf395a189df7ab433f6d5b126fc35c46c1dbc8e607ce2182e97",
+      "documentCanonicalSha256": "61a53239858391aa5057fd98b169a4b775f11da0750f9643a7f5a89be0dc7942",
+      "snapshotFeedbackSha256": "120cef10535a120da763e9c48ae46fb09e916bb0fced7aaef617d04433fd38e8",
+      "confirmedAt": "2026-09-07T02:52:28.079Z",
+      "humanRationale": "entry and release timing are regular, but it's full of LN and its demand for entry/release timing is significantly higher than TAPs, so it's weak LN coordination.",
+      "humanRationaleSource": "decision.rationale",
+      "handoffId": "corpus-500-labeler-0030e055-1b37-458b-bbbd-f0d439b7f37e-7e7bf6375ac0",
+      "handoffSha256": "7286fe8b6db1d2936a01b218a72f8aa95fe45af7b13db516dbf8f40f5bf20664",
+      "claimId": "c6-3"
     }
   ]
 }

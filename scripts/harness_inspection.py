@@ -4,6 +4,7 @@ All ranges are half-open source milliseconds and columns are zero-based. Notes
 retain their full source endpoints. A perspective summarizes all events in the
 range, but its bounded examples do not substitute for inspecting those events.
 """
+from bisect import bisect_left, bisect_right
 from collections import Counter, defaultdict
 
 
@@ -52,7 +53,7 @@ def _actions(chart, start_ms, end_ms):
 
 
 def inspect(chart, start_ms, end_ms, view="rows", offset=0, limit=32):
-    """Page exact attack rows or simultaneous press/release/continuing actions.
+    """Page exact attack rows, LN articulation, or simultaneous actions.
 
     Entering holds are complete, even if their head is outside the requested
     scope. A hold ending exactly at t is a release, never a continuing hold.
@@ -60,15 +61,16 @@ def inspect(chart, start_ms, end_ms, view="rows", offset=0, limit=32):
     if offset < 0:
         raise ValueError("offset must be nonnegative; start at 0, then follow nextOffset")
     limit = max(1, min(MAX_PAGE, limit))
-    if view == "rows":
+    if view in ("rows", "articulation"):
         events = _rows(chart, start_ms, end_ms)
         schema = ["timeMs", "presses"]
     elif view == "actions":
         events = _actions(chart, start_ms, end_ms)
         schema = ["timeMs", "presses", "releases", "continuingHolds"]
     else:
-        raise ValueError("view must be rows or actions")
+        raise ValueError("view must be rows, actions, or articulation")
     selected = events[offset:offset + limit]
+    entering = _holds(chart, start_ms)
     result = {
         "sourceSha256": chart["source"]["sha256"],
         "scope": {"startMs": start_ms, "endMs": end_ms},
@@ -76,7 +78,7 @@ def inspect(chart, start_ms, end_ms, view="rows", offset=0, limit=32):
         "conventions": "Half-open source ms; zero-based columns; full note endpoints. Continuing means start < time < end.",
         "noteSchema": NOTE_SCHEMA,
         "rowSchema": schema,
-        "enteringHolds": [_ref(n) for n in _holds(chart, start_ms)],
+        "enteringHolds": [_ref(n) for n in entering],
         "rows": [[event[0], *[[_ref(n) for n in group] for group in event[1:]]]
                  for event in selected],
         "pagination": {
@@ -84,14 +86,17 @@ def inspect(chart, start_ms, end_ms, view="rows", offset=0, limit=32):
             "nextOffset": offset + len(selected) if offset + len(selected) < len(events) else None,
         },
         "coverage": {
-            "domain": "attack rows" if view == "rows" else "attack and release events",
+            "domain": "attack and release events" if view == "actions" else "attack rows",
             "allEventsReturned": offset == 0 and len(selected) == len(events),
             "eventsNotInThisPage": len(events) - len(selected),
             "enteringHoldsComplete": True,
         },
     }
-    if offset and selected:
-        result["pageEnteringHolds"] = [_ref(n) for n in _holds(chart, selected[0][0])]
+    page_entering = _holds(chart, selected[0][0]) if offset and selected else None
+    if page_entering is not None:
+        result["pageEnteringHolds"] = [_ref(n) for n in page_entering]
+    if view == "articulation":
+        result.update(_articulation(chart, selected, entering, page_entering))
     return result
 
 
@@ -126,6 +131,46 @@ def _beats(points, start, end):
             total += (point["timeMs"] - cursor) / active["beatLengthMs"]
             cursor, active = point["timeMs"], point
     return round(total + (end - cursor) / active["beatLengthMs"], 6)
+
+
+def _articulation(chart, rows, entering, page_entering):
+    """Describe full-source LN head/tail relationships without a duration cutoff."""
+    attacks = dict(_rows(chart, chart["range"]["startMs"], chart["range"]["endMs"]))
+    times = list(attacks)
+    points = _timing(chart)
+    holds = [note for note in chart["notes"] if note["kind"] == "long"]
+
+    def next_gap(time):
+        index = bisect_right(times, time)
+        return times[index] - time if index < len(times) else None
+
+    def ln_facts(note):
+        start, end = note["startMs"], note["endMs"]
+        release_index = bisect_left(times, end)
+        release_position = ("at-attack" if end in attacks else
+                            "between-attacks" if release_index < len(times) else "after-last-attack")
+        continuing = sorted({other["column"] for other in holds
+                             if other["column"] != note["column"] and other["startMs"] < end < other["endMs"]})
+        return [note["sourceLine"], end - start, _beats(points, start, end),
+                release_index - bisect_right(times, start), release_position,
+                [other["column"] for other in attacks.get(end, [])], continuing]
+
+    result = {
+        "rowSchema": ["timeMs", "presses", "nextAttackGapMs", "lnArticulation"],
+        "lnArticulationSchema": ["sourceLine", "durationMs", "durationBeats", "interiorAttackRows",
+                                 "releasePosition", "releaseAttackColumns", "otherHoldColumnsAtRelease"],
+        "rows": [[time, [_ref(note) for note in notes], next_gap(time),
+                  [ln_facts(note) for note in notes if note["kind"] == "long"]] for time, notes in rows],
+        "enteringHoldArticulation": [ln_facts(note) for note in entering],
+        "articulationMeaning": (
+            "LN facts use full source spans, including beyond the requested scope/page. sourceLine links to a full note ref. "
+            "durationBeats integrates tempo changes; SV does not change beats. nextAttackGapMs uses the next source attack row, "
+            "or null at the last attack. interiorAttackRows counts distinct times strictly between head and tail. "
+            "Other holds continue strictly across release. These timing relationships assign no style or playable role."),
+    }
+    if page_entering is not None:
+        result["pageEnteringHoldArticulation"] = [ln_facts(note) for note in page_entering]
+    return result
 
 
 def _row_example(row):
@@ -293,7 +338,7 @@ def perspective(chart, start_ms, end_ms):
         },
         "compareQuestions": [
             "What familiar organization accounts for most of the section? Follow complete press groups and persistent columns before treating changed chord sizes as a new style.",
-            "Do pulse or press/hold/release changes interrupt that organization, or repeat as part of it? Inspect neighboring rows when the crop cannot settle this.",
+            "How do ordered presses, releases and accents shape each cell and its continuation? A repeated cell may itself carry expression; interruption and repetition alone decide no style. Inspect neighboring rows if needed.",
             "Which retrieved human supporting and prominent examples have the same relationships, and where does this section differ in typicality or how much of the episode they govern?",
         ],
     }

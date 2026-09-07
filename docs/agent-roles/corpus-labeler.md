@@ -8,8 +8,11 @@ Read the supplied frozen `skill/SKILL.md`, its judgment guide, `foundation.json`
 `skill-provenance.json`, `assignment.json`, and `bindings.json`. Use these exact
 versions; do not substitute a globally installed skill. The controller preserves
 the complete approved Foundation and exact original sources behind the task hashes.
-The supplied approved calibration claims are a content-preserving view of that
-Foundation. The Parquet files contain each complete normalized difficulty.
+The worker Foundation view preserves definitions and the canonical pin while
+omitting calibration claim bodies. Human examples contain only final judgments,
+source/scope identity, and optional exact `humanComment`; a missing comment does
+not authorize substituting agent reasoning. The Parquet files contain each
+complete normalized difficulty.
 
 Read only your assignment's chart data and supplied references. Source-selection
 metadata is not part of your task. Do not look for corpus metadata, filenames,
@@ -29,7 +32,9 @@ a universal detector threshold. Produce useful representative section claims for
 the four approved dimensions. Do not force positives, fabricate negatives for
 missing dimensions, or call a chart finished after inspecting only its first crop.
 There is no fixed quota of claims. Preserve existing reviewed claims supplied in
-`bindings.json`, and record additional coverage without resubmitting those claims.
+`bindings.json` as `humanJudgments`, and record additional coverage without
+resubmitting those judgments. Separate `humanDecisions` retain rejection/deferral
+and optional human comments; those dispositions do not supply presence or salience.
 
 All claims need their own scope, context and evidence. Witnesses must resolve to
 actual source lines; include the intervening arrangement and necessary entering

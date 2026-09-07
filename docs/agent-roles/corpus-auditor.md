@@ -6,6 +6,12 @@ supplied assignment, Parquet facts, frozen skill/guide, Foundation view, task
 bindings, `discovery.json`, and sealed original handoffs in `handoffs/`. Do not inspect the labeler's
 analysis logs, source-selection evidence, or other workers' directories.
 
+Human examples expose only final `humanJudgments`, source/scope identity, and
+optional exact `humanComment`. Separate `humanDecisions` do not turn rejection or
+deferral into a label. The worker Foundation view omits calibration claim bodies.
+Agent reasoning and evidence in the sealed handoffs remain proposals to audit;
+they are not the human explanation for a compatible golden judgment.
+
 Read the frozen skill and check its version in `skill-provenance.json`. Independently
 inspect every claim's full scope and necessary context against the Parquet rows.
 Check the inference as well as source references. A shared column alone does not

@@ -16,6 +16,9 @@ checklist, minimum call count, or requirement to retrieve examples.
 
 - Use `inspect_section` for missing rows or entry/exit context. Its `actions` view
   distinguishes presses, releases, and holds continuing across each timestamp.
+  Its `articulation` view relates full LN durations to beats and neighboring
+  attacks. Use it when tap-like reading versus independent release control is
+  unclear; duration and overlap facts alone do not decide that distinction.
   Pagination and coverage describe what was actually returned; a preview cannot
   support a claim about unseen rows. Preserve full entering holds and short LNs.
 - Use `chart_context` when tempo, neighboring arrangement, or chart identity needs
@@ -34,7 +37,11 @@ checklist, minimum call count, or requirement to retrieve examples.
   prominent Tech. Begin with the small default page or a specific strength/keyword.
   Open a useful card through `get_human_example`; its `sectionId` works with the
   inspection tools. Compare the actual relationships and relevant counterexample.
-  Search order is label balance, not a relevance score. Do not enumerate the whole
+  Search interleaves labels after filtering, not by relevance. Missing contrast
+  labels mean this search did not supply a balanced comparison. For a difficult
+  Tech boundary, the small `tech-articulation` and `tech-tapping` contrast sets
+  supply curated examples; `ln-held-control` and `ln-articulation` contrast
+  tap-like LNs with coordinated control. Inspect only useful records. Do not enumerate the
   library or load calibration ledgers directly.
 
 Reuse evidence already visible. Stop investigating when the section and remaining
@@ -44,14 +51,14 @@ adequate inspection, state that specific uncertainty instead of forcing a label.
 ## Record the judgment
 
 Assess presence and expression strength independently for all active dimensions.
-Supporting does not mean uncertain; prominent does not mean difficult. Identify
-the familiar flow and the relation that changes its local character before judging
-Tech. Follow the frozen guide and exact human examples; raw interval variety,
+Supporting does not mean uncertain; prominent does not mean difficult. Explain the ordered rhythm and articulation within cells and across their joins
+before judging Tech. A repeated cell may itself carry the expression; do not
+require an additional disruption. Follow the frozen guide and exact human examples; raw interval variety,
 changing chords, or LN occupancy alone cannot decide the style.
 
 In annotation mode, reuse compatible current human decisions at their actual scope
-and record their IDs. Use the human decision rationale, preserving a generic
-confirmation literally. Rejection is not absence; descriptive mention of another
+and record their IDs. Use only the optional `humanComment` for human reasoning. A missing comment
+does not authorize borrowing an agent explanation or selected evidence. Rejection is not absence; descriptive mention of another
 style does not label another dimension. Evaluation mode exposes only its allowed
 calibration pool. Do not seek target answers, other jobs, or outside feedback.
 

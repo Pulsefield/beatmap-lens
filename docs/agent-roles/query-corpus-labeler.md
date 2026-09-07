@@ -95,15 +95,19 @@ command history. Insufficient source evidence goes back for revision.
 Check those scopes under the new definition; also discover missing/new Trill cases.
 No old completion count transfers into this campaign.
 
-`prior-human-feedback.json` retains exact earlier human decisions and their old
-Foundation/observation identities. Apply an explicit compatible human assessment
+`prior-human-feedback.json` exposes final `humanJudgments` with source/scope
+identity and optional exact `humanComment`. Apply a compatible human assessment
 at its original scope without asking again; explain its reuse and consistency with
 the current target. A changed meaning or crop needs a new machine interpretation.
 Do not copy an old observation into a new human-confirmed record. Use the human's
-decision rationale or later direct clarification, not a retained unresolved machine
-explanation. Rejection alone is not an absent observation; its concrete explanation
+optional comment or later direct clarification; missing comments do not authorize
+substituting machine reasoning. Separate `humanDecisions` preserve human
+rejection/deferral without an inherited assessment. Rejection alone is not an
+absent observation; its concrete human comment
 can support your newly sourced proposal. Old Stream absence does not assign Trill
-strength. Preserve current reviewed claims in `bindings.json` without resubmission.
+strength. Preserve current `humanJudgments` in `bindings.json` without resubmission.
+Worker Foundation views omit calibration claim bodies; canonical definitions and
+their original pin remain unchanged.
 
 ## Output
 

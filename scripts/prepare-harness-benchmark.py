@@ -11,6 +11,7 @@ import unicodedata
 
 import pyarrow.parquet as pq
 
+from harness_examples import extract_examples, public_example
 
 REPO = Path(__file__).resolve().parents[1]
 ARMS = ('fixed-evidence', 'harness-a', 'harness-b')
@@ -146,6 +147,20 @@ def brief(cases):
     return '\n'.join(lines)
 
 
+def benchmark_gold(case, feedback):
+    record = next((e for e in extract_examples([feedback], {})
+                   if e['provenance'].get('decisionId') == case['decisionId']
+                   and e['provenance'].get('handoffId') == case['handoffId']
+                   and e['provenance'].get('claimId') == case['claimId']), None)
+    if record is None or any(record[key] != case[key] for key in ('sourceSha256', 'scope', 'reviewContext')):
+        raise ValueError(f"Benchmark scope is not the referenced final human judgment: {case['benchmarkCaseId']}")
+    if record['tagId'] != case['goldTagId'] or record['assessment'] != case['goldAssessment']:
+        raise ValueError(f"Benchmark gold differs from the final human judgment: {case['benchmarkCaseId']}")
+    value = public_example(record)
+    return {'caseId': case['benchmarkCaseId'], 'cohort': case['cohort'], **value,
+            'gold': {value['tagId']: value['assessment']}, 'feedbackSha256': case['feedbackSha256']}
+
+
 def prepare(design_path, root, campaign, python):
     design_path, root, campaign = map(lambda p: Path(p).resolve(), (design_path, root, campaign))
     design, config = read(design_path), read(campaign / 'controller/config.json')
@@ -158,9 +173,11 @@ def prepare(design_path, root, campaign, python):
     if not required_exclusions <= excluded:
         raise ValueError('Song grouping does not cover every design exclusion.')
     feedback_dir = Path(design['selectionSnapshot']['feedbackDirectory'])
+    gold = []
     for case in design['cases']:
         if sha(feedback_dir / (case['sourceSha256'] + '.json')) != case['feedbackSha256']:
             raise ValueError(f"Design feedback snapshot changed: {case['benchmarkCaseId']}")
+        gold.append(benchmark_gold(case, read(feedback_dir / (case['sourceSha256'] + '.json'))))
     foundation_path = campaign / config['workerCommonPath'] / 'foundation.json'
     original_foundation = read(foundation_path)
     if original_foundation['foundationSha256'] != config['foundationSha256']:
@@ -175,10 +192,7 @@ def prepare(design_path, root, campaign, python):
                    for path in sorted(skill_root.rglob('*')) if path.is_file() and path.suffix in ('.md', '.yaml', '.yml')}
     root.mkdir(parents=True, exist_ok=False)
     save(root / 'design.json', design)
-    save(root / 'gold.json', {'cases': [{
-        'caseId': c['benchmarkCaseId'], 'cohort': c['cohort'], 'gold': {c['goldTagId']: c['goldAssessment']},
-        **{key: c[key] for key in ('decisionId', 'handoffId', 'claimId', 'feedbackSha256', 'humanRationale')}
-    } for c in design['cases']]})
+    save(root / 'gold.json', {'cases': gold})
     save(root / 'source-groups.json', groups)
     save(root / 'sections.json', {'sections': [{key: c[key] for key in
                                               ('sectionId', 'sourceSha256', 'scope', 'reviewContext')} for c in cases]})

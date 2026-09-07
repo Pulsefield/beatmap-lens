@@ -1,6 +1,6 @@
 """Scoped human examples, with bounded discovery and explicit full-record retrieval.
 
-Search uses label balancing and literal keywords, not semantic relevance ranking.
+Search interleaves available labels and uses literal keywords, not relevance ranking.
 The caller supplies the immutable feedback snapshot and evaluation exclusions.
 """
 from collections import defaultdict
@@ -12,6 +12,8 @@ from itertools import zip_longest
 LABELS = ('absent', 'supporting', 'prominent')
 MAX_CARDS = 6
 RATIONALE_CHARS = 280
+HUMAN_COMMENT_ORIGINS = ('decision.rationale', 'directObservation.claim.evidence.rationale',
+                         'directObservation.summary.rationale')
 
 
 def _label(record):
@@ -21,10 +23,6 @@ def _label(record):
 
 def _record(feedback, groups, claim, identity, rationale, origin, provenance):
     source = feedback['sourceSha256']
-    evidence = claim.get('evidence')
-    source_evidence = ({key: evidence[key] for key in ('noteRefs', 'contextNoteRefs')}
-                       if evidence is not None else
-                       {key: claim[key] for key in ('witnessCount', 'contextNoteCount') if key in claim})
     return deepcopy({
         'id': 'human-' + hashlib.sha256(f'{source}\0{identity}'.encode()).hexdigest()[:24],
         'sourceSha256': source,
@@ -33,7 +31,6 @@ def _record(feedback, groups, claim, identity, rationale, origin, provenance):
         'rationale': rationale,
         'rationaleOrigin': origin,
         'provenance': {**provenance, 'documentVersion': feedback.get('documentVersion')},
-        'sourceEvidence': source_evidence,
     })
 
 
@@ -79,48 +76,107 @@ def _allowed(record, excluded_sources, excluded_groups):
     return record['sourceSha256'] not in excluded_sources and record['groupId'] not in excluded_groups
 
 
+def _human_comment(record):
+    comment = record.get('humanComment')
+    if 'humanComment' not in record and record.get('rationaleOrigin') in HUMAN_COMMENT_ORIGINS:
+        comment = record.get('rationale')
+    if not comment or not comment.strip(' \t\r\n/') or comment.strip() == 'Human confirmed the original proposal.':
+        return None
+    return comment
+
+
+def public_example(record, comment_chars=None):
+    """Project an extracted record or prior projection to judgment + human comment."""
+    result = {key: record[key] for key in ('id', 'sourceSha256', 'tagId')}
+    result['assessment'] = {key: record['assessment'][key] for key in ('presence', 'salience')
+                            if key in record['assessment']}
+    for key in ('scope', 'reviewContext'):
+        result[key] = {bound: record[key][bound] for bound in ('startMs', 'endMs')}
+    comment = _human_comment(record)
+    if comment is not None:
+        result['humanComment'] = comment if comment_chars is None else comment[:comment_chars]
+        if comment_chars is not None:
+            result['humanCommentTruncated'] = bool(record.get('humanCommentTruncated')) or len(comment) > comment_chars
+        elif record.get('humanCommentTruncated'):
+            result['humanCommentTruncated'] = True
+    return deepcopy(result)
+
+
+def filter_contrast_sets(contrast_sets, records):
+    """Keep only available members; never advertise an empty or excluded-only set."""
+    allowed_ids = {record['id'] for record in records}
+    result = []
+    for item in contrast_sets:
+        members = [identity for identity in item['exampleIds'] if identity in allowed_ids]
+        if members:
+            result.append({'id': item['id'], 'description': item['description'], 'exampleIds': members})
+    return result
+
+
+def _assessment_counts(records):
+    counts = dict.fromkeys(LABELS, 0)
+    for record in records:
+        counts[_label(record)] += 1
+    return counts
+
+
 def search_examples(records, tag_id='tech', assessment=None, text='', offset=0, limit=3,
-                    excluded_sources=(), excluded_groups=()):
+                    excluded_sources=(), excluded_groups=(), contrast_sets=(), contrast_set=None):
     """Return at most six cards, with no note arrays or full provenance.
 
     Assessment accepts absent, supporting, prominent, or present. Keywords match
-    exact human rationale plus optional caller-added title/difficulty metadata.
-    Unfiltered results interleave the three labels deterministically so a first
-    page can show contrasting examples. Exclusions apply before totals or paging.
+    substantive human comments and title/difficulty identity metadata, never
+    machine reasoning or evidence.
+    Results interleave matching labels deterministically, without promising all
+    three labels. Curated sets intersect normal filters; available set descriptors
+    ignore assessment/text but respect tag and evaluation exclusions.
     """
     if assessment not in (None, 'present', *LABELS):
         raise ValueError('assessment must be absent, supporting, prominent, or present')
     if offset < 0 or limit < 1:
         raise ValueError('offset must be nonnegative and limit positive')
     limit = min(limit, MAX_CARDS)
+    allowed = [record for record in records if record['tagId'] == tag_id
+               and _allowed(record, excluded_sources, excluded_groups)]
+    sets = filter_contrast_sets(contrast_sets, allowed)
+    available_sets = [
+        {'id': item['id'],
+         'assessmentCounts': _assessment_counts(record for record in allowed if record['id'] in item['exampleIds'])}
+        for item in sets]
+    if contrast_set is not None:
+        selected = next((item for item in sets if item['id'] == contrast_set), None)
+        if selected is None:
+            raise ValueError('Contrast set is unavailable in this job/tag. Use availableContrastSets from find_human_examples.')
+        allowed = [record for record in allowed if record['id'] in selected['exampleIds']]
     terms = text.casefold().split()
     buckets = defaultdict(list)
-    for record in sorted(records, key=lambda row: row['id']):
-        if not _allowed(record, excluded_sources, excluded_groups) or record['tagId'] != tag_id:
-            continue
+    for record in sorted(allowed, key=lambda row: row['id']):
         if assessment and assessment not in (_label(record), record['assessment']['presence']):
             continue
-        searchable = ' '.join(str(record.get(key, '')) for key in ('rationale', 'title', 'difficulty')).casefold()
+        searchable = ' '.join([_human_comment(record) or '',
+                               *(str(record.get(key, '')) for key in ('title', 'difficulty'))]).casefold()
         if not all(term in searchable for term in terms):
             continue
         buckets[_label(record)].append(record)
     ordered = [record for row in zip_longest(*(buckets[label] for label in LABELS))
                for record in row if record is not None]
-    cards = []
-    for record in ordered[offset:offset + limit]:
-        rationale = record['rationale']
-        card = {key: record[key] for key in
-                ('id', 'sourceSha256', 'groupId', 'tagId', 'assessment', 'scope', 'rationaleOrigin')}
-        card.update(rationale=rationale[:RATIONALE_CHARS], rationaleTruncated=len(rationale) > RATIONALE_CHARS)
-        cards.append(card)
-    return deepcopy({'cards': cards, 'total': len(ordered), 'limit': limit,
-                     'nextOffset': offset + len(cards) if offset + len(cards) < len(ordered) else None,
-                     'order': 'label-balanced-then-id'})
+    cards = [public_example(record, RATIONALE_CHARS) for record in ordered[offset:offset + limit]]
+    counts = _assessment_counts(ordered)
+    result = {'cards': cards, 'total': len(ordered), 'limit': limit,
+              'nextOffset': offset + len(cards) if offset + len(cards) < len(ordered) else None,
+              'order': 'label-interleaved-then-id', 'matchedAssessmentCounts': counts,
+              'missingContrastLabels': [label for label, count in counts.items() if not count],
+              'availableContrastSets': available_sets}
+    if assessment or terms or contrast_set is not None or result['missingContrastLabels']:
+        result['contrastCaveat'] = ('Counts cover all matches, not just this page. Filters and exclusions may leave '
+                                    'one-sided results; missing labels are not evidence of style absence. '
+                                    'Available sets are curated comparisons before assessment/text filters, not relevance rankings.')
+    return deepcopy(result)
 
 
 def get_example(records, example_id, excluded_sources=(), excluded_groups=()):
-    """Return the full exact human record, or None, including for held-out records."""
+    """Return only the final human judgment and optional comment, or None if held out."""
     for record in records:
         if record['id'] == example_id and _allowed(record, excluded_sources, excluded_groups):
-            return deepcopy(record)
+            return public_example(record)
     return None

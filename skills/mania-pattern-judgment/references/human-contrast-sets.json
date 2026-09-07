@@ -1,0 +1,41 @@
+{
+  "authority": "Curated comparisons of exact settled human records; membership is a retrieval aid, never a style detector or new human judgment.",
+  "sets": [
+    {
+      "id": "tech-articulation",
+      "description": "Compare mixed tap/LN flow, expressive repeated release cells, and Tech strength.",
+      "exampleIds": [
+        "human-2bc2bb80374f8bf685b61dd7",
+        "human-bea2d1eb6e012ed027f5c952",
+        "human-8d902a4670afe83e8795a188"
+      ]
+    },
+    {
+      "id": "tech-tapping",
+      "description": "Compare pure-tap flow with supporting and prominent rhythmic expression.",
+      "exampleIds": [
+        "human-e11e45033dc64b58e854aea2",
+        "human-8fe89408b676054b4186f2a6",
+        "human-2fa6e77aed2b10aa554dd06c"
+      ]
+    },
+    {
+      "id": "ln-held-control",
+      "description": "Compare tap-like notes under one anchor with distinct held-control relationships.",
+      "exampleIds": [
+        "human-ee828f6e6a8fed945491740e",
+        "human-49179e2c08057235bcc1d933",
+        "human-d0a1a8ff370dda82b2aa60d5"
+      ]
+    },
+    {
+      "id": "ln-articulation",
+      "description": "Compare brief cascades with regular and interwoven LN control.",
+      "exampleIds": [
+        "human-98da916e4af8466b4715d79f",
+        "human-fcee9f975a9dd5936efe389d",
+        "human-c9a999fc37bb9ac9327c9064"
+      ]
+    }
+  ]
+}

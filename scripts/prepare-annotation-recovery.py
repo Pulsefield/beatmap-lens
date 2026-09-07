@@ -33,6 +33,24 @@ def verify_skill(directory, expected):
             raise ValueError(f"Frozen skill file changed: {entry['path']}")
 
 
+def verify_foundation(common, job, run, foundation_sha):
+    source = common / 'foundation.json'
+    worker = job / 'foundation.json'
+    foundation = read(source)
+    valid = (foundation['foundationSha256'] == foundation_sha
+             and digest(worker.read_bytes()) == run['inputHashes']['foundation.json'])
+    if 'foundationInput' in run:
+        expected = run['foundationInput']
+        valid = (valid and expected['view'] == 'definitions-only'
+                 and digest(source.read_bytes()) == expected['sourceSha256']
+                 and read(worker) == {key: value for key, value in foundation.items() if key != 'calibrationExamples'})
+    else:
+        # Historical jobs received the original file verbatim; retain their exact binding.
+        valid = valid and digest(source.read_bytes()) == run['inputHashes']['foundation.json']
+    if not valid:
+        raise ValueError('Recovery Foundation changed')
+
+
 def validate_frozen_task(path):
     # Read the original transport once in Node, using the same complete validation as import.
     program = r"""
@@ -97,9 +115,7 @@ def prepare(campaign, original_id, findings_file, model_change_reason=None):
             raise ValueError(f'Original worker input changed: {name}')
     for directory in (job, common):
         verify_skill(directory, config['skill'])
-    if (digest((common / 'foundation.json').read_bytes()) != run['inputHashes']['foundation.json']
-            or read(common / 'foundation.json')['foundationSha256'] != config['foundationSha256']):
-        raise ValueError('Recovery Foundation changed')
+    verify_foundation(common, job, run, config['foundationSha256'])
     result_bytes = (job / 'result.json').read_bytes()
     if run.get('resultSha256') and digest(result_bytes) != run['resultSha256']:
         raise ValueError('Original labeler result changed')

@@ -1,5 +1,10 @@
 # Agent–human section review
 
+For learning from natural charts, community observations, and confirmed expert
+sections, use the [beatmap reading workflow](beatmap-learning.md). Agent-only
+section proposals and agreeing audits are workflow artifacts, not learning targets
+or human experience in that path.
+
 Beatmap Lens gives a human and an external agent the same source-backed object of
 judgment. A beatmapset groups the work. Each claim belongs to one difficulty's
 exact source bytes and one source-time interval. Shared audio and community tags
@@ -291,7 +296,7 @@ and any saved human decision; offline `review-status` exposes the same routing. 
 | Status | Next action |
 | --- | --- |
 | `awaiting-audit` | An independent auditor must inspect the proposal. |
-| `agent-reviewed` | Current, settled claim with consistently supported independent audits; retain as machine-reviewed supervision. |
+| `agent-reviewed` | Current claim with consistently supported independent audits; retain as a machine workflow result, excluded from the natural-chart learning evidence. |
 | `superseded` | Follow `supersededBy` to the current reviewed replacement, which can itself need the expert; retain this row as history. |
 | `needs-revision` | Return the concrete defect to the labeler; submit a new immutable proposal and audit its new content. |
 | `needs-expert` | Present the specific unresolved choice, evidence, and reason to the expert. Conflicting audit outcomes also enter this queue. |

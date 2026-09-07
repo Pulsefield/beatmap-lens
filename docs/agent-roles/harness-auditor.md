@@ -10,6 +10,16 @@ Start with the evidence already available. Judge whether the local organization,
 scope, witnesses, counterevidence, and strength support each claim. Consider all
 active dimensions without assuming the labeler's decomposition is complete.
 Supporting versus prominent measures style expression, not confidence or density.
+For Tech, challenge both “roles change, therefore Tech” and “the motif is familiar,
+therefore absent or only supporting.” Inspect expression inside repeated cells,
+not only events that disrupt them. When such a shortcut decides a claim, compare
+the relevant human positive/counterexample; accurate note facts alone do not
+validate the inference or strength.
+For LN coordination, separately recorded tails are not automatically independent
+release duties. Challenge positives based only on short-LN overlap or staggered
+ends; use `articulation` inspection and `ln-held-control`/`ln-articulation` contrasts
+when the reading is unclear. Do not invent a universal duration threshold or
+exclude every short LN/regular arrangement.
 
 Invoke a harness tool only when it can resolve a review question. For example,
 inspect omitted rows that might interrupt a claimed pattern, view press/release
@@ -25,10 +35,13 @@ time, while `time` images preserve it. Structural matches and the player-action
 perspective supply facts and selected examples, never semantic labels. A missing
 query match cannot justify a negative judgment.
 
-Human-example search returns brief, label-balanced cards. Open only a useful
+Human-example search interleaves available labels after filters; inspect the
+reported missing contrast labels. Small curated `tech-articulation` and
+`tech-tapping` sets can clarify a boundary. Open only a useful
 comparison through `get_human_example`, whose `sectionId` can be inspected further.
-Use exact human rationale and actual scopes; do not dump the example library or
-replace a generic human confirmation with a machine explanation. Reuse a compatible
+Use exact optional `humanComment` and actual scopes. Golden examples contain
+only final human judgments and comments; missing comments supply no rationale.
+Never borrow machine explanations or selected evidence into a golden example. Reuse a compatible
 explicit human decision without creating a new human record. In evaluation mode,
 respect source/group exclusions and do not retrieve target answers elsewhere.
 

@@ -231,6 +231,7 @@ def main():
     parser.add_argument('--feedback-dir', type=Path, help='Replay a saved feedback snapshot instead of reading the service.')
     parser.add_argument('--song-groups', type=Path, help='Optional JSON object mapping every source SHA to a curated song ID.')
     parser.add_argument('--batch-size', type=int, default=24)
+    parser.add_argument('--exclude-sections', type=Path, help='Previously attempted section scopes; skip overlapping targets during recurring fine annotation.')
     parser.add_argument('--seed', type=int, default=20260907)
     parser.add_argument('--window-ms', type=int, default=10000)
     parser.add_argument('--stride-ms', type=int, default=5000)
@@ -342,12 +343,16 @@ def main():
         if (index + 1) % 100 == 0:
             print(f'Scored {index + 1}/{len(sources)} charts.', flush=True)
     ranked = rank_candidates(candidates, corrections) if candidates else []
-    batch = select_batch(ranked, args.batch_size, args.seed)
+    excluded = read(args.exclude_sections)['sections'] if args.exclude_sections else []
+    eligible = [candidate for candidate in ranked if not any(
+        candidate['sourceSha256'] == previous['sourceSha256']
+        and intersect([bounds(candidate)], [bounds(previous)]) for previous in excluded)]
+    batch = select_batch(eligible, args.batch_size, args.seed)
     selected_issue_ids = {issue_id for c in batch for issue_id in c['issueIds']}
     groups = sorted({c['selectionGroup'] for c in charts})
     grouped = [{'id': group, 'charts': sum(c['selectionGroup'] == group for c in charts),
                 **{tier: aggregate([c for c in charts if c['selectionGroup'] == group], tier) for tier in ('human', 'combined')}} for group in groups]
-    report = {'kind': 'annotation-priorities-v2', 'startedAt': started, 'finishedAt': datetime.now(timezone.utc).isoformat(),
+    report = {'kind': 'annotation-priorities-v2', 'excludedSectionsSha256': digest(args.exclude_sections) if args.exclude_sections else None, 'startedAt': started, 'finishedAt': datetime.now(timezone.utc).isoformat(),
               'foundationSha256': config['foundationSha256'], 'campaignSkill': config['skill'],
               'scriptSha256': digest(__file__), 'featureScriptSha256': digest(Path(__file__).with_name('section-features.py')),
               'sourceMapSha256': digest(args.campaign / 'admin/source-map.json'),

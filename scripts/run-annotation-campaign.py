@@ -14,11 +14,14 @@ import subprocess
 import time
 import uuid
 
+from harness_examples import public_example
+
 
 REPO = Path(__file__).resolve().parents[1]
 PYTHON = REPO.parent / "Pulsefield-model/.venv/bin/python"
 QUERY_TOOLS = ("annotation-facts.py", "annotation-queries.py", "prepare-query-evidence.py")
 HUMAN_STATES = {"accepted", "modified", "rejected", "deferred"}
+BINDING_KEYS = ("sourceSha256", "taskId", "taskSha256", "foundationSha256", "base")
 
 spec = importlib.util.spec_from_file_location(
     "annotation_revision", Path(__file__).with_name("prepare-annotation-revision.py"))
@@ -51,6 +54,104 @@ def verify_skill(job, expected):
             raise ValueError(f"Worker skill file changed: {entry['path']}")
 
 
+def public_decision(record):
+    result = public_example({**record, "assessment": record.get("assessment", {})})
+    result.pop("assessment")
+    return {**result, "disposition": record["disposition"]}
+
+
+def public_feedback(view):
+    """Project canonical feedback, legacy bindings, or an earlier human-only view."""
+    sha = view["sourceSha256"]
+    judgments = [public_example(row) for row in view.get("humanJudgments", [])]
+    decisions = [public_decision(row) for row in view.get("humanDecisions", [])]
+    for row in view.get("agentReviews", view.get("existingReviews", [])):
+        if row["status"] not in HUMAN_STATES or not row.get("decision"):
+            continue
+        claim = (row["claim"] if "claim" in row else
+                 row["modifiedClaim"] if row["status"] == "modified" else row["summary"])
+        decision = row["decision"]
+        record = public_example({**claim, "id": decision["id"], "sourceSha256": sha,
+                                 "humanComment": decision.get("rationale")})
+        if row["status"] in ("accepted", "modified") and record["assessment"]["presence"] in ("present", "absent"):
+            judgments.append(record)
+        else:
+            decisions.append(public_decision({**record, "disposition": row["status"]}))
+    for observation in view.get("directObservations", view.get("humanObservations", [])):
+        claim = observation.get("claim", observation.get("summary"))
+        if claim["assessment"]["presence"] not in ("present", "absent"):
+            continue
+        comment = claim["evidence"].get("rationale") if "evidence" in claim else claim.get("rationale")
+        judgments.append(public_example({**claim, "id": observation["id"], "sourceSha256": sha,
+                                         "humanComment": comment}))
+    result = {"sourceSha256": sha, "humanJudgments": judgments, "humanDecisions": decisions}
+    if "snapshotAvailable" in view:
+        result["snapshotAvailable"] = view["snapshotAvailable"]
+    return result
+
+
+def public_binding(binding):
+    return {**{key: binding[key] for key in BINDING_KEYS}, **public_feedback(binding)}
+
+
+def project_worker_bindings(root, job):
+    path = job / "bindings.json"
+    if not path.exists():
+        return
+    bindings = read(path)
+    if not any("existingReviews" in row or "humanObservations" in row for row in bindings):
+        return
+    original = root / "controller/worker-bindings" / f"{job.name}.json"
+    if not original.exists():
+        original.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(path, original)
+    write(path, [public_binding(row) for row in bindings])
+
+
+def public_prior_review(value):
+    """Keep actual revision proposals/audits; project their separate human feedback."""
+    result = copy.deepcopy(value)
+    for chart in result["charts"]:
+        decisions = []
+        for entry in (chart, chart.get("currentTask", {})):
+            if "feedback" in entry:
+                entry["feedback"] = public_feedback(entry["feedback"])
+                decisions.extend(entry["feedback"]["humanDecisions"])
+            if "taskBinding" in entry:
+                entry["taskBinding"] = public_binding(entry["taskBinding"])
+        for reason in chart.get("reasons", []):
+            if reason.get("kind") == "human-rejection":
+                decision = (reason["humanDecision"] if "humanDecision" in reason else
+                            next(row for row in decisions if row["id"] == reason["decision"]["id"]))
+                reason.pop("decision", None)
+                reason["humanDecision"] = public_decision(decision)
+    return result
+
+
+def verify_public_worker_inputs(job, bindings_pinned):
+    """Refuse legacy frozen golden inputs; never rewrite them during launch."""
+    message = "Frozen legacy human inputs require a fresh worker; original inputs remain unchanged"
+    if (job / "foundation.json").exists() and "calibrationExamples" in read(job / "foundation.json"):
+        raise ValueError(message)
+    views = read(job / "bindings.json") if bindings_pinned else []
+    if (job / "prior-human-feedback.json").exists():
+        views += read(job / "prior-human-feedback.json")["charts"]
+    if (job / "review-package.json").exists():
+        expert = read(job / "review-package.json")["expertJudgments"]
+        views += expert["current"] + expert["prior"]["charts"]
+    if (job / "prior-review.json").exists():
+        for chart in read(job / "prior-review.json")["charts"]:
+            for entry in (chart, chart.get("currentTask", {})):
+                views += [entry[key] for key in ("feedback", "taskBinding") if key in entry]
+            if any(row.get("kind") == "human-rejection" and "decision" in row for row in chart.get("reasons", [])):
+                raise ValueError(message)
+    for view in views:
+        if (any(key in view for key in ("agentReviews", "directObservations", "existingReviews", "humanObservations"))
+                or any(public_example(row) != row for row in view.get("humanJudgments", []))
+                or any(public_decision(row) != row for row in view.get("humanDecisions", []))):
+            raise ValueError(message)
+
+
 def prior_feedback(root, job, assignment):
     human, machine = [], []
     for chart in assignment["charts"]:
@@ -64,14 +165,9 @@ def prior_feedback(root, job, assignment):
         if view["sourceSha256"] != sha:
             raise ValueError("Prior feedback source differs from the assignment")
         headers = {h["handoffId"]: h for h in view["handoffs"]}
-        reviews, hints = [], {}
+        hints = {}
         for row in view["agentReviews"]:
-            if row.get("decision") or row["status"] in HUMAN_STATES:
-                record = copy.deepcopy(row)
-                if row["status"] == "deferred":
-                    record["summary"] = {key: row["summary"][key] for key in ("tagId", "scope", "reviewContext")}
-                reviews.append(record)
-            else:
+            if not row.get("decision") and row["status"] not in HUMAN_STATES:
                 claim = row["summary"]
                 key = (claim["tagId"], claim["scope"]["startMs"], claim["scope"]["endMs"])
                 hints[key] = {
@@ -80,14 +176,7 @@ def prior_feedback(root, job, assignment):
                     "originalClaimId": row["claimId"], "originalStatus": row["status"],
                     **{key: claim[key] for key in ("tagId", "scope", "reviewContext")},
                 }
-        human.append({
-            "sourceSha256": sha, "snapshotAvailable": True,
-            "snapshotSha256": hashlib.sha256(raw).hexdigest(),
-            "documentVersion": view["documentVersion"], "reviewBase": view["reviewBase"],
-            "agentReviews": reviews, "directObservations": view["directObservations"],
-            "handoffs": [header for key, header in headers.items()
-                         if any(row["handoffId"] == key for row in reviews)],
-        })
+        human.append({**public_feedback(view), "snapshotAvailable": True})
         machine.extend(hints.values())
     write(job / "prior-human-feedback.json", {"charts": human})
     write(job / "prior-machine-candidates.json", {
@@ -108,15 +197,9 @@ def prepare_review_package(job, label_job, assignment):
         handoffs.append({"sourceSha256": chart["sourceSha256"], "path": name,
                          "sha256": hashlib.sha256((job / name).read_bytes()).hexdigest()})
     bindings = read(label_job / "bindings.json")
-    human = [{
-        "sourceSha256": binding["sourceSha256"],
-        "foundationSha256": binding["foundationSha256"], "base": binding["base"],
-        "existingReviews": [row for row in binding["existingReviews"]
-                            if row.get("decision") or row["status"] in HUMAN_STATES],
-        "humanObservations": binding.get("humanObservations", []),
-    } for binding in bindings]
+    human = [public_feedback(binding) for binding in bindings]
     write(job / "bindings.json", [
-        {key: binding[key] for key in ("sourceSha256", "taskId", "taskSha256", "foundationSha256", "base")}
+        {key: binding[key] for key in BINDING_KEYS}
         for binding in bindings
     ])
     label_run = read(label_job / "run.json")
@@ -134,7 +217,8 @@ def prepare_review_package(job, label_job, assignment):
                       for chart in label_result["charts"]],
         "handoffs": handoffs,
         "expertJudgments": {"current": human,
-                            "prior": read(prior_path) if prior_path.exists() else {"charts": []}},
+                            "prior": {"charts": [public_feedback(chart) for chart in read(prior_path)["charts"]]}
+                            if prior_path.exists() else {"charts": []}},
     })
 
 
@@ -161,6 +245,8 @@ def setup_job(root, assignment, role, label_job=None):
                                 for chart in assignment["charts"]]
     else:
         shutil.copytree(common, job, dirs_exist_ok=True)
+        foundation = read(common / "foundation.json")
+        write(job / "foundation.json", {key: value for key, value in foundation.items() if key != "calibrationExamples"})
         (job / "charts").mkdir(exist_ok=True)
         for chart in assignment["charts"]:
             source = Path(chart["parquetPath"])
@@ -190,7 +276,9 @@ def setup_job(root, assignment, role, label_job=None):
         label_result = read(label_job / "result.json")
         write(job / "discovery.json", [{"sourceSha256": c["sourceSha256"], "inspectedRanges": c["inspectedRanges"], "discoverySummary": c["discoverySummary"]} for c in label_result["charts"]])
     if assignment.get("revisionOf") and not evidence_only:
-        shutil.copyfile(root / "controller/revision-inputs" / assignment["assignmentId"] / "prior-review.json", job / "prior-review.json")
+        prior = read(root / "controller/revision-inputs" / assignment["assignmentId"] / "prior-review.json")
+        write(job / "prior-review.json", public_prior_review(prior))
+    project_worker_bindings(root, job)
     run = {
         "producerId": f"corpus-500-{role}-{uuid.uuid4()}", "role": role,
         "assignmentId": assignment["assignmentId"], "durationMs": total,
@@ -201,6 +289,9 @@ def setup_job(root, assignment, role, label_job=None):
     }
     if role == "auditor":
         run["reviewContextMode"] = review_mode
+    if not evidence_only:
+        run["foundationInput"] = {"view": "definitions-only",
+                                   "sourceSha256": hashlib.sha256((common / "foundation.json").read_bytes()).hexdigest()}
     if config.get("models", {}).get(role):
         run["requestedModel"] = config["models"][role]
     if config.get("reasoningEfforts", {}).get(role):
@@ -214,9 +305,9 @@ def setup_job(root, assignment, role, label_job=None):
     prompt = f"""Complete your assigned osu!mania {role} task. Read ROLE.md, skill/SKILL.md and its referenced judgment guide, foundation.json, skill-provenance.json, assignment.json and bindings.json before judging. Use only this job's supplied inputs and write only here. Do not inspect selection/admin directories or other jobs, and do not spawn agents. Python with PyArrow is {PYTHON}. The annotation-facts.py helper provides factual overview and precise row inspection; it does not assign labels. Work through every assigned chart. Use the already approved four-dimensional Foundation, preserve uncertainty and source-time evidence, and write result.json exactly as ROLE.md specifies. The controller handles sealing, provenance and delivery. This assignment contains {total} ms of chart data (maximum 2,400,000 ms); that limit is dataset duration, NOT your wall time. Finish all assigned work, validate your JSON and references, then report completion. No final commentary can substitute for writing result.json."""
     if query_first and not evidence_only:
         prompt = prompt.replace("already approved four-dimensional Foundation", "supplied pinned approved Foundation and its current targets")
-        prompt += " Start with query-index.json and the compact gzip NDJSON files it references. These contain deterministic source facts, not machine or human review. Read prior-human-feedback.json for exact historical human decisions with their original Foundation provenance; rejection is not absence and deferral is not a label. Read prior-machine-candidates.json only as old location hints: it deliberately omits old machine judgments and rationales. Reinspect under the current Foundation rather than inheriting old labels. Cover the complete source, unhinted regions, and newly introduced targets including Trill. The frozen annotation-queries.py supports precise follow-up queries; repeated-subset requires explicit --columns and never skips intervening rows. Use --skill-file skill/SKILL.md and --skill-file skill/references/judgment-guide.md when calling it. Distinguish selected witnesses, incidental notes, and candidate-local entering holds. Query ruleLabels, when present, are explicitly identified necessary-condition negatives under the pinned Foundation; retain their deterministic-query origin in your rationale and analysis sidecar. Abstentions require agent judgment. No query supplies positive salience or independent audit. Verify the full arrangement and explain uncertainty honestly; do not invent conclusions to fill a quota."
+        prompt += " Start with query-index.json and the compact gzip NDJSON files it references. These contain deterministic source facts, not machine or human review. Read prior-human-feedback.json for final humanJudgments with source/scope identity and optional exact humanComment. Separate humanDecisions retain rejection/deferral without inherited assessments; missing comments do not authorize machine reasoning as a human explanation. Read prior-machine-candidates.json only as old location hints: it deliberately omits old machine judgments and rationales. Reinspect under the current Foundation rather than inheriting old labels. Cover the complete source, unhinted regions, and newly introduced targets including Trill. The frozen annotation-queries.py supports precise follow-up queries; repeated-subset requires explicit --columns and never skips intervening rows. Use --skill-file skill/SKILL.md and --skill-file skill/references/judgment-guide.md when calling it. Distinguish selected witnesses, incidental notes, and candidate-local entering holds. Query ruleLabels, when present, are explicitly identified necessary-condition negatives under the pinned Foundation; retain their deterministic-query origin in your rationale and analysis sidecar. Abstentions require agent judgment. No query supplies positive salience or independent audit. Verify the full arrangement and explain uncertainty honestly; do not invent conclusions to fill a quota."
     if evidence_only:
-        prompt = f"""Review the assigned labeler's submitted judgments as an independent auditor. Read ROLE.md, skill/SKILL.md and its referenced judgment guide, skill-provenance.json, and review-package.json. Read the package's discovery declarations and sealed handoff files for every judgment, rationale, exact submitted noteRefs/contextNoteRefs and question. The unchanged labeler-result.json is an administrative original; its claims duplicate the handoffs and do not need to be read again. Read its exact expertJudgments with their original scope, source and Foundation provenance. Administrative bindings.json and assignment.json preserve exchange identities, not additional semantic evidence. Use only these supplied inputs and write only here; do not inspect other jobs, controller/selection directories or recover original chart data, and do not spawn agents. This run's reviewContextMode is labeler-evidence: you have NOT independently traversed the original chart. Selected references are not the complete contents of a scope. Assess the submitted reasoning, calculations, evidence sufficiency and consistency with expert guidance. Review coverage declarations for supported explanation and visible gaps, without claiming independent full-source coverage. Return concrete missing evidence, unsupported inference or coverage explanation as needs-revision for the labeler to fix; use needs-expert only for a genuine semantic question that remains despite sufficient supplied evidence. Do not invent ambiguity or infer absence from unprovided notes. Follow ROLE.md's unchanged audit result contract, covering every original claim and question, and write result.json with exact skill provenance. The controller seals and delivers it against the original handoffs and frozen tasks. This assignment represents {total} ms of chart duration (maximum 2,400,000 ms), not a wall-time limit. No final commentary substitutes for result.json."""
+        prompt = f"""Review the assigned labeler's submitted judgments as an independent auditor. Read ROLE.md, skill/SKILL.md and its referenced judgment guide, skill-provenance.json, and review-package.json. Read the package's discovery declarations and sealed handoff files for every judgment, rationale, exact submitted noteRefs/contextNoteRefs and question. The unchanged labeler-result.json is an administrative original; its claims duplicate the handoffs and do not need to be read again. Read its final expertJudgments with source/scope identity and optional exact humanComment. HumanDecisions retain rejection/deferral without inherited assessments. Submitted agent reasoning remains in the separate handoffs being audited. Administrative bindings.json and assignment.json preserve exchange identities, not additional semantic evidence. Use only these supplied inputs and write only here; do not inspect other jobs, controller/selection directories or recover original chart data, and do not spawn agents. This run's reviewContextMode is labeler-evidence: you have NOT independently traversed the original chart. Selected references are not the complete contents of a scope. Assess the submitted reasoning, calculations, evidence sufficiency and consistency with expert guidance. Review coverage declarations for supported explanation and visible gaps, without claiming independent full-source coverage. Return concrete missing evidence, unsupported inference or coverage explanation as needs-revision for the labeler to fix; use needs-expert only for a genuine semantic question that remains despite sufficient supplied evidence. Do not invent ambiguity or infer absence from unprovided notes. Follow ROLE.md's unchanged audit result contract, covering every original claim and question, and write result.json with exact skill provenance. The controller seals and delivers it against the original handoffs and frozen tasks. This assignment represents {total} ms of chart duration (maximum 2,400,000 ms), not a wall-time limit. No final commentary substitutes for result.json."""
     if assignment.get("revisionOf") and role == "labeler":
         prompt += " This is a new revision attempt. Read prior-review.json. Correct the concrete source, scope, coverage or reasoning defects using the supplied chart data. Keep already supported content accurate, address every revision finding, and return a complete replacement proposal collection for these charts. Preserve explicit human decisions in bindings.json. Do not overwrite or present the prior agent's work as your own execution. The new handoff supersedes the listed old handoff only in this campaign's acceptance record; original history remains intact."
     elif assignment.get("revisionOf") and not evidence_only:
@@ -256,6 +347,9 @@ def launch(root, job):
     for name, expected in run["inputHashes"].items():
         if hashlib.sha256((job / name).read_bytes()).hexdigest() != expected:
             raise ValueError(f"Worker input changed after preparation: {name}")
+    verify_public_worker_inputs(job, "bindings.json" in run["inputHashes"])
+    if "bindings.json" not in run["inputHashes"]:
+        project_worker_bindings(root, job)
     run["inputHashes"]["bindings.json"] = hashlib.sha256((job / "bindings.json").read_bytes()).hexdigest()
     run.update(status="running", startedAt=now())
     out = (job / "events.jsonl").open("w")

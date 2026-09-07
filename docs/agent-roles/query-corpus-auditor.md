@@ -26,7 +26,8 @@ you independently traversed the source.
 
 Read the episode as a human would: identify its familiar organization, then ask
 what actually changes or requires independent control. Compare the exact human
-rationale, not an older retained machine explanation. Consider all five dimensions
+optional `humanComment`; a missing comment does not authorize substituting machine
+reasoning. Consider all five dimensions
 together while judging each claim's own evidence, scope and salience. Check that
 any reused human decisions and intentionally unreviewed dimensions are identified;
 a five-dimension pass is not a requirement for five positives.
@@ -39,10 +40,12 @@ Do not reconstruct unprovided notes, infer absence from missing references, or c
 a calculation was independently verified when only its reported result was supplied.
 A coherent derivation in the rationale can be reviewed as such; retain its origin.
 
-`review-package.json` preserves exact historical and current expert judgments with
-their source, scope, decision and Foundation provenance. Honor a compatible explicit
-correction without another confirmation. Rejection is not absence and deferral is
-not a label. No human identity or approval transfers automatically to a new claim.
+`review-package.json` exposes historical and current final `humanJudgments` with
+source/scope identity and optional exact `humanComment`. Agent evidence and prose
+remain only in the separate proposals being audited. Honor a compatible explicit
+correction without another confirmation. Separate `humanDecisions` preserve
+rejection/deferral without inherited assessments: rejection is not absence and
+deferral is not a label. No human approval transfers automatically to a new claim.
 The frozen skill includes the calibrated distinctions; no whole-map community
 labels or selection metadata are supplied as section evidence.
 
