@@ -82,7 +82,23 @@ def check_lines(value, field, interval, by_line, fail):
         fail("references-outside-range", field, range=interval, notes=outside)
 
 
-def check_claim(claim, by_line, fail):
+def coverage_gaps(ranges, target):
+    through = target["startMs"]
+    gaps = []
+    for interval in sorted(ranges, key=lambda item: item["startMs"]):
+        if interval["endMs"] <= through:
+            continue
+        if interval["startMs"] >= target["endMs"]:
+            break
+        if interval["startMs"] > through:
+            gaps.append({"startMs": through, "endMs": interval["startMs"]})
+        through = min(target["endMs"], max(through, interval["endMs"]))
+    if through < target["endMs"]:
+        gaps.append({"startMs": through, "endMs": target["endMs"]})
+    return gaps
+
+
+def check_claim(claim, by_line, fail, inspected_ranges=None):
     if not isinstance(claim, dict):
         fail("expected-object", "claim")
         return
@@ -94,6 +110,10 @@ def check_claim(claim, by_line, fail):
         fail("unknown-tag", "tagId", value=claim.get("tagId"), allowed=sorted(TAGS))
     scope = time_range(claim.get("scope"), "scope", fail)
     context = time_range(claim.get("reviewContext"), "reviewContext", fail)
+    if scope is not None and inspected_ranges is not None:
+        gaps = coverage_gaps(inspected_ranges, scope)
+        if gaps:
+            fail("scope-outside-inspected-ranges", "scope", scope=scope, gaps=gaps)
     if scope is not None and context is not None and (
             context["startMs"] > scope["startMs"] or context["endMs"] < scope["endMs"]):
         fail("context-does-not-contain-scope", "reviewContext", scope=scope, reviewContext=context)
@@ -115,25 +135,36 @@ def check_claim(claim, by_line, fail):
         fail("positive-requires-witnesses", "noteLines")
 
 
-def check_coverage(value, chart_range, fail):
+def check_targets(value, chart_range, fail):
+    if not isinstance(value, list) or not value:
+        fail("target-ranges-required", "targetRanges", chartRange=chart_range)
+        return []
+    ranges = []
+    for index, candidate in enumerate(value):
+        field = f"targetRanges[{index}]"
+        interval = time_range(candidate, field, fail)
+        if interval is None:
+            continue
+        if interval["startMs"] < chart_range["startMs"] or interval["endMs"] > chart_range["endMs"]:
+            fail("target-outside-source-range", field, range=interval, chartRange=chart_range)
+        ranges.append(interval)
+    return ranges
+
+
+def check_coverage(value, chart_range, fail, target_ranges=None):
     if not isinstance(value, list) or not value:
         fail("inspected-ranges-required", "inspectedRanges", chartRange=chart_range)
-        return
+        return []
     ranges = []
     for index, candidate in enumerate(value):
         interval = time_range(candidate, f"inspectedRanges[{index}]", fail)
         if interval is not None:
             ranges.append(interval)
-    through = chart_range["startMs"]
-    gaps = []
-    for interval in sorted(ranges, key=lambda item: item["startMs"]):
-        if interval["startMs"] > through:
-            gaps.append({"startMs": through, "endMs": interval["startMs"]})
-        through = max(through, interval["endMs"])
-    if through < chart_range["endMs"]:
-        gaps.append({"startMs": through, "endMs": chart_range["endMs"]})
+    targets = [chart_range] if target_ranges is None else target_ranges
+    gaps = [gap for target in targets for gap in coverage_gaps(ranges, target)]
     if gaps:
         fail("uninspected-gaps", "inspectedRanges", chartRange=chart_range, gaps=gaps)
+    return ranges
 
 
 def check_questions(value, claim_ids, fail):
@@ -213,7 +244,9 @@ def check(job, result_path=None):
         del table
         if meta["source"]["sha256"] != sha:
             chart_failure("parquet-source-mismatch", "sourceSha256", actual=meta["source"]["sha256"])
-        check_coverage(chart.get("inspectedRanges"), meta["range"], chart_failure)
+        selected_sections = assignment.get("coverageMode") == "selected-sections"
+        targets = check_targets(expected[sha].get("targetRanges"), meta["range"], chart_failure) if selected_sections else None
+        inspected = check_coverage(chart.get("inspectedRanges"), meta["range"], chart_failure, targets)
         if not nonempty(chart.get("discoverySummary")):
             chart_failure("discovery-summary-required", "discoverySummary")
         claims = chart.get("claims")
@@ -231,7 +264,7 @@ def check(job, result_path=None):
                 if claim_id in claim_ids:
                     claim_failure("duplicate-claim-id", "id")
                 claim_ids.add(claim_id)
-            check_claim(claim, by_line, claim_failure)
+            check_claim(claim, by_line, claim_failure, inspected if selected_sections else None)
             checked_claims += 1
         check_questions(chart.get("questions"), claim_ids, chart_failure)
         checked_charts += 1

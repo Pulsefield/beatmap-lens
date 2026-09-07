@@ -81,6 +81,52 @@ class ResultPreflightTest(unittest.TestCase):
         self.assertTrue(report["ok"], report)
         self.assertEqual(report["checkedClaims"], 3)
 
+    def test_selected_targets_allow_surrounding_context_but_default_requires_full_chart(self):
+        self.assigned["targetRanges"] = [{"startMs": 50000, "endMs": 50200}, {"startMs": 50700, "endMs": 50900}]
+        self.chart["inspectedRanges"] = [{"startMs": 50600, "endMs": 51030}, {"startMs": 49900, "endMs": 50300}]
+        assignment = {"coverageMode": "selected-sections", "charts": [self.assigned]}
+        write(self.job / "assignment.json", assignment)
+        report = self.check()
+        self.assertTrue(report["ok"], report)
+        self.assertEqual(report["checkedClaims"], 1)
+
+        del assignment["coverageMode"]
+        write(self.job / "assignment.json", assignment)
+        report = self.check()
+        self.assertFalse(report["ok"])
+        self.assertEqual(report["errors"][0]["gaps"], [
+            {"startMs": 49664, "endMs": 49900}, {"startMs": 50300, "endMs": 50600},
+            {"startMs": 51030, "endMs": 51254},
+        ])
+
+    def test_selected_targets_and_claim_scopes_cannot_skip_uninspected_gaps(self):
+        self.chart["inspectedRanges"] = [{"startMs": 50500, "endMs": 50803}, {"startMs": 50804, "endMs": 51030}]
+        self.assigned["targetRanges"] = [{"startMs": 50500, "endMs": 51030}]
+        assignment = {"coverageMode": "selected-sections", "charts": [self.assigned]}
+        write(self.job / "assignment.json", assignment)
+        report = self.check()
+        self.assertEqual({e["code"] for e in report["errors"]},
+                         {"uninspected-gaps", "scope-outside-inspected-ranges"})
+        self.assertTrue(all(e["gaps"] == [{"startMs": 50803, "endMs": 50804}] for e in report["errors"]))
+
+        self.assigned["targetRanges"] = self.chart["inspectedRanges"]
+        write(self.job / "assignment.json", assignment)
+        report = self.check()
+        self.assertEqual([e["code"] for e in report["errors"]], ["scope-outside-inspected-ranges"])
+
+    def test_selected_assignments_require_nonempty_targets_within_source(self):
+        for targets in (None, [], [{"startMs": 49663, "endMs": 50804}], [{"startMs": 50803, "endMs": 51255}]):
+            with self.subTest(targets=targets):
+                if targets is not None:
+                    self.assigned["targetRanges"] = targets
+                else:
+                    self.assigned.pop("targetRanges", None)
+                write(self.job / "assignment.json", {"coverageMode": "selected-sections", "charts": [self.assigned]})
+                report = self.check()
+                self.assertFalse(report["ok"])
+                expected = "target-ranges-required" if not targets else "target-outside-source-range"
+                self.assertIn(expected, {e["code"] for e in report["errors"]})
+
     def test_all_outside_duplicate_and_missing_references_are_reported(self):
         self.claim["noteLines"] = [6675, 6683, 6684, 6683, 99999, 6676]
         self.claim["reviewContext"] = {"startMs": 50577, "endMs": 50804}

@@ -13,6 +13,16 @@ Foundation. The original four-target campaign remains preserved separately.
 Labelers must perform full-chart structural discovery; representative section
 collection does not claim exhaustive semantic labeling of every instant or dimension.
 
+## Selecting additional sections
+
+The population ranking below explains the original 500-chart corpus. Further
+annotation uses [intentional section selection](annotation-selection.md): inspect
+one episode across all five dimensions, prioritize human-feedback comparisons and
+coverage gaps, and retain a seeded exploration share. Its derived report separates
+per-dimension human/machine coverage from full-chart discovery and acceptance.
+New roles and skill guidance require new frozen jobs; existing worker snapshots
+and historical claims keep their meaning.
+
 ## Selection and clean inputs
 
 Select by the sum of difficulty-level community `top_tag_ids[].count` descending,
