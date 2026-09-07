@@ -95,6 +95,88 @@ async function get(url: string, pathname: string) {
 }
 
 describe("local Review service exchange", () => {
+  it("publishes machine revision lineage and preserves it across a service restart", async () => {
+    const f = await fixture();
+    const service = await start(f.workspace);
+    const original = await sealHandoffV2(f.task, {
+      handoffId: "pending-original",
+      createdAt: NOW,
+      agent: f.handoff.agent,
+      proposals: [{ ...f.claim, assessment: { presence: "unresolved" } }],
+      audit: [],
+      questions: [],
+    });
+    const oldAudit = await sealAuditV2(f.task, original, {
+      auditId: "pending-original-audit",
+      createdAt: NOW,
+      agent: f.audit.agent,
+      claims: [
+        {
+          claimId: f.claim.id,
+          outcome: "needs-expert",
+          rationale: "A calibrated comparison is needed.",
+          expertReason: "semantic-boundary",
+          question: "Does this qualify?",
+        },
+      ],
+      questions: [],
+    });
+    await post(service.url, "submit", { kind: "handoff", packet: original });
+    await post(service.url, "submit", { kind: "audit", packet: oldAudit });
+    const replacement = await sealHandoffV2(f.task, {
+      handoffId: "settled-replacement",
+      createdAt: NOW,
+      agent: f.handoff.agent,
+      proposals: [{ ...f.claim, id: "settled-claim", assessment: { presence: "absent" } }],
+      audit: [],
+      questions: [],
+      supersedes: [
+        {
+          handoffId: original.handoffId,
+          handoffSha256: await hashWorkflowValueV2(original),
+          claimId: f.claim.id,
+          replacementClaimId: "settled-claim",
+        },
+      ],
+    });
+    expect(
+      (await post(service.url, "submit", { kind: "handoff", packet: replacement })).status,
+    ).toBe(200);
+    const pending = await get(service.url, `feedback/${f.sha}`);
+    expect(pending.counts["needs-expert"]).toBe(1);
+    expect(pending.handoffs[1].supersedes).toEqual(replacement.supersedes);
+    const audit = await sealAuditV2(f.task, replacement, {
+      auditId: "settled-audit",
+      createdAt: NOW,
+      agent: f.audit.agent,
+      claims: [
+        {
+          claimId: "settled-claim",
+          outcome: "supported",
+          rationale: "The source-backed comparison establishes absence.",
+        },
+      ],
+      questions: [],
+    });
+    expect((await post(service.url, "submit", { kind: "audit", packet: audit })).status).toBe(200);
+    const feedback = await get(service.url, `feedback/${f.sha}`);
+    expect(feedback.counts).toEqual({ total: 2, superseded: 1, "agent-reviewed": 1 });
+    expect(feedback.agentReviews[0].supersededBy).toEqual({
+      handoffId: replacement.handoffId,
+      claimId: "settled-claim",
+    });
+    expect(feedback.reviewBase).toEqual(pending.reviewBase);
+    const dispositions = await get(service.url, `dispositions/${f.sha}`);
+    expect(dispositions.handoffs[1].supersedes).toEqual(replacement.supersedes);
+    expect(dispositions.agentReviews.every((row: { decision?: unknown }) => !row.decision)).toBe(
+      true,
+    );
+    await service.close();
+    const restarted = await start(f.workspace);
+    expect(await get(restarted.url, `feedback/${f.sha}`)).toEqual(feedback);
+    expect(restarted.cacheInfo().fullSourceReads).toBe(0);
+  }, 10_000);
+
   it("drains queued human decisions, closes old keep-alive streams, and restarts on the same port", async () => {
     const f = await fixture();
     const dataset = join(f.workspace, "dataset");

@@ -138,6 +138,13 @@ export interface HandoffV2 {
   readonly createdAt: string;
   readonly agent: AgentProvenanceV2;
   readonly proposals: readonly ClaimV2[];
+  /** Explicit machine revision lineage; takes effect only after independent support. */
+  readonly supersedes?: readonly {
+    readonly handoffId: string;
+    readonly handoffSha256: string;
+    readonly claimId: string;
+    readonly replacementClaimId: string;
+  }[];
   readonly audit: readonly {
     readonly id: string;
     readonly claimIds: readonly string[];
@@ -202,6 +209,7 @@ export interface AgentReviewV2 {
     | "agent-reviewed"
     | "needs-revision"
     | "needs-expert"
+    | "superseded"
     | "stale"
     | HumanDecisionV2["disposition"];
   readonly baseStatus: "current" | "stale";
@@ -214,6 +222,7 @@ export interface AgentReviewV2 {
   readonly expertReason?: string;
   readonly question?: string;
   readonly decision?: HumanDecisionV2;
+  readonly supersededBy?: { readonly handoffId: string; readonly claimId: string };
 }
 
 export interface HumanDecisionV2 {

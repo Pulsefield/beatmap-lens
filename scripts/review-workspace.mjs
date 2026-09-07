@@ -94,7 +94,7 @@ export async function startReviewWorkspace(options) {
     const { document, version } = stored;
     const agentReviews = await domain.readAgentReviewsV2(document);
     const reviews = agentReviews.map(
-      ({ handoffId, claimId, claim, status, rationale, question, expertReason }) => ({
+      ({ handoffId, claimId, claim, status, rationale, question, expertReason, supersededBy }) => ({
         handoffId,
         claimId,
         tagId: claim.tagId,
@@ -103,6 +103,7 @@ export async function startReviewWorkspace(options) {
         rationale,
         ...(question ? { question } : {}),
         ...(expertReason ? { expertReason } : {}),
+        ...(supersededBy ? { supersededBy } : {}),
       }),
     );
     const counts = { total: reviews.length };
@@ -239,6 +240,7 @@ export async function startReviewWorkspace(options) {
         summary: claimSummary(row.claim),
         audits: row.audits.map(({ auditId, result }) => ({ auditId, result })),
         ...(row.decision ? { decision: row.decision } : {}),
+        ...(row.supersededBy ? { supersededBy: row.supersededBy } : {}),
         ...(row.decision?.disposition === "modified"
           ? { modifiedClaim: observations.get(row.decision.observationId).claim }
           : {}),
@@ -249,6 +251,7 @@ export async function startReviewWorkspace(options) {
         document.handoffs.map(async ({ handoff, handoffSha256, baseStatus }) => ({
           handoffId: handoff.handoffId,
           handoffSha256,
+          ...(handoff.supersedes ? { supersedes: handoff.supersedes } : {}),
           ...taskBinding(handoff),
           agent: handoff.agent,
           baseStatus:

@@ -47,6 +47,70 @@ class HumanAssessmentAcceptanceTest(unittest.TestCase):
         self.assertEqual(self.review("absent", modified=True, question=True), "accepted-reviewed")
 
 
+class SupersessionAcceptanceTest(unittest.TestCase):
+    def setUp(self):
+        self.chart = {"coverageReview": {"outcome": "supported"},
+                      "questions": [{"questionId": "old-question", "disposition": "needs-expert"}]}
+        self.handoff = {"handoffId": "original", "proposals": [{"id": "drill"}, {"id": "ln"}],
+                        "questions": [{"id": "old-question", "claimIds": ["drill"]}]}
+        self.feedback = {"handoffs": [{"handoffId": "original", "baseStatus": "current"},
+                                      {"handoffId": "replacement", "baseStatus": "current"}],
+                         "agentReviews": [
+                             {"handoffId": "original", "claimId": "drill", "status": "superseded",
+                              "summary": {"assessment": {"presence": "unresolved"}},
+                              "supersededBy": {"handoffId": "replacement", "claimId": "new-drill"}},
+                             {"handoffId": "original", "claimId": "ln", "status": "agent-reviewed",
+                              "summary": {"assessment": {"presence": "absent"}}},
+                             {"handoffId": "replacement", "claimId": "new-drill", "status": "agent-reviewed",
+                              "summary": {"assessment": {"presence": "present", "salience": "prominent"}}}]}
+
+    def acceptance(self):
+        return campaign.chart_acceptance(self.chart, self.feedback, self.handoff)
+
+    def test_current_settled_replacement_resolves_only_its_original_question(self):
+        before = json.dumps([self.chart, self.feedback, self.handoff], sort_keys=True)
+        self.assertEqual(self.acceptance(), "accepted-reviewed")
+        self.assertEqual(json.dumps([self.chart, self.feedback, self.handoff], sort_keys=True), before)
+        self.feedback["agentReviews"][2]["summary"]["assessment"] = {"presence": "absent"}
+        self.assertEqual(self.acceptance(), "accepted-reviewed")
+        self.handoff["questions"][0]["claimIds"] = []
+        self.feedback["agentReviews"][1]["status"] = "needs-expert"
+        self.assertEqual(self.acceptance(), "needs-expert")
+
+    def test_linear_chain_uses_the_terminal_review_and_keeps_coverage_requirement(self):
+        self.feedback["agentReviews"][2].update(status="superseded", supersededBy={"handoffId": "final", "claimId": "final-drill"})
+        self.feedback["handoffs"].append({"handoffId": "final", "baseStatus": "current"})
+        self.feedback["agentReviews"].append({"handoffId": "final", "claimId": "final-drill", "status": "agent-reviewed",
+                                               "summary": {"assessment": {"presence": "absent"}}})
+        self.assertEqual(self.acceptance(), "accepted-reviewed")
+        self.chart["coverageReview"]["outcome"] = "needs-revision"
+        self.assertEqual(self.acceptance(), "needs-revision")
+
+    def test_unsupported_or_conflicted_replacement_does_not_settle_the_original(self):
+        self.feedback["agentReviews"][0].pop("supersededBy")
+        self.feedback["agentReviews"][0]["status"] = "needs-expert"
+        for replacement_status in ("awaiting-audit", "needs-expert", "needs-revision"):
+            self.feedback["agentReviews"][2]["status"] = replacement_status
+            self.assertEqual(self.acceptance(), "needs-expert")
+
+    def test_human_decision_takes_precedence_over_an_existing_machine_link(self):
+        original = self.feedback["agentReviews"][0]
+        original["status"] = "rejected"
+        self.assertEqual(self.acceptance(), "needs-revision")
+        original.update(status="modified", modifiedClaim={"assessment": {"presence": "absent"}})
+        self.assertEqual(self.acceptance(), "accepted-reviewed")
+        original["modifiedClaim"]["assessment"] = {"presence": "unresolved"}
+        self.assertEqual(self.acceptance(), "needs-expert")
+
+    def test_current_terminal_can_replace_a_stale_original_but_not_other_stale_claims(self):
+        self.feedback["handoffs"][0]["baseStatus"] = "stale"
+        self.assertEqual(self.acceptance(), "stale")
+        self.feedback["agentReviews"][1].update(status="modified", modifiedClaim={"assessment": {"presence": "absent"}})
+        self.assertEqual(self.acceptance(), "accepted-reviewed")
+        self.feedback["handoffs"][1]["baseStatus"] = "stale"
+        self.assertEqual(self.acceptance(), "stale")
+
+
 class CampaignStopTest(unittest.TestCase):
     def test_user_stop_blocks_run_before_setup_and_keeps_status_available(self):
         with TemporaryDirectory() as temporary:

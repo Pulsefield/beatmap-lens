@@ -205,12 +205,15 @@ export async function registerTaskV2(
 
 export async function sealHandoffV2(
   task: TaskPacketV2,
-  input: Pick<HandoffV2, "handoffId" | "createdAt" | "agent" | "proposals" | "audit" | "questions">,
+  input: Pick<
+    HandoffV2,
+    "handoffId" | "createdAt" | "agent" | "proposals" | "audit" | "questions" | "supersedes"
+  >,
 ): Promise<HandoffV2> {
   record(
     input,
     ["handoffId", "createdAt", "agent", "proposals", "audit", "questions"],
-    [],
+    ["supersedes"],
     "submission",
   );
   if (!array(input.proposals, "submission.proposals").length) {
@@ -252,7 +255,7 @@ export async function validateHandoffV2(input: unknown, task: TaskPacketV2): Pro
       "audit",
       "questions",
     ],
-    [],
+    ["supersedes"],
     "handoff",
   );
   equal(handoff.contract, HANDOFF_CONTRACT_V2, "handoff.contract");
@@ -279,6 +282,26 @@ export async function validateHandoffV2(input: unknown, task: TaskPacketV2): Pro
   for (const claim of proposals) assertClaimV2(claim, task.structure.notes, task.foundation);
   uniqueIds(proposals, "proposals");
   const claimIds = new Set(proposals.map((claim) => (claim as ClaimV2).id));
+  if ("supersedes" in handoff) {
+    const targets = new Set<string>();
+    for (const entry of array(handoff.supersedes, "handoff.supersedes")) {
+      const link = record(
+        entry,
+        ["handoffId", "handoffSha256", "claimId", "replacementClaimId"],
+        [],
+        "supersedes",
+      );
+      for (const key of ["handoffId", "claimId", "replacementClaimId"])
+        nonempty(link[key], `supersedes.${key}`);
+      if (typeof link.handoffSha256 !== "string" || !/^[a-f\d]{64}$/.test(link.handoffSha256))
+        throw new Error("Superseded handoff needs its exact SHA-256.");
+      if (!claimIds.has(link.replacementClaimId as string))
+        throw new Error("Supersession references an unknown replacement claim.");
+      const key = JSON.stringify([link.handoffId, link.claimId]);
+      if (targets.has(key)) throw new Error("Supersession repeats an original claim.");
+      targets.add(key);
+    }
+  }
   for (const kind of ["audit", "questions"] as const) {
     const entries = array(handoff[kind], `handoff.${kind}`);
     uniqueIds(entries, kind);
@@ -326,6 +349,16 @@ export async function importHandoffV2(
       "Handoff ID already exists with different immutable content",
     );
     return { document, status: "duplicate", baseStatus: existing.baseStatus };
+  }
+  assertSupersessionTargets(document.handoffs, handoff);
+  for (const link of handoff.supersedes ?? []) {
+    if (
+      document.decisions.some(
+        (decision) => decision.handoffId === link.handoffId && decision.claimId === link.claimId,
+      )
+    ) {
+      throw new Error("A machine revision cannot supersede a human decision.");
+    }
   }
   const baseStatus: "current" | "stale" = sameBase(handoff.base, await baseForTaskV2(document))
     ? "current"
@@ -747,7 +780,54 @@ export async function readAgentReviewsV2(
       });
     }),
   );
-  return rows.flat();
+  const reviews = rows.flat();
+  const byKey = new Map(reviews.map((row) => [JSON.stringify([row.handoffId, row.claimId]), row]));
+  for (const { handoff } of [...document.handoffs].reverse()) {
+    for (const link of handoff.supersedes ?? []) {
+      const replacement = byKey.get(JSON.stringify([handoff.handoffId, link.replacementClaimId]));
+      const original = byKey.get(JSON.stringify([link.handoffId, link.claimId]));
+      if (
+        !original ||
+        original.decision ||
+        !replacement ||
+        !["agent-reviewed", "accepted", "modified", "superseded"].includes(replacement.status)
+      )
+        continue;
+      byKey.set(JSON.stringify([link.handoffId, link.claimId]), {
+        ...original,
+        status: "superseded",
+        supersededBy: { handoffId: replacement.handoffId, claimId: replacement.claimId },
+      });
+    }
+  }
+  return [...byKey.values()];
+}
+
+function assertSupersessionTargets(prior: ReviewDocumentV2["handoffs"], handoff: HandoffV2): void {
+  for (const link of handoff.supersedes ?? []) {
+    if (
+      prior.some((entry) =>
+        entry.handoff.supersedes?.some(
+          (previous) => previous.handoffId === link.handoffId && previous.claimId === link.claimId,
+        ),
+      )
+    )
+      throw new Error("Claim already has a replacement; revise that replacement instead.");
+    const original = prior.find((entry) => entry.handoff.handoffId === link.handoffId);
+    if (!original) throw new Error("Supersession must reference an earlier imported handoff.");
+    equal(original.handoffSha256, link.handoffSha256, "Superseded handoff hash differs");
+    equal(original.handoff.sourceSha256, handoff.sourceSha256, "Superseded source differs");
+    equal(
+      original.handoff.foundationSha256,
+      handoff.foundationSha256,
+      "Superseded Foundation differs",
+    );
+    const previous = original.handoff.proposals.find((claim) => claim.id === link.claimId);
+    const next = handoff.proposals.find((claim) => claim.id === link.replacementClaimId);
+    if (!previous || !next) throw new Error("Supersession must reference existing claims.");
+    equal(previous.tagId, next.tagId, "Supersession must retain the target tag");
+    same(previous.scope, next.scope, "Supersession must judge the complete original scope.");
+  }
 }
 
 export async function readExpertQueueV2(
@@ -767,6 +847,8 @@ export async function readDispositionsV2(document: ReviewDocumentV2) {
     handoffs: await Promise.all(
       document.handoffs.map(async (entry) => ({
         handoffId: entry.handoff.handoffId,
+        handoffSha256: entry.handoffSha256,
+        ...(entry.handoff.supersedes ? { supersedes: entry.handoff.supersedes } : {}),
         agent: entry.handoff.agent,
         taskId: entry.handoff.taskId,
         taskSha256: entry.handoff.taskSha256,
@@ -1058,6 +1140,7 @@ export async function validateReviewDocumentV2(
     : undefined;
   const handoffs = array(value.handoffs, "review.handoffs");
   const handoffIds: { id: unknown }[] = [];
+  const priorHandoffs: ReviewDocumentV2["handoffs"][number][] = [];
   for (const entry of handoffs) {
     const imported = record(
       entry,
@@ -1069,6 +1152,8 @@ export async function validateReviewDocumentV2(
     const task = document.tasks.find((task) => task.taskId === candidate.taskId);
     if (!task) throw new Error("Stored handoff has no frozen task.");
     const handoff = await validateHandoffV2(imported.handoff, task);
+    assertSupersessionTargets(priorHandoffs, handoff);
+    priorHandoffs.push(entry as ReviewDocumentV2["handoffs"][number]);
     equal(imported.handoffSha256, await hashWorkflowValueV2(handoff), "handoffSha256");
     oneOf(imported.baseStatus, ["current", "stale"], "baseStatus");
     nonempty(imported.importedAt, "importedAt");

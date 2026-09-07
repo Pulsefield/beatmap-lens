@@ -821,6 +821,10 @@ onBeforeUnmount(() => { stashDraft(); playback?.dispose(); });
         <template v-if="activeClaim">
           <section v-if="editorOrigin === 'proposal' && activeReview" class="review-section review-audit-result">
             <h2>{{ latestDecision(activeHandoffId, activeClaim.id) }}</h2>
+            <template v-if="activeReview.supersededBy">
+              <p>This original proposal was replaced by an independently reviewed machine judgment. Its history remains available.</p>
+              <button type="button" @click="openQuestion(activeReview.supersededBy.handoffId, activeReview.supersededBy.claimId)">View replacement judgment</button>
+            </template>
             <p v-if="activeReview.question">{{ activeReview.question }}</p>
             <p class="review-copy">{{ activeReview.rationale }}</p>
             <details v-if="activeReview.audits.length"><summary>Independent findings · {{ activeReview.audits.length }}</summary><p v-for="finding in activeReview.audits" :key="finding.auditId" class="review-decision"><strong>{{ finding.producerId }} · {{ finding.result.outcome }}</strong><br>{{ finding.result.rationale }}</p></details>

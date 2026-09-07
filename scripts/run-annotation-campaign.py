@@ -339,19 +339,31 @@ def chart_acceptance(chart, feedback, handoff):
     reviews = [r for r in feedback["agentReviews"] if r["handoffId"] == handoff["handoffId"]]
     if {r["claimId"] for r in reviews} != {c["id"] for c in handoff["proposals"]}:
         return "awaiting-review"
-    states = {r["status"] for r in reviews}
+    by_key = {(r["handoffId"], r["claimId"]): r for r in feedback["agentReviews"]}
+    effective = []
+    for original in reviews:
+        review = original
+        while review["status"] == "superseded":
+            link = review["supersededBy"]
+            review = by_key[(link["handoffId"], link["claimId"])]
+        effective.append((original, review))
+    states = {r["status"] for _, r in effective}
     questions = {q["id"]: q for q in handoff["questions"]}
-    human = {r["claimId"] for r in reviews if r["status"] in ("accepted", "modified")
+    human = {original["claimId"] for original, r in effective if r["status"] in ("accepted", "modified")
              and r.get("modifiedClaim", r["summary"])["assessment"]["presence"] in ("present", "absent")}
-    uncertain_human = any(r["status"] in ("accepted", "modified") and r["claimId"] not in human
-                          for r in reviews)
+    settled = human | {original["claimId"] for original, r in effective
+                       if original["status"] == "superseded" and r["status"] == "agent-reviewed"
+                       and r["summary"]["assessment"]["presence"] in ("present", "absent")}
+    uncertain_human = any(r["status"] in ("accepted", "modified") and original["claimId"] not in human
+                          for original, r in effective)
     all_claims = [c["id"] for c in handoff["proposals"]]
     dispositions = {
         q["disposition"] for q in chart["questions"]
-        if not ((affected := questions[q["questionId"]]["claimIds"] or all_claims) and set(affected) <= human)
+        if not ((affected := questions[q["questionId"]]["claimIds"] or all_claims) and set(affected) <= settled)
     }
-    header = next(h for h in feedback["handoffs"] if h["handoffId"] == handoff["handoffId"])
-    if header["baseStatus"] == "stale":
+    headers = {h["handoffId"]: h for h in feedback["handoffs"]}
+    if any(original["claimId"] not in human and headers[r["handoffId"]]["baseStatus"] == "stale"
+           for original, r in effective):
         return "stale"
     if chart.get("coverageReview", {}).get("outcome") != "supported" or states & {"needs-revision", "rejected"} or "needs-revision" in dispositions:
         return "needs-revision"

@@ -59,11 +59,14 @@ and [compositional framework proposal](decisions/0004-compositional-pattern-judg
 when revising it; the initial factory is not sufficient semantic authority for
 human-confirmed observations.
 
-The current experiment uses Jack organization, Stream organization, Tech, and LN
+The first pilot used Jack organization, Stream organization, Tech, and LN
 coordination. The user approved the four-dimension Foundation and the ten reviewed
 calibration cases with explicit corrections. Revision 2 includes roll/burst in
 Stream organization and excludes the reviewed grouped jumpdrill; three consecutive
-complete four-note directional roll groups establish local prominence. Community
+complete four-note directional roll groups establish prominent roll structure,
+without automatically establishing prominent Stream style. The current
+[V2 corpus campaign](corpus-annotation.md) adds approved Drill organization as its
+fifth section target. Each task retains its actual frozen Foundation. Community
 whole-difficulty target selection and alignments remain separate proposals. Its
 [`experimental-campaign.ts`](../apps/inspector/src/annotation/workflow/experimental-campaign.ts)
 factory still creates an empty **proposed** template. Record approval on the actual
@@ -227,6 +230,23 @@ bindings with the current browser state. Source mismatches are rejected; a chang
 review base is shown as stale and requires a fresh task before confirmation.
 Repeated imports of identical content do not create duplicates.
 
+A new machine review of an unresolved claim can include `supersedes`, with
+`handoffId`, `handoffSha256`, `claimId`, and `replacementClaimId` for each old/new
+claim pair. The source, Foundation, tag, and complete scope must match. Only one
+replacement may target a claim; further revisions continue from that replacement.
+The old task stays in the expert queue until the replacement receives consistent
+independent support. Original proposals and audits remain immutable, and the UI
+links their superseded rows to the new judgment. Feedback includes both the exact
+links and the effective `supersededBy` status; consumers follow the chain to its
+current judgment instead of treating `superseded` as a semantic label.
+
+A recorded human decision cannot be superseded by importing a machine proposal.
+If the human responds while a replacement is being audited, that human decision
+still takes precedence. Human acceptance or modification of a replacement also
+keeps the prior machine task retired; rejection or deferral does not establish a
+settled replacement. A later conflicting audit restores the outstanding machine
+case unless a subsequent, independently supported revision resolves it.
+
 New handoffs and independent audits require claims. A standalone semantic question
 belongs to the curator lane. Historical empty-proposal handoffs remain readable
 with their questions, but cannot become agent-reviewed through an empty audit.
@@ -265,6 +285,7 @@ and any saved human decision; offline `review-status` exposes the same routing. 
 | --- | --- |
 | `awaiting-audit` | An independent auditor must inspect the proposal. |
 | `agent-reviewed` | Current, settled claim with consistently supported independent audits; retain as machine-reviewed supervision. |
+| `superseded` | Follow `supersededBy` to the current independently supported replacement; retain this row as history. |
 | `needs-revision` | Return the concrete defect to the labeler; submit a new immutable proposal and audit its new content. |
 | `needs-expert` | Present the specific unresolved choice, evidence, and reason to the expert. Conflicting audit outcomes also enter this queue. |
 | `stale` | Read current review state and obtain a fresh task; do not silently rebase an old packet. |

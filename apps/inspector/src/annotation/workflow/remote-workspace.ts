@@ -35,7 +35,7 @@ export interface InboxSourceV2 {
 }
 export type InboxClaimV2 = Pick<
   AgentReviewV2,
-  "handoffId" | "claimId" | "status" | "rationale" | "question" | "expertReason"
+  "handoffId" | "claimId" | "status" | "rationale" | "question" | "expertReason" | "supersededBy"
 > & {
   readonly tagId: string;
   readonly scope: { readonly startMs: number; readonly endMs: number };
