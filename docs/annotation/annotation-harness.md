@@ -139,16 +139,15 @@ compact section brief, and output schema alongside the bundle.
 When both IDs exist, `caseId` is the tool handle. Handles must be unique across
 the whole job: source-local names such as `whole-source` can recur on other songs.
 
-Install the pinned runtime into a local environment before preparing a bundle:
+Prepare the locked project environment from the repository root before creating
+a bundle:
 
 ```sh
-uv venv .local/annotation-venv --python python3.10
-uv pip install --python .local/annotation-venv/bin/python \
-  -r harness/requirements.txt
+uv sync --locked
 ```
 
 ```sh
-.local/annotation-venv/bin/python harness/prepare-annotation-harness.py \
+uv run --locked python harness/prepare-annotation-harness.py \
   --campaign .local/campaign \
   --sections /ABS/sections.json \
   --feedback-dir /ABS/feedback-snapshot \
@@ -156,10 +155,11 @@ uv pip install --python .local/annotation-venv/bin/python \
   --mode annotation
 ```
 
-Use a Python environment with `pyarrow` for preparation and structural-query code,
+The locked environment supplies `pyarrow` for preparation and structural queries,
 `mcp` for the stdio server, and `Pillow` for PNG views. Launch the frozen copied
 server, using the job's own command configuration; no global MCP configuration
-needs modification. For example, these Codex overrides apply only to this run:
+needs modification. In the example below, `/ABS/PYTHON` is the absolute path to
+this checkout's `.venv/bin/python`; these Codex overrides apply only to this run:
 
 ```sh
 codex exec --ignore-user-config -C /ABS/JOB --skip-git-repo-check \
@@ -225,11 +225,11 @@ schema. The administrative design contains gold and stays outside worker folders
 The harness arms additionally receive the optional inspection role and MCP access.
 
 ```sh
-.local/annotation-venv/bin/python annotation/evaluation/prepare-harness-benchmark.py \
+uv run --locked python annotation/evaluation/prepare-harness-benchmark.py \
   --campaign .local/campaign \
   --design /ABS/administrative-evaluation-design.json \
   --root /ABS/new-benchmark
-.local/annotation-venv/bin/python annotation/evaluation/run-harness-benchmark.py run \
+uv run --locked python annotation/evaluation/run-harness-benchmark.py run \
   --campaign .local/campaign \
   --root /ABS/new-benchmark
 ```
@@ -243,7 +243,7 @@ Review command traces for boundary violations before interpreting a run.
 Run the Python suite with the pinned environment:
 
 ```sh
-.local/annotation-venv/bin/python scripts/test-python.py
+uv run --locked python scripts/test-python.py
 pnpm check:skill
 ```
 

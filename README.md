@@ -47,10 +47,12 @@ publishing the npm package; it does not require a general dataset conversion lay
 
 ## Development
 
-Use Node.js 22.18+ on the 22.x line or Node.js 24.11+, and pnpm 11+.
+Use Node.js 22.18+ on the 22.x line or Node.js 24.11+, pnpm 11+, and uv.
+Python 3.10 and its project dependencies are managed in the root `.venv`.
 
 ```sh
 pnpm install
+uv sync --locked
 pnpm check
 pnpm dev
 ```

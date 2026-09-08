@@ -42,7 +42,7 @@ chart sources and confirmed examples. Machine proposals, audits, and disposition
 histories do not enter the human-example library.
 
 ```sh
-.local/annotation-venv/bin/python annotation/learning/beatmap-learning.py prepare \
+uv run --locked python annotation/learning/beatmap-learning.py prepare \
   --dataset ../Pulsefield-model/dataset \
   --beatmapset 1986822 \
   --out .local/beatmap-learning/corpus
@@ -55,9 +55,9 @@ current checkout. Human bundles with evaluation exclusions cannot be repurposed
 to expose their hidden examples.
 
 ```sh
-.local/annotation-venv/bin/python annotation/learning/beatmap-learning.py catalog \
+uv run --locked python annotation/learning/beatmap-learning.py catalog \
   --bundle .local/beatmap-learning/corpus --text 'SYSTEM ERROR'
-.local/annotation-venv/bin/python annotation/learning/beatmap-learning.py catalog \
+uv run --locked python annotation/learning/beatmap-learning.py catalog \
   --bundle .local/beatmap-learning/corpus --community-tag tech
 ```
 
@@ -71,12 +71,12 @@ original file or audio is unavailable; availability is reported separately.
 ## Study a real arrangement
 
 ```sh
-.local/annotation-venv/bin/python annotation/learning/beatmap-learning.py context \
+uv run --locked python annotation/learning/beatmap-learning.py context \
   --bundle .local/beatmap-learning/corpus --handle chart:SOURCE_SHA
-.local/annotation-venv/bin/python annotation/learning/beatmap-learning.py inspect \
+uv run --locked python annotation/learning/beatmap-learning.py inspect \
   --bundle .local/beatmap-learning/corpus --handle chart:SOURCE_SHA \
   --start-ms 170400 --end-ms 174300 --view actions
-.local/annotation-venv/bin/python annotation/learning/beatmap-learning.py render \
+uv run --locked python annotation/learning/beatmap-learning.py render \
   --bundle .local/beatmap-learning/corpus --handle chart:SOURCE_SHA \
   --start-ms 170400 --end-ms 174300 --view time --out .local/reading.png
 ```
@@ -92,9 +92,9 @@ complete local inspection.
 Retrieve human experience when it helps interpret the observed organization:
 
 ```sh
-.local/annotation-venv/bin/python annotation/learning/beatmap-learning.py examples \
+uv run --locked python annotation/learning/beatmap-learning.py examples \
   --bundle .local/beatmap-learning/corpus --tag tech --text 'SYSTEM ERROR'
-.local/annotation-venv/bin/python annotation/learning/beatmap-learning.py example \
+uv run --locked python annotation/learning/beatmap-learning.py example \
   --bundle .local/beatmap-learning/corpus --id HUMAN_EXAMPLE_ID
 ```
 
@@ -119,7 +119,7 @@ MIR teacher experiment. This reuses a feature extractor without adopting a V3
 architecture or changing Pulsefield's caches.
 
 ```sh
-.local/annotation-venv/bin/python annotation/learning/beatmap-learning.py audio \
+uv run --locked python annotation/learning/beatmap-learning.py audio \
   --bundle .local/beatmap-learning/corpus --handle chart:SOURCE_SHA \
   --start-ms 168400 --end-ms 174400 --out .local/audio-reading
 ```
@@ -168,12 +168,12 @@ their scopes must overlap an inspected source context. They remain distinct from
 human judgments and do not change a reading's hypothesis status.
 
 ```sh
-.local/annotation-venv/bin/python annotation/learning/beatmap-learning.py remember \
+uv run --locked python annotation/learning/beatmap-learning.py remember \
   --bundle .local/beatmap-learning/corpus --memory .local/beatmap-learning/experience \
   --input .local/reading.json --producer ACTUAL_AGENT_ID
-.local/annotation-venv/bin/python annotation/learning/beatmap-learning.py recall \
+uv run --locked python annotation/learning/beatmap-learning.py recall \
   --memory .local/beatmap-learning/experience --text 'release'
-.local/annotation-venv/bin/python annotation/learning/beatmap-learning.py recall \
+uv run --locked python annotation/learning/beatmap-learning.py recall \
   --memory .local/beatmap-learning/experience --id EXPERIENCE_ID
 ```
 

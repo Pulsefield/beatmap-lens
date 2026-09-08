@@ -27,7 +27,14 @@ invents a Foundation approval or configures every possible dataset.
 ## Local inputs and runtime
 
 Paired development with Pulsefield is the default. Keep dataset and workspace paths
-configurable and pass the Python environment used for preparation explicitly.
+configurable. The root uv project manages Python 3.10 and the annotation dependencies
+in `.venv`, using `pyproject.toml`, `uv.lock`, and `.python-version`:
+
+```sh
+uv sync --locked
+```
+
+Run Python tools from the repository root with `uv run --locked python SCRIPT`.
 Shared configuration is:
 
 | Setting | Use |
@@ -35,17 +42,12 @@ Shared configuration is:
 | `PULSEFIELD_ROOT` | Pulsefield checkout; defaults to `../Pulsefield-model` |
 | `PULSEFIELD_PYTHON` | Pulsefield audio runtime; defaults to that checkout's `.venv/bin/python` |
 | `PULSEFIELD_DATASET` | Review metadata dataset; `--dataset` overrides it |
-| `ANNOTATION_PYTHON` | Whole-chart worker helper runtime; falls back to `PULSEFIELD_PYTHON`, then the paired checkout's Python |
+| `ANNOTATION_PYTHON` | Optional annotation helper runtime override; otherwise use the current Python interpreter |
 
-Learning also accepts `--dataset` and `--pulsefield-root`. Fine annotation uses its
-launching Python unless a preparation runtime is supplied. For a separate
-annotation environment:
-
-```sh
-uv venv .local/annotation-venv --python python3.10
-uv pip install --python .local/annotation-venv/bin/python -r harness/requirements.txt
-export ANNOTATION_PYTHON="$PWD/.local/annotation-venv/bin/python"
-```
+Learning also accepts `--dataset` and `--pulsefield-root`. Annotation helpers use
+the launching interpreter unless explicitly overridden; under `uv run --locked`
+this is the project `.venv`. Pulsefield audio extraction still uses its separately
+configured runtime and audio dependencies.
 
 `.local/` paths below are example destinations for new work. They do not refer to
 bundled campaigns. Keep raw beatmaps, selection manifests, generated inputs, and
@@ -58,7 +60,7 @@ Prepare a selected corpus with the Lens parser and a PyArrow-enabled runtime:
 node annotation/pipeline/prepare-annotation-corpus.mjs \
   --selection /path/to/selection.json \
   --out .local/campaign \
-  --python .local/annotation-venv/bin/python \
+  --python .venv/bin/python \
   --max-duration-ms 2400000
 ```
 
@@ -95,9 +97,9 @@ role-specific model and reasoning settings. Whole-chart jobs use the
 [auditor](../../annotation/roles/query-corpus-auditor.md).
 
 ```sh
-.local/annotation-venv/bin/python annotation/pipeline/run-annotation-campaign.py run \
+uv run --locked python annotation/pipeline/run-annotation-campaign.py run \
   --campaign .local/campaign --concurrency 5
-.local/annotation-venv/bin/python annotation/pipeline/run-annotation-campaign.py status \
+uv run --locked python annotation/pipeline/run-annotation-campaign.py status \
   --campaign .local/campaign --refresh
 ```
 
@@ -118,7 +120,7 @@ claims do not establish complete-chart discovery.
 Run the selector against the discovered corpus and current review feedback:
 
 ```sh
-.local/annotation-venv/bin/python annotation/pipeline/annotation-priorities.py \
+uv run --locked python annotation/pipeline/annotation-priorities.py \
   --campaign .local/campaign --out .local/section-priorities --batch-size 24
 ```
 

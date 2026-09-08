@@ -57,6 +57,12 @@ Keep the label and its human authority separate from a proposed explanation.
 
 ## Verification
 
+Python dependencies live in the root `pyproject.toml` and `uv.lock`; `.python-version`
+selects Python 3.10. Run `uv sync --locked` to prepare `.venv`, and use
+`uv run --locked python SCRIPT` for Python tools. Update the project dependency
+specification and lockfile together when changing dependencies. Pulsefield audio
+keeps its separate runtime, configurable through `PULSEFIELD_PYTHON`.
+
 Run the checks relevant to the changed behavior, then the repository check before
 merging:
 

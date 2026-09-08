@@ -147,6 +147,22 @@ class RegressionGateTests(unittest.TestCase):
             self.assertFalse(result['passed'])
             self.assertIn('auditor', result['errors'][0])
 
+    def test_root_python_environment_files_are_bound_and_changes_need_evidence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo, _ = self.repository(directory)
+            for name in ('pyproject.toml', 'uv.lock', '.python-version'):
+                (repo / name).write_text('Original environment.\n')
+            baseline = gate.source_snapshot(repo)
+            gate.save(repo / gate.BASELINE, {'snapshot': baseline})
+            self.assertTrue(gate.check(repo)['passed'])
+            for name in ('pyproject.toml', 'uv.lock', '.python-version'):
+                with self.subTest(name=name):
+                    self.assertIn(name, baseline['files']['labeler'])
+                    (repo / name).write_text('Changed environment.\n')
+                    self.assertEqual(gate.check(repo)['changedCoverage'], ['labeler'])
+                    self.assertFalse(gate.check(repo)['passed'])
+                    (repo / name).write_text('Original environment.\n')
+
     def test_ci_base_ref_prevents_replacing_baseline_to_hide_changed_role(self):
         with tempfile.TemporaryDirectory() as directory:
             repo, role = self.repository(directory)

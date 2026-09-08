@@ -7,11 +7,15 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const { values } = parseArgs({
   options: {
     selection: { type: "string" },
     out: { type: "string" },
-    python: { type: "string", default: "python3" },
+    python: {
+      type: "string",
+      default: process.env.ANNOTATION_PYTHON ?? join(repoRoot, ".venv/bin/python"),
+    },
     "max-duration-ms": { type: "string", default: "2400000" },
   },
 });
@@ -20,7 +24,6 @@ if (!values.selection || !values.out) {
 }
 const maximumDurationMs = Number(values["max-duration-ms"]);
 assert.ok(Number.isFinite(maximumDurationMs) && maximumDurationMs > 0);
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const destination = resolve(values.out);
 const admin = join(destination, "admin");
 await mkdir(admin, { recursive: true });

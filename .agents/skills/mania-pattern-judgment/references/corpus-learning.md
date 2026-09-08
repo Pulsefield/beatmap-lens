@@ -83,8 +83,8 @@ not a five-label prediction:
 | `updateReason` | Required when revising an existing identity; explain changed evidence or interpretation. |
 
 ```sh
-python annotation/learning/beatmap-learning.py remember --bundle BUNDLE --memory MEMORY --input experience.json --producer ACTUAL_AGENT_ID
-python annotation/learning/beatmap-learning.py recall --memory MEMORY --text motif --limit 5
+uv run --locked python annotation/learning/beatmap-learning.py remember --bundle BUNDLE --memory MEMORY --input experience.json --producer ACTUAL_AGENT_ID
+uv run --locked python annotation/learning/beatmap-learning.py recall --memory MEMORY --text motif --limit 5
 ```
 
 The writer binds source/human/community evidence and appends revisions marked

@@ -21,8 +21,7 @@ from annotation_runtime import REPO, load_module
 public_example = load_module(REPO / 'harness/harness_examples.py').public_example
 
 
-PULSEFIELD = Path(os.environ.get("PULSEFIELD_ROOT", REPO.parent / "Pulsefield-model"))
-PYTHON = Path(os.environ.get("ANNOTATION_PYTHON", os.environ.get("PULSEFIELD_PYTHON", PULSEFIELD / ".venv/bin/python")))
+PYTHON = Path(os.environ.get("ANNOTATION_PYTHON", sys.executable))
 QUERY_TOOLS = ("annotation-facts.py", "annotation-queries.py", "prepare-query-evidence.py")
 HUMAN_STATES = {"accepted", "modified", "rejected", "deferred"}
 BINDING_KEYS = ("sourceSha256", "taskId", "taskSha256", "foundationSha256", "base")

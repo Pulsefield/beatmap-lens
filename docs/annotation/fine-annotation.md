@@ -7,15 +7,15 @@ It freezes the current skill and approved Foundation definitions for the new job
 while preserving current human decisions.
 
 ```sh
-.local/annotation-venv/bin/python annotation/pipeline/run-fine-annotation.py prepare \
+uv run --locked python annotation/pipeline/run-fine-annotation.py prepare \
   --campaign .local/campaign \
-  --python .local/annotation-venv/bin/python \
+  --python .venv/bin/python \
   --root .local/section-annotation \
   --queue .local/section-priorities/queue.json \
   --bundle .local/section-harness
-.local/annotation-venv/bin/python annotation/pipeline/run-fine-annotation.py run \
+uv run --locked python annotation/pipeline/run-fine-annotation.py run \
   --root .local/section-annotation --concurrency 5
-.local/annotation-venv/bin/python annotation/pipeline/run-fine-annotation.py status \
+uv run --locked python annotation/pipeline/run-fine-annotation.py status \
   --root .local/section-annotation
 ```
 
@@ -59,7 +59,7 @@ The controller uses 25-section rounds, five concurrent workers, and at most five
 sections per worker. The final source-brief grouping cap is 28,000 characters, including human and repair records.
 
 ```sh
-.local/annotation-venv/bin/python annotation/pipeline/fine-annotation-campaign.py advance \
+uv run --locked python annotation/pipeline/fine-annotation-campaign.py advance \
   --root .local/section-campaign --campaign .local/campaign --target 100
 ```
 

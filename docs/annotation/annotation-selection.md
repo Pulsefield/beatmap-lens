@@ -34,7 +34,7 @@ preserves newlines in these notes. Historical proposals and human prose are reta
 Run from this checkout with the existing PyArrow environment:
 
 ```sh
-.local/annotation-venv/bin/python annotation/pipeline/annotation-priorities.py \
+uv run --locked python annotation/pipeline/annotation-priorities.py \
   --campaign .local/campaign \
   --out .local/section-priorities \
   --batch-size 24 --seed 20260907
@@ -201,7 +201,7 @@ training-exposed human corrections as held-out model performance.
 The Python suite requires the [annotation runtime](corpus-annotation.md#local-inputs-and-runtime):
 
 ```sh
-.local/annotation-venv/bin/python scripts/test-python.py
+uv run --locked python scripts/test-python.py
 ```
 
 Skill/workflow changes also use the [regression gate](../../annotation/evaluation/README.md).

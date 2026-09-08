@@ -14,9 +14,12 @@ not a held-out accuracy benchmark.
 
 ## Enforcement
 
+Prepare the root project environment with `uv sync --locked`. Python commands use
+its `.venv` and locked dependencies:
+
 ```sh
-python3 annotation/evaluation/regression_gate.py check
-python3 -m unittest discover -s annotation/evaluation/tests -p 'test_regression_gate.py'
+uv run --locked python annotation/evaluation/regression_gate.py check
+uv run --locked python -m unittest discover -s annotation/evaluation/tests -p 'test_regression_gate.py'
 ```
 
 The normal repository check runs the first command. An unchanged source snapshot
@@ -56,13 +59,13 @@ Use the adopted source checkout for one side and the candidate checkout for the
 other. Run the following from each checkout with different output directories:
 
 ```sh
-python annotation/evaluation/run_regression.py prepare \
+uv run --locked python annotation/evaluation/run_regression.py prepare \
   --root /path/to/local-comparison/baseline \
   --campaign /path/to/campaign \
   --feedback-dir /path/to/feedback
 ```
 
-Preparation needs the harness Python dependencies and locally available campaign
+Preparation uses the project Python environment and locally available campaign
 source files. It creates three repeats, with bounded jobs of up to five sections.
 The same production `prepare_job`, role, skill, and `common_prompt` build each job.
 The evaluation harness excludes every target source and its known song group from
@@ -74,7 +77,7 @@ the job is forbidden by worker instructions, not by an OS read sandbox.
 Preparation does not start workers. This command consumes model usage:
 
 ```sh
-python annotation/evaluation/run_regression.py run \
+uv run --locked python annotation/evaluation/run_regression.py run \
   --root /path/to/local-comparison/baseline --concurrency 3
 ```
 
@@ -85,7 +88,7 @@ do not submit or replace human review records.
 ## Reviewing and retaining results
 
 ```sh
-python3 annotation/evaluation/regression_gate.py compare \
+uv run --locked python annotation/evaluation/regression_gate.py compare \
   --baseline /path/to/local-comparison/baseline \
   --candidate /path/to/local-comparison/candidate \
   --out /path/to/local-comparison/evidence.json

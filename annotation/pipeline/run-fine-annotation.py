@@ -341,7 +341,7 @@ def main():
     parser.add_argument('--campaign', type=Path, default=REPO / '.local/corpus-500-v2')
     parser.add_argument('--queue', type=Path)
     parser.add_argument('--bundle', type=Path)
-    parser.add_argument('--python', default=str(REPO / '.local/annotation-harness-venv/bin/python'))
+    parser.add_argument('--python', default=os.environ.get('ANNOTATION_PYTHON', sys.executable))
     parser.add_argument('--concurrency', type=int, default=5)
     parser.add_argument('--max-sections', type=int, default=5)
     parser.add_argument('--max-brief-chars', type=int, default=28000)

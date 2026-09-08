@@ -21,7 +21,7 @@ SOURCES = {
     'labeler': (
         '.agents/skills/mania-pattern-judgment/*',
         'annotation/roles/harness-labeler.md', 'annotation/roles/labeler.md',
-        'harness/*.py', 'harness/requirements.txt',
+        'harness/*.py', 'pyproject.toml', 'uv.lock', '.python-version',
         'annotation/annotation_runtime.py', 'annotation/section_evidence.py',
         'annotation/evaluation/run_regression.py', 'annotation/evaluation/run-section-benchmark.py',
         'annotation/evaluation/prepare-harness-benchmark.py',
@@ -72,7 +72,9 @@ def source_snapshot(repo=REPO, ref=None):
                                         text=True).splitlines()
     else:
         roots = {pattern.split('/')[0] for patterns in SOURCES.values() for pattern in patterns}
-        names = [str(p.relative_to(repo)) for root in roots for p in (repo / root).rglob('*') if p.is_file()]
+        paths = (repo / root for root in roots)
+        names = [str(p.relative_to(repo)) for path in paths
+                 for p in ([path] if path.is_file() else path.rglob('*')) if p.is_file()]
     files = {}
     for role, patterns in SOURCES.items():
         selected = sorted(name for name in names if any(fnmatch.fnmatchcase(name, p) for p in patterns)

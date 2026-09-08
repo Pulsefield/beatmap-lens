@@ -1,22 +1,23 @@
 {
   "kind": "annotation-regression-source-baseline-v1",
   "establishedOn": "2026-09-08",
-  "basis": "Initial repository migration reference. Judgment skill and Foundation semantics are preserved; this snapshot is not a successful model replay or evidence that current outputs meet every protected case. Future source changes require reviewed regression evidence.",
+  "basis": "Initial repository migration reference, including uv environment adoption with the same Python 3.10 and direct dependency versions. Judgment skill and Foundation semantics are preserved; interpreter defaults now use the project environment. This snapshot is not a successful model replay or evidence that current outputs meet every protected case. Future source changes require reviewed regression evidence against the trusted Git base.",
   "snapshot": {
     "files": {
       "labeler": {
         ".agents/skills/mania-pattern-judgment/SKILL.md": "cef9d7270930bd96bfaade00271bf8970542bcbe5d31bd2ce57dcde3b75ddf3a",
         ".agents/skills/mania-pattern-judgment/agents/openai.yaml": "ccf36cf046af3bb2919a79be0498afbb9a00304fc99e3cee2bb9b404da2be06a",
         ".agents/skills/mania-pattern-judgment/references/beatmap-lens-exchange.md": "4c11d831416d895ce8ea8bc5507e7de78b9e00f519a2ec1ebe566c74ea00f304",
-        ".agents/skills/mania-pattern-judgment/references/corpus-learning.md": "58c436c1148025011cc6b472119a926d90f1716028904f338d435d6b90f536ad",
+        ".agents/skills/mania-pattern-judgment/references/corpus-learning.md": "5654f10fd4b56adc78ea58d7deb9a611e10cd15c820e2a55a06d40bd2fc4d647",
         ".agents/skills/mania-pattern-judgment/references/expert-review-20260907.json": "a860d4cbf2f654a07c2370156a037a981d093b3081e6c1d20f2e35a10b4a9c0a",
         ".agents/skills/mania-pattern-judgment/references/feedback-calibration.json": "7556109301f8eb8672d3d44e2ad3086ea5f4e367287b9bd79e6170c7f557d42d",
-        ".agents/skills/mania-pattern-judgment/references/feedback-maintenance.md": "1860bae5ad908133b07158f9a67a33a36a821ce2d55cbe01f177325f81ba8875",
+        ".agents/skills/mania-pattern-judgment/references/feedback-maintenance.md": "b6c83a1b335a171f864d2bfb3d0f8ada0fd22bc980a35a1a34b1247417a3e561",
         ".agents/skills/mania-pattern-judgment/references/human-contrast-sets.json": "546df6d4bf26e8489e67c381bb09b6b182411c97b801434c39d638436746fa67",
         ".agents/skills/mania-pattern-judgment/references/judgment-guide.md": "f3e0a214a3b7bbb60b481b78bb9b680ebdbf54b3059c5b7aa30f52088c23e22a",
         ".agents/skills/mania-pattern-judgment/references/structural-queries.md": "3a136cdc46cd192c93c0c373508e54b09b2fb41d7177589c0a062ebe43e991c9",
         ".agents/skills/mania-pattern-judgment/references/tech-pack-20260907.md": "1e1ef39c5c791a8b077f3c66bb577b6efc89f895569261388180af686d4a7280",
         ".agents/skills/mania-pattern-judgment/scripts/check_budget.py": "eb0eb0e27d59e78eef29f9dbc45caaa4c02a9544741a1be60e33e5b04b41864c",
+        ".python-version": "7a41a41354ab8049091ef1a00253ca00567f5a1d3f9aef5502c0b4b5ce9ae707",
         "annotation/annotation_runtime.py": "b7f3330d4ca7117af500453aa7efe1fa42cebca7fa85ff85c85f3aee28d2775b",
         "annotation/evaluation/prepare-harness-benchmark.py": "0e268f9b5382cc90fa5532461f3528710a9c0ad18edff86582f37ac061b26418",
         "annotation/evaluation/run-section-benchmark.py": "3883420f111754eddf3ba4ec1b0706d7727fa677f82d6de7b9c3f89436b626b6",
@@ -31,7 +32,8 @@
         "harness/harness_inspection.py": "2b964bb7f77be34777777068399baeafb0900c8835f63230734da549c5f26020",
         "harness/harness_render.py": "1afb4abf4a9ae4201ed03486c64edb840efd129c0bea4e5f67ad597ee49ba4c9",
         "harness/prepare-annotation-harness.py": "921e32405ac97772727a3141c0ffcf617525b9c2809049fbba1877761f814b2a",
-        "harness/requirements.txt": "192c47f12eeac5c27a904f91420b65b8de9e0362327c8632b63080272653ad40"
+        "pyproject.toml": "4138bc862c347f4f6407edf9f69f66ad143de956e4bec1618cb578819989eb75",
+        "uv.lock": "c9fc9bf8e1d35ce7d342fcd15c379550eeb0a6dc74fce3aac17d32591de54e7f"
       },
       "auditor": {
         "annotation/pipeline/section_annotation_delivery.py": "fade53fa0563ef6ebe77b0d6fb7e89d594f677865a64820f06c7145eafec3dca",
@@ -41,11 +43,11 @@
         "annotation/roles/query-corpus-auditor.md": "5949a3258ce726189126e36f9f0e9d9a899be95e8c06de0e1547f467ad1af6e0"
       },
       "discovery": {
-        "annotation/pipeline/prepare-annotation-corpus.mjs": "3b068dfd40a40675704c47fc2846d3b2c731f2e22d89cc5885f23a87a315ed43",
+        "annotation/pipeline/prepare-annotation-corpus.mjs": "aef648a46c7a9a61cb801b55585f116da9b61df9569367387367cc96144c65c5",
         "annotation/pipeline/prepare-annotation-corpus.py": "6ee54e9c31952a8c82562d3c5a0b369ba2637b31fd5ea90f6a8b25d81338f97a",
         "annotation/pipeline/prepare-query-campaign-workspace.mjs": "7d85bc69f6f34557b547df7bddbfaaee29b63010d4d5c5a1aa4b1abeb7aadf78",
         "annotation/pipeline/prepare-query-evidence.py": "dc10e00466ac88387be8887dabafd3958b0848fa9349b01eeb3d03bba9e192a8",
-        "annotation/pipeline/run-annotation-campaign.py": "1cab325a07113327bdea7db1cb19b72fb942593427b9dee1d6ea7ae0060c7b5c",
+        "annotation/pipeline/run-annotation-campaign.py": "9410494035b30a40b51c400556c3c41a92b00591c6fbabd91eb623aa0202ade7",
         "annotation/roles/corpus-labeler.md": "0a13b2dd3054bccfe548e5085aef676c7b95de3e955f916e736640127f92d298",
         "annotation/roles/curator.md": "a5438ccea2cab92cb38d7eaf89d275959bfc63b5a3e64e2ffe0d4465ffde3df9",
         "annotation/roles/query-corpus-labeler.md": "ebf28bf117adcca2e8851f0f09a73fec77795146cc76bcf336987503f29d078a"
@@ -56,7 +58,7 @@
         "annotation/pipeline/fine-annotation-campaign.py": "8cde86982dafccd80d16b5e7c3d47a35ce2bd8f5292d8689302ed3cd6e68b4ed",
         "annotation/pipeline/prepare-annotation-recovery.py": "075543cfcc846f7913e44f7bd6775827ccabcf8c6064b327904af005b798fb43",
         "annotation/pipeline/prepare-annotation-revision.py": "30e26ed4e0379858be784a5f17f8c3024baf23ff49679abcb9beb80844d6aa77",
-        "annotation/pipeline/run-fine-annotation.py": "df0af651486bd22455840acfc3eaf92ac1158ce12ca70bbf69dbd2b9dc8fa007"
+        "annotation/pipeline/run-fine-annotation.py": "2099b05539ac0d75feecfbc60c71fcc9b8b8a9e28eae380eebc1096cde95c879"
       },
       "foundation": {
         "apps/inspector/src/annotation/foundation.ts": "4470986bbc511caf8d2cc526827c6cd948c0c6b891e123c4f75b7cbd6fac58b6",
