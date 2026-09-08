@@ -4,12 +4,14 @@ import { createServer as createHttpServer } from "node:http";
 import { createRequire } from "node:module";
 import { extname, join, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { parseArgs } from "node:util";
+import { parseArgs, promisify } from "node:util";
+import { gzip } from "node:zlib";
 import { resolveReviewAudio, streamReviewAudio } from "./review-audio.mjs";
 import { createCommunityTagReader } from "./review-community-tags.mjs";
 import { atomicWrite, LocalDirectoryHandle } from "./workflow-local-directory.mjs";
 
 const repo = fileURLToPath(new URL("../../../", import.meta.url));
+const compress = promisify(gzip);
 const require = createRequire(new URL("../package.json", import.meta.url));
 const packetContracts = {
   handoff: "beatmap-lens-agent-handoff",
@@ -39,6 +41,9 @@ export async function startReviewWorkspace(options) {
     resolve: { alias: { "beatmap-lens": join(repo, "packages/beatmap-lens/src/index.ts") } },
   });
   const domain = await vite.ssrLoadModule("/apps/inspector/src/annotation/workflow/domain.ts");
+  const { encodeReviewResponse } = await vite.ssrLoadModule(
+    "/apps/inspector/src/annotation/workflow/review-transport.ts",
+  );
   const { WorkflowDirectoryV2 } = await vite.ssrLoadModule(
     "/apps/inspector/src/annotation/workflow/directory.ts",
   );
@@ -594,16 +599,21 @@ export async function startReviewWorkspace(options) {
       return streamReviewAudio(request, response, audio);
     }
     if (request.method === "GET") {
-      if (action === "inbox") return send(response, 200, await inbox());
+      if (action === "inbox") return send(response, 200, await inbox(), request);
       if (action === "source") {
         const current = await source(sha);
         const audio = await sourceAudio(current);
-        return send(response, 200, {
-          ...current.stored,
-          sourceBytes: Array.from(current.sourceBytes),
-          communityTags: await communityTags(current.stored.document.source),
-          audio: audio ? { url: `/api/review/audio/${sha}`, filename: audio.filename } : null,
-        });
+        return send(
+          response,
+          200,
+          {
+            ...current.stored,
+            sourceBytes: Array.from(current.sourceBytes),
+            communityTags: await communityTags(current.stored.document.source),
+            audio: audio ? { url: `/api/review/audio/${sha}`, filename: audio.filename } : null,
+          },
+          request,
+        );
       }
       if (action === "task") return send(response, 200, (await source(sha)).task);
       if (action === "dispositions") return send(response, 200, await dispositions(sha));
@@ -681,18 +691,24 @@ export async function startReviewWorkspace(options) {
         } else throw httpError(400, "Unsupported human command.");
         sources.delete(sha);
         await dispositions(sha);
-        return send(response, 200, result);
+        return send(response, 200, result, request);
       }
     }
     throw httpError(404, "Unknown review endpoint.");
   }
 
-  function send(response, status, value) {
+  async function send(response, status, value, request) {
+    const shared = request?.headers["x-review-transport"] === "shared-v1";
+    const text = shared ? encodeReviewResponse(value) : json(value);
+    const compressed = shared && /\bgzip\b/.test(request.headers["accept-encoding"] ?? "");
+    const body = compressed ? await compress(text, { level: 1 }) : text;
     response.writeHead(status, {
       "Content-Type": "application/json; charset=utf-8",
       "Cache-Control": "no-store",
+      Vary: "X-Review-Transport, Accept-Encoding",
+      ...(compressed ? { "Content-Encoding": "gzip" } : {}),
     });
-    response.end(json(value));
+    response.end(body);
   }
 
   let port;

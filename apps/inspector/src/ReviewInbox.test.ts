@@ -103,6 +103,58 @@ async function change(control: HTMLInputElement | HTMLSelectElement, value: stri
 }
 
 describe("machine review sampling", () => {
+  it("prefetches the next sample, reuses recent sources, and invalidates changed versions", async () => {
+    const { inbox, source, claim } = await fixture();
+    const second: InboxSourceV2 = {
+      ...source,
+      source: { ...source.source, sha256: "f".repeat(64) },
+      reviews: [claim("second")],
+    };
+    Object.assign(inbox, { sources: [source, second] });
+    localStorage.setItem(
+      `beatmap-lens-review-sample:${inbox.workspace}`,
+      JSON.stringify({
+        createdAt: "2026-09-08",
+        tagId: "",
+        strength: "all",
+        claims: [
+          { sourceSha256: source.source.sha256, handoffId: "handoff", claimId: "one" },
+          { sourceSha256: second.source.sha256, handoffId: "handoff", claimId: "second" },
+        ],
+      }),
+    );
+    const reads: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url.endsWith("inbox")) return Response.json(inbox);
+        const selected = url.endsWith(second.source.sha256) ? second : source;
+        reads.push(selected.source.sha256);
+        return Response.json({ document: { source: selected.source }, version: selected.version });
+      }),
+    );
+    const { container } = mount();
+    await vi.waitFor(() => expect(container.textContent).toContain("Continue review"));
+    await click(container, "Continue review");
+    await vi.waitFor(() => expect(reads).toEqual([source.source.sha256, second.source.sha256]));
+    await click(container, "Next sample");
+    await vi.waitFor(() =>
+      expect(container.querySelector("output")?.textContent).toContain("second"),
+    );
+    await click(container, "Next sample");
+    await vi.waitFor(() => expect(container.querySelector("output")?.textContent).toContain("one"));
+    expect(reads).toHaveLength(2);
+    await click(container, "Next sample");
+    await vi.waitFor(() =>
+      expect(container.querySelector("output")?.textContent).toContain("second"),
+    );
+    Object.assign(source, { version: { revision: 2, sha256: "b".repeat(64) } });
+    await click(container, "Save test judgment");
+    await vi.waitFor(() =>
+      expect(reads.filter((sha) => sha === source.source.sha256)).toHaveLength(2),
+    );
+  });
+
   it("keeps equal labels from different skill hashes and auditor versions distinct", async () => {
     const { source, claim } = await fixture();
     const agent = (hash: string) => ({
@@ -255,6 +307,7 @@ describe("machine review sampling", () => {
     const saved = localStorage.getItem(`beatmap-lens-review-sample:${inbox.workspace}`);
     assert(saved);
     const batch = JSON.parse(saved);
+    failedSource = batch.claims[2].sourceSha256;
     (container.querySelector(".inbox-sample-list button") as HTMLButtonElement).click();
     await vi.waitFor(() =>
       expect(container.querySelector("output")?.textContent).toContain(batch.claims[0].claimId),
@@ -263,7 +316,6 @@ describe("machine review sampling", () => {
     await vi.waitFor(() =>
       expect(container.querySelector("output")?.textContent).toContain(batch.claims[1].claimId),
     );
-    failedSource = batch.claims[2].sourceSha256;
     await click(container, "Next sample");
     await vi.waitFor(() =>
       expect(container.querySelector(".inbox-active [role='alert']")?.textContent).toContain(

@@ -7,6 +7,7 @@ import type {
   ReviewBaseV2,
 } from "./contracts";
 import type { StoredReviewV2, WorkflowDirectoryV2 } from "./directory";
+import { decodeReviewResponse } from "./review-transport";
 
 export type ReviewStoreV2 = Omit<WorkflowDirectoryV2, "registerSourceFromApprovedFoundation">;
 export interface CommunityTagMetadata {
@@ -63,18 +64,21 @@ export interface ReviewInboxV2 {
 
 export async function reviewRequest<T>(path: string, body?: unknown): Promise<T> {
   const response = await fetch(`/api/review/${path}`, {
+    headers: {
+      "X-Review-Transport": "shared-v1",
+      ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+    },
     ...(body === undefined
       ? {}
       : {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         }),
     cache: "no-store",
   });
   const value = await response.json();
   if (!response.ok) throw new Error(value.error ?? `Review service returned ${response.status}.`);
-  return value as T;
+  return decodeReviewResponse<T>(value);
 }
 
 export function createRemoteReviewStore(sourceSha256: string): ReviewStoreV2 {

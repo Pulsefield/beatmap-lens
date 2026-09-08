@@ -25,6 +25,7 @@ import {
   sealAuditV2,
   sealHandoffV2,
 } from "./domain";
+import { decodeReviewResponse } from "./review-transport";
 import { historicalAcceptance, NOW, workflowFixture } from "./test-fixtures";
 
 const serviceUrl = pathToFileURL(resolve("apps/inspector/server/review-workspace.mjs")).href;
@@ -105,6 +106,19 @@ async function get(url: string, pathname: string) {
 }
 
 describe("local Review service exchange", () => {
+  it("negotiates compressed shared snapshots without changing the canonical source", async () => {
+    const f = await fixture();
+    const service = await start(f.workspace);
+    const initial = await get(service.url, `source/${f.sha}`);
+    const response = await fetch(`${service.url}/api/review/source/${f.sha}`, {
+      headers: { "X-Review-Transport": "shared-v1", "Accept-Encoding": "gzip" },
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-encoding")).toBe("gzip");
+    expect(decodeReviewResponse(await response.json())).toEqual(initial);
+    expect((await get(service.url, `source/${f.sha}`)).version).toEqual(initial.version);
+  });
+
   it("persists a modified human judgment without a rationale across restart", async () => {
     const f = await fixture();
     const service = await start(f.workspace);

@@ -311,7 +311,7 @@ describe("ReviewWorkspace mounted workflow", () => {
     expect(control(container, "Source time").value).toBe(playhead);
   });
 
-  it("switches pending section tags with arrows, preserves drafts and advances only after a successful save", async () => {
+  it("advances before save confirmation, blocks duplicate writes and restores a failed draft", async () => {
     const f = await workspaceFixture(true);
     if (!f.handoff) throw new Error("Missing handoff.");
     const current = await f.read();
@@ -333,9 +333,7 @@ describe("ReviewWorkspace mounted workflow", () => {
     };
     await vi.waitFor(() => expect(currentTag()).toBe("Synthetic A"));
     await vi.waitFor(() =>
-      expect(container.querySelector(".review-tag-navigation")?.textContent).toContain(
-        "1 / 3 tags remaining",
-      ),
+      expect(container.querySelector(".review-tag-navigation")?.textContent).toContain("1/3"),
     );
     expect(container.querySelector(".review-details select")).toBeNull();
     expect(
@@ -357,8 +355,13 @@ describe("ReviewWorkspace mounted workflow", () => {
     expect(control(container, "Salience").value).toBe("supporting");
     expect(control(container, "Source time").value).toBe(playhead);
     let fail = true;
+    let releaseSave: () => void = () => {};
+    let saveGate = new Promise<void>((resolve) => {
+      releaseSave = resolve;
+    });
     const request = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, options) => {
       expect(String(url)).toContain("/decide");
+      await saveGate;
       if (fail) return new Response(JSON.stringify({ error: "Save interrupted" }), { status: 500 });
       const body = JSON.parse(String(options?.body));
       return new Response(
@@ -368,15 +371,24 @@ describe("ReviewWorkspace mounted workflow", () => {
     });
     try {
       button(container, "Save modified").click();
+      await nextTick();
+      expect(currentTag()).toBe("Synthetic C");
+      expect(container.textContent).toContain("Saving judgment");
+      await arrow("ArrowRight");
+      expect(currentTag()).toBe("Synthetic A");
+      expect(button(container, "Accept original").disabled).toBe(true);
+      button(container, "Accept original").click();
+      expect(request).toHaveBeenCalledTimes(1);
+      expect((await f.read())?.document.decisions).toHaveLength(0);
+      releaseSave();
       await vi.waitFor(() => expect(container.textContent).toContain("Save interrupted"));
       expect(container.querySelector(".claim-fields legend")?.textContent).toBe("Synthetic B");
       expect((await f.read())?.document.decisions).toHaveLength(0);
       fail = false;
+      saveGate = Promise.resolve();
       await click(container, "Save modified");
       await vi.waitFor(() => expect(currentTag()).toBe("Synthetic C"));
-      expect(container.querySelector(".review-tag-navigation")?.textContent).toContain(
-        "2 / 2 tags remaining",
-      );
+      expect(container.querySelector(".review-tag-navigation")?.textContent).toContain("2/2");
       await arrow("ArrowLeft");
       expect(currentTag()).toBe("Synthetic A");
       await click(container, "Accept original");
@@ -388,8 +400,10 @@ describe("ReviewWorkspace mounted workflow", () => {
       await setValue(control(container, "Assessment"), "absent");
       await click(container, "Save modified");
       expect(container.querySelector(".review-proposed-judgment")).toBeNull();
-      expect(container.querySelector(".review-section-complete")?.textContent).toBe(
-        "All section judgments reviewed.",
+      await vi.waitFor(() =>
+        expect(container.querySelector(".review-section-complete")?.textContent).toBe(
+          "All section judgments reviewed.",
+        ),
       );
       const saved = await f.read();
       expect(
@@ -1095,7 +1109,10 @@ async function upload(container: Element, label: string, file: File): Promise<vo
 async function idle(container: Element): Promise<void> {
   await nextTick();
   await vi.waitFor(
-    () => expect(container.querySelector('[role="status"]')?.textContent).not.toBe("Working…"),
+    () =>
+      expect(container.querySelector(".review-status")?.textContent ?? "").not.toMatch(
+        /Working…|Saving judgment/,
+      ),
     { interval: 5 },
   );
   await nextTick();

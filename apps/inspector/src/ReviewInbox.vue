@@ -12,6 +12,8 @@ const activeSource = shallowRef<RemoteSourceV2>();
 const openClaim = shallowRef<{ handoffId: string; claimId: string }>();
 const showingInbox = ref(true);
 const loading = ref(false);
+const recentSources = new Map<string, RemoteSourceV2>();
+const sourceLoads = new Map<string, Promise<RemoteSourceV2>>();
 const lastSynced = ref("");
 const inboxView = ref<"requests" | "sample" | "history">("requests");
 const showingProvenance = ref(false);
@@ -57,6 +59,34 @@ const nextSample = computed(() => {
   const current = rows.findIndex(row => row.key === activeSampleKey.value);
   return [...rows.slice(current + 1), ...rows.slice(0, current)].find(row => row.item?.claim.status === "agent-reviewed")?.item;
 });
+watch(() => !showingInbox.value ? nextSample.value?.source : undefined, next => {
+  if (next && next.source.sha256 !== activeSource.value?.document.source.sha256)
+    void loadSource(next).catch(() => {}); // Prefetch failure is retried by an explicit open.
+});
+
+async function loadSource(source: InboxSourceV2): Promise<RemoteSourceV2> {
+  const sha = source.source.sha256;
+  const cached = recentSources.get(sha);
+  if (cached?.version.sha256 === source.version.sha256) {
+    recentSources.delete(sha);
+    recentSources.set(sha, cached);
+    return cached;
+  }
+  const key = `${sha}:${source.version.sha256}`;
+  const pending = sourceLoads.get(key);
+  if (pending) return pending;
+  const request = reviewRequest<RemoteSourceV2>(`source/${sha}`).then(loaded => {
+    recentSources.delete(sha);
+    recentSources.set(sha, loaded);
+    for (const oldest of recentSources.keys()) {
+      if (recentSources.size <= 3) break;
+      recentSources.delete(oldest);
+    }
+    return loaded;
+  }).finally(() => sourceLoads.delete(key));
+  sourceLoads.set(key, request);
+  return request;
+}
 const sampleStorageKey = computed(() => `beatmap-lens-review-sample:${inbox.value?.workspace}`);
 watch(() => inbox.value?.workspace, workspace => {
   if (!workspace) return;
@@ -161,7 +191,7 @@ async function open(source: InboxSourceV2, claim?: InboxClaimV2, sample = ""): P
   loadError.value = "";
   try {
     if (activeSource.value?.document.source.sha256 !== source.source.sha256) {
-      const loaded = await reviewRequest<RemoteSourceV2>(`source/${source.source.sha256}`);
+      const loaded = await loadSource(source);
       if (request !== selection) return;
       activeSource.value = loaded;
     }
