@@ -14,8 +14,12 @@ import {
 } from "./domain";
 import { NOW, workflowFixture } from "./test-fixtures";
 
-const bootstrapUrl = pathToFileURL(resolve("scripts/prepare-query-campaign-workspace.mjs")).href;
-const adapterUrl = pathToFileURL(resolve("scripts/workflow-local-directory.mjs")).href;
+const bootstrapUrl = pathToFileURL(
+  resolve("annotation/pipeline/prepare-query-campaign-workspace.mjs"),
+).href;
+const adapterUrl = pathToFileURL(
+  resolve("apps/inspector/server/workflow-local-directory.mjs"),
+).href;
 const { prepareQueryCampaign, approvePreparedQueryCampaign } = await import(
   /* @vite-ignore */ bootstrapUrl
 );

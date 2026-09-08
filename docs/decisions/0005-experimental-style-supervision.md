@@ -26,7 +26,7 @@ open. The community-tag research pages describe a corpus snapshot, not an approv
 model target list. The earlier nine-concept campaign remains a calibration proposal;
 its count is not a requirement for this experiment.
 
-The [compositional judgment guide](../../skills/mania-pattern-judgment/references/judgment-guide.md)
+The [compositional judgment guide](../../.agents/skills/mania-pattern-judgment/references/judgment-guide.md)
 helps experts inspect arrangements. Its analytical levels are not a required model
 hierarchy, annotation inventory, or set of independent control parameters.
 

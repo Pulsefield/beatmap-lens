@@ -8,7 +8,9 @@ import { WorkflowConflictError, WorkflowDirectoryV2 } from "./directory";
 import { hashWorkflowValueV2 } from "./domain";
 import { workflowFixture } from "./test-fixtures";
 
-const adapterUrl = pathToFileURL(resolve("scripts/workflow-local-directory.mjs")).href;
+const adapterUrl = pathToFileURL(
+  resolve("apps/inspector/server/workflow-local-directory.mjs"),
+).href;
 const { LocalDirectoryHandle, compactReviewWorkspace } = await import(
   /* @vite-ignore */ adapterUrl
 );

@@ -27,7 +27,7 @@ import {
 } from "./domain";
 import { historicalAcceptance, NOW, workflowFixture } from "./test-fixtures";
 
-const serviceUrl = pathToFileURL(resolve("scripts/review-workspace.mjs")).href;
+const serviceUrl = pathToFileURL(resolve("apps/inspector/server/review-workspace.mjs")).href;
 const exec = promisify(execFile);
 const { startReviewWorkspace } = await import(/* @vite-ignore */ serviceUrl);
 const cleanups: Array<() => Promise<void>> = [];
@@ -862,7 +862,7 @@ describe("local Review service exchange", () => {
       new TextDecoder().decode(f.sourceBytes).replace("Version: Mixed", "Version: Another"),
     );
     await writeFile(sourcePath, newBytes);
-    const script = resolve("scripts/annotation-workflow.mjs");
+    const script = resolve("apps/inspector/server/annotation-workflow.mjs");
     const args = [
       script,
       "register-source",

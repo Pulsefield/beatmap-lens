@@ -3,6 +3,9 @@
 - Status: Accepted
 - Date: 2026-09-03
 
+This is the accepted design record. See the [package README](../../packages/beatmap-lens/README.md)
+for the current API and usage.
+
 ## Goal
 
 Establish a Beatmap-centric, explicitly bounded render API with one canonical source-time-to-scene
@@ -91,8 +94,8 @@ export function parseBeatmap(
 ): Beatmap
 ```
 
-`connectBeatmapAudio` remains available when audio is associated later. Because the package is
-unpublished and versioned `0.0.0`, this goal does not retain deprecated `createBeatmap` or
+`connectBeatmapAudio` remains available when audio is associated later. At the time of this decision, the package was
+unpublished and versioned `0.0.0`, so the change did not retain deprecated `createBeatmap` or
 `BeatmapInput` aliases. `filename` maps to the existing, more explicit `Beatmap.osuFilename` field;
 `audio` is convenience composition equivalent to calling `connectBeatmapAudio` after parsing.
 
@@ -425,24 +428,7 @@ A long note ending exactly at `range.endMs` is rendered in the left scene with
 `continuesAfter: false` and is absent from the adjacent right scene. A long note starting exactly at
 `range.endMs` is absent from the left scene and eligible for the right scene.
 
-## Execution status
-
-Only `not-started`, `in-progress`, `blocked`, and `complete` are valid phase states. A phase becomes
-complete only after every acceptance item has named evidence below.
-
-| Phase | Status | Completed | Evidence |
-| --- | --- | --- | --- |
-| 0 — Goal specification | complete | 2026-09-03 | Decisions, boundary formulas, three initial reviews, and independent Amendment 1 review |
-| 1 — Model, time, boundaries | complete | 2026-09-03 | 235 tests; package and Inspector type checks; corpus smoke |
-| 2 — Canonical projection | complete | 2026-09-03 | 252 tests; dual-direction core and Inspector integration; independent review |
-| 3 — Resolved geometry | complete | 2026-09-03 | 263 tests; exact sizing/precision regressions; type/runtime XOR; independent review |
-| 4 — Public render contract | complete | 2026-09-03 | 266 tests; package gate; declaration/package audit; two independent reviews |
-
-Phase 0 is frozen. Implementation may add evidence and clarify prose without changing the decided
-contract. Any contract change requires an explicit amendment with rationale and another Phase 0
-review before dependent implementation proceeds.
-
-### Amendment 1 — Scene precision (2026-09-03)
+## Amendment 1 — Scene precision (2026-09-03)
 
 `RenderScene` preserves resolved numeric precision. Geometry is not independently rounded while
 building the scene; a backend such as the SVG serializer may format numbers only at its encoding
@@ -453,183 +439,6 @@ and each equal lane width cannot also preserve the fixed sizing formulas exactly
 would additionally make high-precision theme metrics disagree with the geometry they produced.
 Keeping the visual IR precise preserves projection, equal-lane, and sizing invariants while leaving
 compact textual formatting to each serializer.
-
-Review requirement: Phase 3 cannot be accepted until tests show both playfield-size branches close
-under the fixed formulas and high-precision resolved metrics remain observable in note geometry.
-
-Review evidence: an independent Phase 0 review accepted the amendment after checking its numeric
-policy against the frozen sizing formulas, projection invariants, resolved scene contract, and
-implementation. A repeating-division 7K regression with fractional metrics records the identified
-IEEE-754 boundary explicitly.
-
-## Phased execution and acceptance
-
-### Phase 0 — Freeze this goal specification
-
-Acceptance:
-
-- the document identifies the primary model and both public usage paths;
-- immediate architecture, future seams, required inputs, defaults, and non-goals are explicit;
-- the decision is consistent with ADR 0001 and repository architecture rules;
-- no implementation capability is claimed before it exists.
-
-### Phase 1 — Primary model and source-time vocabulary
-
-Work:
-
-- replace `createBeatmap`/`BeatmapInput` with `parseBeatmap`/`ParseBeatmapOptions`;
-- migrate package public source-time fields and SVG data attributes to `*Ms`;
-- export `TimeRange` and migrate first-party runtime ranges without removing persisted `V1` names;
-- add the normalized `ManiaChart.range` complete-chart convenience;
-- make render range required and update every package, archive parser, and first-party caller;
-- apply the boundary formulas above in the same phase as the half-open public contract.
-
-Acceptance:
-
-- the README golden path starts with `parseBeatmap(osuSource)` and holds a `Beatmap`;
-- public API tests contain `parseBeatmap` and no `createBeatmap` runtime export;
-- a fixture with taps and crossing long notes preserves exact source milliseconds from parser to
-  chart, scene, and SVG attributes;
-- checked `@ts-expect-error` cases reject a render call without a range, while runtime JavaScript
-  shapes without a valid range throw `RangeError`;
-- tap and long-note membership matches every formula in “Boundary formulas,” including both shared
-  endpoints across adjacent ranges;
-- `parseOsz` and `iterateOsz` still produce equivalent connected `Beatmap` objects;
-- package and Inspector type checks pass.
-
-Evidence (accepted 2026-09-03):
-
-- code: `types.ts`, `parser.ts`, `mania.ts`, `beatmap.ts`, `osz.ts`, `render-scene.ts`, `svg.ts`,
-  and migrated Inspector/script consumers;
-- runtime: `public-api.test.ts`, `beatmap.test.ts`, `mania.test.ts`,
-  `render-boundaries.test.ts`, `render.test.ts`, and archive tests;
-- type contract: `test/type-contracts.ts` verifies required options and both range endpoints;
-- verification: all 33 Vitest files / 235 tests, package `tsc`, Inspector `vue-tsc`, Biome on changed
-  source areas, package build, corpus-validator smoke, and `git diff --check` passed.
-
-### Phase 2 — Canonical projection
-
-Work:
-
-- implement the serializable linear projection plus `projectTime` and `unprojectTime`;
-- make scene note and long-note geometry consume the projection;
-- migrate Inspector note placement, overlay range geometry, pointer inversion, and playhead
-  translation to shared projection helpers without moving controller lifecycle into the package.
-
-Acceptance:
-
-- start, midpoint, and end projection tests pass for both directions and non-zero/negative ranges;
-- forward/inverse round trips have absolute error at most `1e-9`;
-- invalid or out-of-domain forward/inverse inputs throw `RangeError`;
-- direction tests share one projection implementation;
-- crossing long notes are clipped in time before projection;
-- the old minimum-height behavior is absent and short-range endpoint distance equals
-  `contentHeightPx`;
-- `viewportYToSourceTime`, `BufferedSceneController.noteGroupTransform`, and annotation overlay
-  geometry call `projectTime`/`unprojectTime`; viewport translation contains no duplicate linear
-  time-to-Y formula;
-- pointer and overlay round trips pass with non-zero group translation.
-
-Evidence (accepted 2026-09-03):
-
-- core: `projection.ts` owns closed-domain forward/inverse math; `render-scene.ts` clips long notes
-  before projection and exposes `scene.projection` as the only range/direction/scale source;
-- integration: `buffered-scene.ts`, `FallingNoteViewport.vue`, and `AnnotateWorkspace.vue` consume
-  the helpers for moving-group, pointer, scrub, and overlay coordinates;
-- runtime: `projection.test.ts` and `buffered-scene.test.ts` cover both directions, negative and
-  non-zero ranges, `1e-9` round trips, short ranges, translated pointers, overlays, and large-time
-  inclusive refresh-boundary floating error;
-- verification: all 34 Vitest files / 252 tests, package `tsc`, Inspector `vue-tsc`, Biome, scoped
-  stale-formula search, and independent correctness review passed.
-
-### Phase 3 — Resolved geometry
-
-Work:
-
-- introduce playfield width XOR types and resolved theme metrics;
-- move lane gap, note height, inset, radius, and padding out of renderer literals;
-- validate resolved geometric relationships.
-
-Acceptance:
-
-- TypeScript prevents simultaneous `widthPx` and `laneWidthPx`, and runtime validation rejects the
-  same plain-JavaScript shape;
-- padding changes lane origin and scene size; gap changes lane X; height changes tap geometry;
-  inset changes note X/width; radius changes glyph radius;
-- a lane width that cannot contain the configured note inset is rejected before serialization.
-
-Evidence (accepted 2026-09-03):
-
-- contract: `PlayfieldSize` makes complete width and lane width mutually exclusive;
-  `RenderThemeInput` groups partial metric overrides while `RenderScene.metrics` exposes the fully
-  resolved values;
-- geometry: both sizing branches close under the fixed formulas, all four padding sides and every
-  metric affect their documented geometry, and the scene preserves resolved numeric precision per
-  Amendment 1;
-- validation: compile-time cases reject ambiguous sizing, runtime cases reject both/neither sizing
-  fields and invalid scalars, and resolved lanes must be wider than twice the note inset;
-- verification: all 34 Vitest files / 263 tests, package `tsc`, Inspector `vue-tsc`, Biome,
-  `git diff --check`, a repeating-division 7K precision regression, and independent Phase 3 review
-  passed.
-
-### Phase 4 — Public render and serializer contract
-
-Work:
-
-- keep `renderSvg(ManiaChart, options, svgOptions?)` as the bounded convenience operation;
-- keep `createRenderScene(ManiaChart, options)` as the explicit primitive;
-- separate `SerializeSvgOptions` from scene options;
-- expose resolved size, projection, metrics, and lane geometry on `RenderScene`;
-- update root/package documentation, benchmarks, corpus validation, and compatibility notes.
-
-Acceptance:
-
-- `renderSvg(chart, options, svgOptions)` is byte-identical to the explicit scene/serializer path;
-- checked `@ts-expect-error` cases prove SVG metadata cannot be supplied as scene geometry options
-  and scene geometry cannot be supplied as serializer options;
-- examples never imply an unbounded zero-option render;
-- Inspector static and dynamic rendering consume `RenderTimeProjection`, verified by integration
-  tests rather than type checking alone;
-- the root runtime API snapshot is intentional and a Changeset describes the breaking migration.
-
-Evidence (accepted 2026-09-03):
-
-- API: `RenderScene.size` is the only resolved scene-size field; `SerializeSvgOptions` is separate,
-  and three-argument `renderSvg` is byte-identical to explicit scene creation and serialization;
-- contracts: checked negative type cases reject missing ranges, mixed scene/SVG concerns, ambiguous
-  playfield sizing, all removed option names, and all removed top-level scene fields;
-- integration: the Inspector static preview adapter and dynamic buffered controller both exercise
-  bottom-to-top scenes through the canonical projection, including pointer, overlay, translation,
-  and buffer-boundary behavior;
-- edge behavior: derived scene heights reject overflow/underflow before geometry generation, while
-  SVG encoding preserves valid sub-millipixel dimensions instead of collapsing them to zero;
-- release: both READMEs document the minimal and advanced paths, every default, projection helpers,
-  and deferred capabilities; the minor Changeset records the breaking migration;
-- verification: all 35 Vitest files / 266 tests, full workspace type checks and builds, Biome,
-  package dry-run, corpus and pattern-map smoke tests, generated declaration/runtime-export audits,
-  `git diff --check`, and independent API plus DX reviews passed.
-
-## Final verification
-
-The goal is complete only when:
-
-- every phase acceptance condition is represented by code, type, integration, or documentation
-  evidence;
-- `pnpm check` passes, including formatting, type checks, tests, builds, package contents, and smoke
-  tests;
-- tests cover public API shape, half-open boundaries, projection round trips, both directions,
-  clipped long notes, playfield XOR, resolved metric validation, and primary/advanced equivalence;
-- generated package declarations contain no stale public `createBeatmap`, `BeatmapInput`,
-  `RenderOptions`, `RenderSvgOptions`, `RenderScene.timeRange`, or ambiguous public source-time
-  field; scoped source search allows old names only in this migration ADR, Changeset, and checked
-  negative type-contract assertions, and the duplicate-formula audit is limited to
-  RenderScene-based falling-note consumers;
-- the implementation remains DOM-free and performs no implicit file or network access.
-
-Final evidence: the complete root `pnpm check` pipeline passed with the bundled pnpm 11.19.0,
-including formatting, recursive type checks, 266 tests, both builds, package dry-run, and both smoke
-test suites. The generated package contains only its declared files, exposes the intentional 11
-runtime functions, and has no stale public declarations.
 
 ## Consequences
 

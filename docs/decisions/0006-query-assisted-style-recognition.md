@@ -47,12 +47,12 @@ is hard to anticipate through familiar patterns.
 Tech and LN coordination retain contextual interpretation. Regularity alone is
 neither a positive nor a blanket exclusion; compare the actual playable grouping,
 rhythmic landmarks, and independent press/release organization. See the revised
-[judgment guide](../../skills/mania-pattern-judgment/references/judgment-guide.md)
+[judgment guide](../../.agents/skills/mania-pattern-judgment/references/judgment-guide.md)
 for the source-specific positive/negative comparisons and remaining questions.
 
 ## Minimal implementation
 
-The [query reference](../../skills/mania-pattern-judgment/references/structural-queries.md)
+The [query reference](../../.agents/skills/mania-pattern-judgment/references/structural-queries.md)
 defines a standalone Parquet helper for fixed-group repeats, disjoint-group
 alternation, a selected repeated core with incidental chord notes, four-note
 directional candidates, and LN event relations. It emits

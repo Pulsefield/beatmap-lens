@@ -21,7 +21,7 @@ import {
 import { workflowFixture } from "./test-fixtures";
 
 const exec = promisify(execFile);
-const script = resolve("scripts/prepare-annotation-revision.py");
+const script = resolve("annotation/pipeline/prepare-annotation-revision.py");
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
@@ -313,7 +313,7 @@ describe("revision preparation at the current human base", () => {
     await save(join(job, "assignment.json"), await json(result.assignmentPath));
     await save(join(f.root, "admin/source-map.json"), []);
     await exec(process.execPath, [
-      resolve("scripts/campaign-exchange.mjs"),
+      resolve("annotation/pipeline/campaign-exchange.mjs"),
       "prepare",
       f.root,
       job,
