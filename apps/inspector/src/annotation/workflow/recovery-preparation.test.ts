@@ -12,7 +12,7 @@ import { workflowFixture } from "./test-fixtures";
 
 const exec = promisify(execFile);
 const hash = (value: Uint8Array) => createHash("sha256").update(value).digest("hex");
-const script = resolve("scripts/prepare-annotation-recovery.py");
+const script = resolve("annotation/pipeline/prepare-annotation-recovery.py");
 
 async function save(path: string, value: unknown) {
   await mkdir(dirname(path), { recursive: true });
@@ -45,7 +45,7 @@ it("validates original task transport and preserves Chinese calibration across r
     await writeFile(path, gzipSync(JSON.stringify(task)));
     const program = `
 import gzip, importlib.util, json, pathlib, sys
-spec = importlib.util.spec_from_file_location('recovery', pathlib.Path('scripts/prepare-annotation-recovery.py'))
+spec = importlib.util.spec_from_file_location('recovery', pathlib.Path('annotation/pipeline/prepare-annotation-recovery.py'))
 recovery = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(recovery)
 task = json.loads(gzip.decompress(pathlib.Path(sys.argv[1]).read_bytes()))

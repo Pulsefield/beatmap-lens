@@ -21,7 +21,7 @@ import { workflowFixture } from "./test-fixtures";
 
 const exec = promisify(execFile);
 const script = fileURLToPath(
-  new URL("../../../../../scripts/annotation-workflow.mjs", import.meta.url),
+  new URL("../../../../../apps/inspector/server/annotation-workflow.mjs", import.meta.url),
 );
 const adapterUrl = pathToFileURL(join(script, "../workflow-local-directory.mjs")).href;
 const { compactReviewWorkspace, readCanonicalWorkflowFile } = await import(
