@@ -336,9 +336,15 @@ agents. Saved human dispositions take precedence; a deferred claim remains
 unsettled in its history even though it is no longer an open queue row.
 
 The human sees the original scope, tag/assessment/salience, evidence, and rationale,
-then accepts, modifies, rejects, or defers each claim. Accept/reject/defer do not
-require a typed explanation; modification records the revised claim and an
-explanation. This uses the existing claim and decision structures, without a
+with **Accept original** and **Modify judgment** as the review actions. All human
+decision notes are optional, including modifications; a modified human claim may
+also leave its rationale empty. Agent proposals and audits still require reasoning.
+Left and right arrow keys (or the previous/next tag buttons) switch pending tags
+within the same handoff and section ID, or identical scopes when section IDs are
+missing. Switching preserves each tag's draft and the current preview position.
+Each successful submission removes that tag from the pending list and opens the
+next one. Failed saves retain the current judgment for retry. Saved judgments
+remain available in history. This uses the existing claim and decision structures, without a
 separate questionnaire or agent framework. Acceptance or modification creates a
 human-provenance observation. Rejection is not an
 `absent` judgment, and deferral neither changes the original assessment to unknown

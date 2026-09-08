@@ -105,6 +105,37 @@ async function get(url: string, pathname: string) {
 }
 
 describe("local Review service exchange", () => {
+  it("persists a modified human judgment without a rationale across restart", async () => {
+    const f = await fixture();
+    const service = await start(f.workspace);
+    await post(service.url, "submit", { kind: "handoff", packet: f.handoff });
+    const initial = await get(service.url, `source/${f.sha}`);
+    const result = await post(service.url, `human/${f.sha}/decide`, {
+      expectedBase: initial.version,
+      input: {
+        handoffId: f.handoff.handoffId,
+        claimId: f.claim.id,
+        disposition: "modified",
+        humanId: "expert",
+        modifiedClaim: {
+          ...f.claim,
+          assessment: { presence: "absent" },
+          evidence: { ...f.claim.evidence, rationale: "" },
+        },
+      },
+    });
+    expect(result.status).toBe(200);
+    expect(result.value.document.decisions[0]).toMatchObject({
+      disposition: "modified",
+      rationale: "",
+    });
+    expect(result.value.document.observations[0].claim.evidence.rationale).toBe("");
+    expect(result.value.document.handoffs[0].handoff).toEqual(f.handoff);
+    await service.close();
+    const restarted = await start(f.workspace);
+    expect((await get(restarted.url, `source/${f.sha}`)).document).toEqual(result.value.document);
+  });
+
   it("publishes machine revision lineage and preserves it across a service restart", async () => {
     const f = await fixture();
     const service = await start(f.workspace);

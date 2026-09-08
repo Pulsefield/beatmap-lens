@@ -311,6 +311,102 @@ describe("ReviewWorkspace mounted workflow", () => {
     expect(control(container, "Source time").value).toBe(playhead);
   });
 
+  it("switches pending section tags with arrows, preserves drafts and advances only after a successful save", async () => {
+    const f = await workspaceFixture(true);
+    if (!f.handoff) throw new Error("Missing handoff.");
+    const current = await f.read();
+    if (!current) throw new Error("Missing review.");
+    const imported = await f.directory.importHandoff(f.sourceBytes, current.version, f.handoff);
+    const container = document.createElement("div");
+    document.body.append(container);
+    const app = createApp(ReviewWorkspace, {
+      remoteSource: { ...imported.stored, sourceBytes: Array.from(f.sourceBytes) },
+      openClaim: { handoffId: f.handoff.handoffId, claimId: "claim-a" },
+    });
+    app.config.errorHandler = (error) => appErrors.push(error);
+    apps.push(app);
+    app.mount(container);
+    const currentTag = () => container.querySelector(".review-proposed-judgment h2")?.textContent;
+    const arrow = async (key: string, target: Element = document.body) => {
+      target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+      await nextTick();
+    };
+    await vi.waitFor(() => expect(currentTag()).toBe("Synthetic A"));
+    await vi.waitFor(() =>
+      expect(container.querySelector(".review-tag-navigation")?.textContent).toContain(
+        "1 / 3 tags remaining",
+      ),
+    );
+    expect(container.querySelector(".review-details select")).toBeNull();
+    expect(
+      [...container.querySelectorAll("button")].some((node) =>
+        ["Defer", "Reject proposal"].includes(node.textContent ?? ""),
+      ),
+    ).toBe(false);
+    const playhead = control(container, "Source time").value;
+    await arrow("ArrowRight");
+    expect(currentTag()).toBe("Synthetic B");
+    await click(container, "Modify judgment");
+    await setValue(control(container, "Salience"), "supporting");
+    await setValue(control(container, "Evidence / judgment rationale"), "", "input");
+    await arrow("ArrowRight", control(container, "Human decision rationale"));
+    expect(container.querySelector(".claim-fields legend")?.textContent).toBe("Synthetic B");
+    await arrow("ArrowLeft");
+    expect(currentTag()).toBe("Synthetic A");
+    await arrow("ArrowRight");
+    expect(control(container, "Salience").value).toBe("supporting");
+    expect(control(container, "Source time").value).toBe(playhead);
+    let fail = true;
+    const request = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, options) => {
+      expect(String(url)).toContain("/decide");
+      if (fail) return new Response(JSON.stringify({ error: "Save interrupted" }), { status: 500 });
+      const body = JSON.parse(String(options?.body));
+      return new Response(
+        JSON.stringify(await f.directory.decide(f.sourceBytes, body.expectedBase, body.input)),
+        { status: 200 },
+      );
+    });
+    try {
+      button(container, "Save modified").click();
+      await vi.waitFor(() => expect(container.textContent).toContain("Save interrupted"));
+      expect(container.querySelector(".claim-fields legend")?.textContent).toBe("Synthetic B");
+      expect((await f.read())?.document.decisions).toHaveLength(0);
+      fail = false;
+      await click(container, "Save modified");
+      await vi.waitFor(() => expect(currentTag()).toBe("Synthetic C"));
+      expect(container.querySelector(".review-tag-navigation")?.textContent).toContain(
+        "2 / 2 tags remaining",
+      );
+      await arrow("ArrowLeft");
+      expect(currentTag()).toBe("Synthetic A");
+      await click(container, "Accept original");
+      await vi.waitFor(() => expect(currentTag()).toBe("Synthetic C"));
+      expect(container.querySelector<HTMLButtonElement>('[aria-label="Next tag"]')?.disabled).toBe(
+        true,
+      );
+      await click(container, "Modify judgment");
+      await setValue(control(container, "Assessment"), "absent");
+      await click(container, "Save modified");
+      expect(container.querySelector(".review-proposed-judgment")).toBeNull();
+      expect(container.querySelector(".review-section-complete")?.textContent).toBe(
+        "All section judgments reviewed.",
+      );
+      const saved = await f.read();
+      expect(
+        saved?.document.decisions.map((decision) => [decision.claimId, decision.disposition]),
+      ).toEqual([
+        ["claim-b", "modified"],
+        ["claim-a", "accepted"],
+        ["claim-c", "modified"],
+      ]);
+      expect(saved?.document.observations[0]?.claim.evidence.rationale).toBe("");
+      expect(saved?.document.decisions[0]?.rationale).toBe("");
+      expect(saved?.document.handoffs[0]?.handoff).toEqual(f.handoff);
+    } finally {
+      request.mockRestore();
+    }
+  });
+
   it("routes an unresolved inbox proposal through an explicit assessment instead of Accept original", async () => {
     const f = await workspaceFixture(true);
     if (!f.handoff) throw new Error("Missing handoff.");
@@ -334,12 +430,8 @@ describe("ReviewWorkspace mounted workflow", () => {
         (node) => node.textContent === "Accept original",
       ),
     ).toBe(false);
-    await click(container, "Decide judgment");
-    await setValue(
-      control(container, "Human decision rationale"),
-      "The scoped pattern is present, supporting.",
-      "input",
-    );
+    await click(container, "Modify judgment");
+    expect(control(container, "Human decision rationale").value).toBe("");
     expect(button(container, "Save modified").disabled).toBe(true);
     await setValue(control(container, "Assessment"), "present");
     await setValue(control(container, "Salience"), "supporting");
@@ -358,7 +450,10 @@ describe("ReviewWorkspace mounted workflow", () => {
     try {
       await click(container, "Save modified");
       expect(requests).toHaveLength(1);
-      expect((await f.read())?.document.decisions[0]?.disposition).toBe("modified");
+      expect((await f.read())?.document.decisions[0]).toMatchObject({
+        disposition: "modified",
+        rationale: "",
+      });
       expect((await f.read())?.document.observations[0]?.claim.assessment).toEqual({
         presence: "present",
         salience: "supporting",
@@ -407,7 +502,7 @@ describe("ReviewWorkspace mounted workflow", () => {
       expect(container.textContent).toContain("This historical acceptance kept unresolved"),
     );
     expect(container.textContent).toContain("Later direct human judgment: present · supporting");
-    expect(container.textContent).toContain("accepted · unresolved");
+    await vi.waitFor(() => expect(container.textContent).toContain("accepted · unresolved"));
     expect(
       [...container.querySelectorAll("button")].some((node) =>
         ["Accept original", "Save modified", "Decide judgment"].includes(node.textContent ?? ""),
@@ -531,7 +626,16 @@ describe("ReviewWorkspace mounted workflow", () => {
       "Leave this specific question open.",
       "input",
     );
-    await click(container, "Defer");
+    const beforeDeferral = await f.read();
+    if (!beforeDeferral || !f.handoff) throw new Error("Missing review.");
+    await f.directory.decide(f.sourceBytes, beforeDeferral.version, {
+      handoffId: f.handoff.handoffId,
+      claimId: "claim-c",
+      disposition: "deferred",
+      humanId: "human-ui",
+      rationale: control(container, "Human decision rationale").value,
+    });
+    await click(container, "Reload saved workspace");
     await vi.waitFor(() => expect(container.textContent).toContain("Expert review · 0"));
     await upload(container, "Import independent audit", jsonFile(audit, "audit-again.json"));
     expect(container.querySelector('[role="status"]')?.textContent).toContain("duplicate");
@@ -668,7 +772,16 @@ describe("ReviewWorkspace mounted workflow", () => {
       "The question remains open; defer this claim.",
       "input",
     );
-    await click(container, "Defer");
+    const beforeDeferral = await f.read();
+    if (!beforeDeferral || !f.handoff) throw new Error("Missing review.");
+    await f.directory.decide(f.sourceBytes, beforeDeferral.version, {
+      handoffId: f.handoff.handoffId,
+      claimId: "claim-c",
+      disposition: "deferred",
+      humanId: "human-ui",
+      rationale: control(container, "Human decision rationale").value,
+    });
+    await click(container, "Reload saved workspace");
     const decided = await f.read();
     expect(decided?.document.decisions.map((decision) => decision.disposition)).toEqual([
       "accepted",

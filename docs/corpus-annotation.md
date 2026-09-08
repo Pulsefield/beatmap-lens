@@ -427,11 +427,12 @@ reloads. Drawing uses compact inbox summaries; the full chart loads only when a
 sample is opened. Open and **Next sample** reuse the usual review workspace,
 section focus, music, zoom, and decision controls.
 
-When the expert disagrees, prefer **Modify judgment** with the corrected presence,
-salience or scope and a short discriminating reason. **Reject proposal** records a
-rejection without inventing a negative replacement. Both leave the original machine
-proposal intact. Saving publishes the normal decision/observation and agent outbox
-feedback; there is no second sampling-specific annotation store.
+When the expert disagrees, use **Modify judgment** with the corrected presence,
+salience or scope; the reason is optional. **Accept original** confirms the proposal.
+Use left/right arrow keys to switch pending tags within the section. Each successful
+save removes that tag and advances to the next; the original machine proposal and
+saved human judgment remain in history. Saving publishes the normal decision,
+observation and agent outbox feedback.
 
 The next agent pass consumes that feedback in this order:
 

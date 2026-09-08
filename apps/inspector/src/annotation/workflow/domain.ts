@@ -32,7 +32,7 @@ export interface DecideClaimInputV2 extends OperationOptionsV2 {
   readonly claimId: string;
   readonly disposition: HumanDecisionV2["disposition"];
   readonly humanId: string;
-  readonly rationale: string;
+  readonly rationale?: string;
   readonly modifiedClaim?: ClaimV2;
 }
 
@@ -628,7 +628,12 @@ export async function decideClaimV2(
   if (input.disposition !== "modified" && input.modifiedClaim)
     throw new Error("Only a modified human decision may supply a revised claim.");
   const claim = input.modifiedClaim ?? proposal;
-  assertClaimV2(claim, createStableNoteRefsV1(inspected.chart), document.foundation);
+  assertClaimV2(
+    claim,
+    createStableNoteRefsV1(inspected.chart),
+    document.foundation,
+    input.disposition !== "modified",
+  );
   if (confirming && ["unresolved", "unreviewed"].includes(claim.assessment.presence))
     throw new Error(
       "Choose present with salience or absent before confirming a proposal, or defer this review. Unresolved and unreviewed do not decide presence.",
@@ -645,7 +650,7 @@ export async function decideClaimV2(
     claimId: input.claimId,
     disposition: input.disposition,
     humanId: input.humanId,
-    rationale: input.rationale,
+    rationale: input.rationale ?? "",
     decidedAt,
     ...(confirming ? { observationId } : {}),
   };
@@ -1022,6 +1027,7 @@ export function assertClaimV2(
   input: unknown,
   sourceNotes: readonly StableNoteRefV1[],
   foundation: FoundationV2,
+  requireRationale = true,
 ): asserts input is ClaimV2 {
   const claim = record(
     input,
@@ -1048,7 +1054,7 @@ export function assertClaimV2(
     oneOf(assessment.salience, ["supporting", "prominent"], "assessment.salience");
   } else record(assessment, ["presence"], [], "assessment");
   const evidence = assertEvidence(claim.evidence, scope, context, sourceNotes, "claim.evidence");
-  if (assessment.presence !== "unreviewed")
+  if (requireRationale && assessment.presence !== "unreviewed")
     nonempty(evidence.rationale, "claim.evidence.rationale");
   if (assessment.presence === "present" && !evidence.noteRefs.length)
     throw new Error("A positive claim requires source-backed witness notes.");
@@ -1089,7 +1095,7 @@ export function assertClaimV2(
       sourceNotes,
       "transition.evidence",
     );
-    nonempty(transitionEvidence.rationale, "transition.evidence.rationale");
+    if (requireRationale) nonempty(transitionEvidence.rationale, "transition.evidence.rationale");
     if (!transitionEvidence.noteRefs.length)
       throw new Error("A transition needs its own source-backed evidence.");
   }
@@ -1220,7 +1226,13 @@ export async function validateReviewDocumentV2(
     requireApproved(rules);
     if (!inspected)
       throw new Error("Exact source bytes are required to verify human observations.");
-    assertClaimV2(observation.claim, createStableNoteRefsV1(inspected.chart), rules);
+    const provenance = observation.origin;
+    const modified =
+      provenance.kind === "agent-proposal" &&
+      document.decisions.some(
+        (decision) => decision.id === provenance.decisionId && decision.disposition === "modified",
+      );
+    assertClaimV2(observation.claim, createStableNoteRefsV1(inspected.chart), rules, !modified);
     const origin = object(observation.origin, "origin");
     if (origin.kind === "direct-human") record(origin, ["kind"], [], "origin");
     else {
