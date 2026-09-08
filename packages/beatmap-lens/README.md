@@ -1,8 +1,7 @@
 # beatmap-lens
 
-A pre-release TypeScript toolkit for 4K-10K `osu!mania` beatmaps.
-
-The package is not published, and its API can still change.
+A TypeScript toolkit for 4K-10K `osu!mania` beatmaps, released independently from the
+Inspector and annotation tooling.
 
 ```ts
 import {

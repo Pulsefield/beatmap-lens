@@ -12,10 +12,9 @@ representation can improve the judgment. The skill retains semantics; determinis
 tools expose observations. This separation keeps the instruction budget bounded
 while allowing difficult Tech and salience cases to receive deeper inspection.
 
-Use [the harness labeler role](agent-roles/harness-labeler.md) and
-[the harness auditor role](agent-roles/harness-auditor.md) for newly prepared jobs.
-The existing corpus campaign and its frozen roles remain unchanged. Harness tools
-are read-only; normal claim validation, independent audit, and exchange submission
+Use [the harness labeler role](../../annotation/roles/harness-labeler.md) and
+[the harness auditor role](../../annotation/roles/harness-auditor.md) for newly prepared jobs.
+Harness tools are read-only; normal claim validation, independent audit, and exchange submission
 remain separate from inspection.
 
 ## Tool contract
@@ -124,14 +123,14 @@ pages when a claim requires complete local evidence.
 The preparer reads a campaign source map and Parquets, verifies original source
 bytes, and copies normalized chart data, exact human examples, and tool code into
 a new bundle. Its manifest pins source, feedback, Foundation, and file provenance.
-It also snapshots [the curated human sets](../skills/mania-pattern-judgment/references/human-contrast-sets.json)
+It also snapshots [the curated human sets](../../.agents/skills/mania-pattern-judgment/references/human-contrast-sets.json)
 as `contrast-sets.json`, retaining only eligible example IDs and dropping empty
 sets. The manifest pins both the original catalog hash (`contrastSetsSha256`) and
 the filtered snapshot hash. `--contrast-sets` can supply another small curated
 catalog with shape `{"sets":[{"id":"…","description":"…","exampleIds":["human-…"]}]}`.
 Keep descriptions short and about the comparison, without source or example IDs.
 Source/song exclusions apply before memberships, counts, or descriptors reach the
-worker bundle or tools. Existing frozen bundles retain their original code and inputs.
+worker bundle or tools. Keep the inputs of an active job fixed.
 The section input accepts either a `sections` or `cases` array, with
 `sourceSha256`, `scope`, and optional `reviewContext`; supply stable `sectionId` or
 `caseId` values. The job launcher supplies the frozen skill/Foundation, role,
@@ -143,14 +142,14 @@ the whole job: source-local names such as `whole-source` can recur on other song
 Install the pinned runtime into a local environment before preparing a bundle:
 
 ```sh
-uv venv .local/annotation-harness-venv --python python3.10
-uv pip install --python .local/annotation-harness-venv/bin/python \
-  -r scripts/requirements-annotation-harness.txt
+uv venv .local/annotation-venv --python python3.10
+uv pip install --python .local/annotation-venv/bin/python \
+  -r harness/requirements.txt
 ```
 
 ```sh
-.local/annotation-harness-venv/bin/python scripts/prepare-annotation-harness.py \
-  --campaign .local/corpus-500-v2 \
+.local/annotation-venv/bin/python harness/prepare-annotation-harness.py \
+  --campaign .local/campaign \
   --sections /ABS/sections.json \
   --feedback-dir /ABS/feedback-snapshot \
   --out /ABS/new-harness-bundle \
@@ -226,10 +225,12 @@ schema. The administrative design contains gold and stays outside worker folders
 The harness arms additionally receive the optional inspection role and MCP access.
 
 ```sh
-.local/annotation-harness-venv/bin/python scripts/prepare-harness-benchmark.py \
+.local/annotation-venv/bin/python annotation/evaluation/prepare-harness-benchmark.py \
+  --campaign .local/campaign \
   --design /ABS/administrative-evaluation-design.json \
   --root /ABS/new-benchmark
-.local/annotation-harness-venv/bin/python scripts/run-harness-benchmark.py run \
+.local/annotation-venv/bin/python annotation/evaluation/run-harness-benchmark.py run \
+  --campaign .local/campaign \
   --root /ABS/new-benchmark
 ```
 
@@ -242,9 +243,12 @@ Review command traces for boundary violations before interpreting a run.
 Run the Python suite with the pinned environment:
 
 ```sh
-.local/annotation-harness-venv/bin/python -m unittest discover -s scripts -p 'test_*.py'
+.local/annotation-venv/bin/python scripts/test-python.py
 pnpm check:skill
 ```
+
+The [regression gate](../../annotation/evaluation/README.md) governs candidate updates.
+Labeler replay does not, by itself, validate whole-chart discovery or auditor behavior.
 
 ## Design basis
 

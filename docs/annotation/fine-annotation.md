@@ -1,20 +1,22 @@
 # Fine annotation with the optional harness
 
-The whole-chart corpus dispatcher and its frozen workers are separate from fine
-section annotation. `run-fine-annotation.py` prepares new source-bound selected
-section jobs from a priority queue and its matching annotation-mode harness bundle.
-It freezes the current skill and approved Foundation definitions without changing
-historical workers or human decisions.
+Selected-section annotation follows whole-chart discovery in the main workflow.
+The two stages use separate dispatchers and coverage checks.
+`run-fine-annotation.py` prepares new source-bound selected-section jobs from a priority queue and its matching annotation-mode harness bundle.
+It freezes the current skill and approved Foundation definitions for the new jobs
+while preserving current human decisions.
 
 ```sh
-.local/annotation-harness-venv/bin/python scripts/run-fine-annotation.py prepare \
-  --root .local/fine-annotation-next \
-  --queue .local/annotation-priorities-next/queue.json \
-  --bundle .local/annotation-harness-next
-.local/annotation-harness-venv/bin/python scripts/run-fine-annotation.py run \
-  --root .local/fine-annotation-next --concurrency 5
-.local/annotation-harness-venv/bin/python scripts/run-fine-annotation.py status \
-  --root .local/fine-annotation-next
+.local/annotation-venv/bin/python annotation/pipeline/run-fine-annotation.py prepare \
+  --campaign .local/campaign \
+  --python .local/annotation-venv/bin/python \
+  --root .local/section-annotation \
+  --queue .local/section-priorities/queue.json \
+  --bundle .local/section-harness
+.local/annotation-venv/bin/python annotation/pipeline/run-fine-annotation.py run \
+  --root .local/section-annotation --concurrency 5
+.local/annotation-venv/bin/python annotation/pipeline/run-fine-annotation.py status \
+  --root .local/section-annotation
 ```
 
 Each fresh ephemeral labeler receives at most five sections, with a 28,000-character
@@ -24,9 +26,8 @@ role, skill, guide and Foundation prefix remain identical within each role; raw
 source evidence is read once from the brief, with optional progressive harness
 inspection. Each completed batch goes to a separate fresh auditor. Its compact claim view uses
 source-line references into the complete brief; exact sealed task and handoff files
-remain frozen alongside it. On the initial batch, this removes 85.2% of repeated
-claim-view JSON characters without changing the source evidence or canonical packets. Context is
-never extended indefinitely across batches. Actual input/cache/output tokens and
+remain frozen alongside it. Compact claims avoid repeating source evidence already
+present in the brief. Context is bounded per batch. Actual input/cache/output tokens and
 worker durations remain in `run.json` and aggregate `progress.json`; a shared
 prefix permits reuse but does not guarantee a cache hit rate.
 
@@ -52,14 +53,14 @@ delivery, retaining their actual producer identity and frozen evidence.
 
 The `fine-annotation-campaign.py` controller tracks a target across section batches.
 `status` refreshes canonical feedback for registered source/scope units;
-`advance` runs one unfinished or new batch under a campaign lock. The current
-configuration targets 4,000 sections and uses 25-section rounds, five concurrent
-workers, and at most five sections per worker. The final source-brief grouping cap
-is 28,000 characters, including human and repair records.
+`advance` runs one unfinished or new batch under a campaign lock. The target is
+configured for the campaign.
+The controller uses 25-section rounds, five concurrent workers, and at most five
+sections per worker. The final source-brief grouping cap is 28,000 characters, including human and repair records.
 
 ```sh
-.local/annotation-harness-venv/bin/python scripts/fine-annotation-campaign.py advance \
-  --root .local/fine-annotation-4000
+.local/annotation-venv/bin/python annotation/pipeline/fine-annotation-campaign.py advance \
+  --root .local/section-campaign --campaign .local/campaign --target 100
 ```
 
 Completion requires settled coverage in all five dimensions across each actual
@@ -71,9 +72,3 @@ a resumed batch retains its original hashes. The controller stops new dispatch a
 the target, on exhausted eligible selection, or on an execution/delivery error that
 needs inspection. Partial semantic sections stay visible without blocking unrelated
 new sections.
-
-The first 24-section trial used fresh labelers and independent auditors: all ten
-workers completed, with 2,747,453 aggregate input tokens, 2,172,032 cached input
-tokens (79.1%), and 37,844 output tokens. These cumulative request counts are not
-peak context sizes. The measurements support retaining five-section jobs; they do
-not establish a universal optimal batch size or semantic accuracy.

@@ -1,6 +1,6 @@
 # Annotation performance
 
-Agents read one normalized Parquet at a time through `scripts/annotation-facts.py`.
+Agents read one normalized Parquet at a time through `harness/annotation-facts.py`.
 The single-file reader avoids loading the dataset/Pandas backend. It produces the
 same source-time facts and does not construct a browser, SVG scene, or full workflow.
 Human reviewers retain the complete Inspector and its source-backed evidence.
@@ -44,3 +44,17 @@ uses the time index for evidence candidates and a per-source reference lookup fo
 selection, avoiding a full-chart scan on each seek. Boundary checks on 8,065 real
 ranges preserved exact note membership and ordering, including entering holds.
 Browser node counts verify virtualization, not frame time or browser heap usage.
+
+## Selected-section batch observations
+
+A 24-section trial with separate labelers and auditors completed all ten workers.
+The run used 2,747,453 cumulative input tokens, including 2,172,032 cached input
+(79.1%), and 37,844 output tokens. These are cumulative request counts, not peak
+context sizes. Compact audit claim views removed 85.2% of repeated claim-view JSON
+characters in the initial batch while retaining the complete source brief and
+canonical packets.
+
+These observations motivated retaining jobs of at most five sections with a
+28,000-character source-brief grouping cap. They do not establish an optimal batch
+size, a guaranteed cache hit rate, or semantic accuracy. Actual task cost depends
+on source length, tool use, model settings, and the review needed.

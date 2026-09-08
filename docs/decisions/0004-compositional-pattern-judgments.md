@@ -26,7 +26,7 @@ fixed-group long jump jacks from chordjack; minijacks from longjack; source LN k
 from tapping articulation; staggered releases from incidental or simultaneous
 endings; and tricky organization from regular chordstream-like activity. These
 distinctions are recorded in the
-[judgment guide](../../skills/mania-pattern-judgment/references/judgment-guide.md).
+[judgment guide](../../.agents/skills/mania-pattern-judgment/references/judgment-guide.md).
 
 ## Proposed model
 

@@ -6,7 +6,7 @@ Agent-only section predictions and agreeing machine audits are excluded from the
 learning evidence. Existing annotation packets remain historical workflow records;
 the learning path does not submit claims or count completed section labels.
 
-The [judgment skill](../skills/mania-pattern-judgment/SKILL.md) defines three
+The [judgment skill](../../.agents/skills/mania-pattern-judgment/SKILL.md) defines three
 concurrent views: time, action, and organization. Interpret the same arrangement
 across individual actions, groups, recurring cells, passages, and whole-chart
 development. Local burst, trill, stream, or jump descriptions can coexist with a
@@ -15,9 +15,8 @@ Keep source milliseconds and beat relationships, full attack groups, LN endpoint
 and entering holds together. Action interpretations are hypotheses calibrated by
 human examples, not measured motor experience or gameplay-demand values.
 
-The [reading framework](beatmap-reading-framework.md) develops these views through
-the complete current expert study, explicit positive/negative contrasts, natural
-variants, and remaining explanatory boundaries.
+The [reading framework](../research/beatmap-reading-framework.md) develops these views through
+positive/negative contrasts, natural variants, and remaining explanatory boundaries.
 
 ## Evidence roles
 
@@ -43,23 +42,22 @@ chart sources and confirmed examples. Machine proposals, audits, and disposition
 histories do not enter the human-example library.
 
 ```sh
-.local/annotation-harness-venv/bin/python scripts/beatmap-learning.py prepare \
+.local/annotation-venv/bin/python annotation/learning/beatmap-learning.py prepare \
   --dataset ../Pulsefield-model/dataset \
   --beatmapset 1986822 \
-  --human-bundle .local/tech-ln-calibration-20260907/universal-human-only-harness \
   --out .local/beatmap-learning/corpus
 ```
 
-Omit `--human-bundle` for a natural-chart-only study. Repeat `--beatmapset` to add
-sets. Preparation requires a fresh output directory and hashes the source and
+Add `--human-bundle PATH` when using a prepared annotation-mode human bundle.
+Repeat `--beatmapset` to add sets. Preparation requires a fresh output directory and hashes the source and
 metadata snapshots. The manifest records tool provenance; runtime code is the
 current checkout. Human bundles with evaluation exclusions cannot be repurposed
 to expose their hidden examples.
 
 ```sh
-.local/annotation-harness-venv/bin/python scripts/beatmap-learning.py catalog \
+.local/annotation-venv/bin/python annotation/learning/beatmap-learning.py catalog \
   --bundle .local/beatmap-learning/corpus --text 'SYSTEM ERROR'
-.local/annotation-harness-venv/bin/python scripts/beatmap-learning.py catalog \
+.local/annotation-venv/bin/python annotation/learning/beatmap-learning.py catalog \
   --bundle .local/beatmap-learning/corpus --community-tag tech
 ```
 
@@ -73,12 +71,12 @@ original file or audio is unavailable; availability is reported separately.
 ## Study a real arrangement
 
 ```sh
-.local/annotation-harness-venv/bin/python scripts/beatmap-learning.py context \
+.local/annotation-venv/bin/python annotation/learning/beatmap-learning.py context \
   --bundle .local/beatmap-learning/corpus --handle chart:SOURCE_SHA
-.local/annotation-harness-venv/bin/python scripts/beatmap-learning.py inspect \
+.local/annotation-venv/bin/python annotation/learning/beatmap-learning.py inspect \
   --bundle .local/beatmap-learning/corpus --handle chart:SOURCE_SHA \
   --start-ms 170400 --end-ms 174300 --view actions
-.local/annotation-harness-venv/bin/python scripts/beatmap-learning.py render \
+.local/annotation-venv/bin/python annotation/learning/beatmap-learning.py render \
   --bundle .local/beatmap-learning/corpus --handle chart:SOURCE_SHA \
   --start-ms 170400 --end-ms 174300 --view time --out .local/reading.png
 ```
@@ -94,9 +92,9 @@ complete local inspection.
 Retrieve human experience when it helps interpret the observed organization:
 
 ```sh
-.local/annotation-harness-venv/bin/python scripts/beatmap-learning.py examples \
+.local/annotation-venv/bin/python annotation/learning/beatmap-learning.py examples \
   --bundle .local/beatmap-learning/corpus --tag tech --text 'SYSTEM ERROR'
-.local/annotation-harness-venv/bin/python scripts/beatmap-learning.py example \
+.local/annotation-venv/bin/python annotation/learning/beatmap-learning.py example \
   --bundle .local/beatmap-learning/corpus --id HUMAN_EXAMPLE_ID
 ```
 
@@ -121,13 +119,14 @@ MIR teacher experiment. This reuses a feature extractor without adopting a V3
 architecture or changing Pulsefield's caches.
 
 ```sh
-.local/annotation-harness-venv/bin/python scripts/beatmap-learning.py audio \
+.local/annotation-venv/bin/python annotation/learning/beatmap-learning.py audio \
   --bundle .local/beatmap-learning/corpus --handle chart:SOURCE_SHA \
   --start-ms 168400 --end-ms 174400 --out .local/audio-reading
 ```
 
-Use `--pulsefield-root PATH` for a different checkout; its `.venv/bin/python` must
-provide the existing Pulsefield audio dependencies. The output directory must be
+Use `--pulsefield-root PATH` or `PULSEFIELD_ROOT` for a different checkout, and
+`PULSEFIELD_PYTHON` for its audio runtime. That runtime must provide Pulsefield's
+audio dependencies; see [configuration](corpus-annotation.md#local-inputs-and-runtime). The output directory must be
 fresh. Open the returned `imagePath` to inspect the Mel spectrum and four-lane
 attack/hold/release panel on the same absolute source-time axis. The command also
 retains numerical frames in `features.npz` and provenance in `evidence.json`.
@@ -169,12 +168,12 @@ their scopes must overlap an inspected source context. They remain distinct from
 human judgments and do not change a reading's hypothesis status.
 
 ```sh
-.local/annotation-harness-venv/bin/python scripts/beatmap-learning.py remember \
+.local/annotation-venv/bin/python annotation/learning/beatmap-learning.py remember \
   --bundle .local/beatmap-learning/corpus --memory .local/beatmap-learning/experience \
   --input .local/reading.json --producer ACTUAL_AGENT_ID
-.local/annotation-harness-venv/bin/python scripts/beatmap-learning.py recall \
+.local/annotation-venv/bin/python annotation/learning/beatmap-learning.py recall \
   --memory .local/beatmap-learning/experience --text 'release'
-.local/annotation-harness-venv/bin/python scripts/beatmap-learning.py recall \
+.local/annotation-venv/bin/python annotation/learning/beatmap-learning.py recall \
   --memory .local/beatmap-learning/experience --id EXPERIENCE_ID
 ```
 

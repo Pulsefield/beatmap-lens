@@ -1,10 +1,9 @@
 # Selecting valuable annotation sections
 
-Pulsefield V3 needs trustworthy, partly observed section-style labels. Read its
-canonical `../Pulsefield-model/docs/formulation/gameplay-state.md` together with
-its README: there is currently no executable V3 evaluator, calibrated demand scale,
-or model uncertainty signal. The initial selector is a reproducible retrieval
-heuristic. Its score is neither style truth nor model error.
+The selector chooses useful sections after whole-chart discovery. It combines
+review issues, missing dimensions, structural variety, and exploration. Its score
+is an experimental retrieval heuristic, not style truth, model error, or a
+calibrated measure of uncertainty.
 
 ## One inspection, five dimensions
 
@@ -22,8 +21,8 @@ naming another style do not automatically give it a presence or strength label.
 A complete dimension pass means every dimension was considered, including an
 honest reason for unresolved/unreviewed cells; it does not mean five positives.
 
-The [labeler](agent-roles/query-corpus-labeler.md) and
-[auditor](agent-roles/query-corpus-auditor.md) use 2–4 short bullets per rationale,
+The [labeler](../../annotation/roles/query-corpus-labeler.md) and
+[auditor](../../annotation/roles/query-corpus-auditor.md) use 2–4 short bullets per rationale,
 normally at most 80 words. Describe what repeats or flows, what disrupts it, and
 why the dimension fits. Keep source references and calculations structured. The
 submitted bullets and references must contain decisive audit evidence; an analysis
@@ -35,16 +34,15 @@ preserves newlines in these notes. Historical proposals and human prose are reta
 Run from this checkout with the existing PyArrow environment:
 
 ```sh
-../Pulsefield-model/.venv/bin/python scripts/annotation-priorities.py \
-  --campaign .local/corpus-500-v2 \
-  --out .local/annotation-priorities-next \
+.local/annotation-venv/bin/python annotation/pipeline/annotation-priorities.py \
+  --campaign .local/campaign \
+  --out .local/section-priorities \
   --batch-size 24 --seed 20260907
 ```
 
 The output directory must be new. This reads current service feedback for registered
 workspace sources and writes derived files only; it does not dispatch workers,
-submit labels, resume a stopped campaign, or rewrite frozen inputs. For reproducible
-reranking, pass `--feedback-dir PREVIOUS_OUTPUT/feedback`. A snapshot is per source,
+submit labels, resume a stopped campaign, or rewrite frozen inputs. To rerank the same feedback, pass `--feedback-dir PREVIOUS_OUTPUT/feedback`. A snapshot is per source,
 captured over the recorded time interval, not an atomic snapshot of a live workspace.
 
 Outputs:
@@ -116,19 +114,17 @@ an unbiased corpus-accuracy estimate.
 
 ## Mina-inspired facts, separate semantic judgments
 
-[`section-features.py`](../scripts/section-features.py) measures local attacks,
+[`section-features.py`](../../annotation/pipeline/section-features.py) measures local attacks,
 sliding 500 ms peaks, hand imbalance, same-column timing, chord shares, recurrence,
 ABAB structure, rhythm variation, and LN occupancy/releases. Counts use exact
 half-open scopes and full source hold endings. The feature-only rhythm histogram
 groups gaps differing by at most 1 ms; source rows and semantic cuts stay unchanged.
 
-The reference is Mug-Diffusion's `scripts/prepare_beatmap_features.py::get_ett_scores`
-and `scripts/MinaCalc-1.0.tar.gz` in the sibling repository. Its wrapper sends sorted
-attack `(ms, column)` pairs and returns eight difficulty ratings. It omits LN
-releases and occupancy. Cropping also resets stamina/context and requires rebased
-time; a crop rating is not additive song difficulty. This implementation borrows
-measurement ideas without copying the calculator or presenting its output as a
-calibrated Mina rating. Numerical demand is separate from section-style strength.
+These measurements borrow ideas from Mina-style difficulty features without
+presenting their output as a calibrated Mina rating. LN releases and occupancy
+remain explicit. Cropping changes stamina and surrounding context; a crop's
+numerical difficulty is not additive song difficulty. Numerical demand is also
+separate from section-style strength.
 
 ## Coverage and dataset quality
 
@@ -168,18 +164,12 @@ silently merge remixes or editions.
 
 ## Preparing and evaluating the next pass
 
-Keep the current campaign's frozen workers and user-stop state. Prepare new jobs
-from the proposed assignment, fetch fresh task bindings and human feedback, and
-freeze the revised skill, roles and checker with new provenance. Preserve original
-source bytes and complete chart context. `coverageMode: "selected-sections"` asks
-the checker to verify `targetRanges`; its default still requires the entire chart.
-Use the public `annotation-workflow.mjs handoff` / `audit` / `submit` commands
-for these bounded jobs. The existing `campaign-exchange.mjs` and whole-chart
-dispatcher still require full discovery; do not feed this proposed section
-assignment to that dispatcher. Section dispatch and completion accounting are
-a separate integration from this read-only selector and section preflight.
-Route new immutable claims and independent audits through the public exchange;
-explicit supersession is required when replacing previous machine proposals.
+Prepare a matching [harness bundle](annotation-harness.md), then use the
+[fine-annotation runner](fine-annotation.md) for the selected assignment. It fetches
+current human feedback, creates source-bound tasks, and independently audits new
+claims before exchange delivery. `coverageMode: "selected-sections"` checks the
+assigned ranges; the whole-chart dispatcher retains its discovery coverage check.
+Use explicit supersession for replacement claims and keep settled human cells.
 
 For a bounded 24-section pilot, inspect whether the priority arm finds more
 corrected or newly settled dimension judgments per review minute than the
@@ -189,7 +179,7 @@ contrasts so the dataset does not become only ambiguities. Report calibration
 replay separately from held-out semantic accuracy.
 
 Evaluate skill changes separately from selection changes. The
-[`run-section-benchmark.py`](../scripts/run-section-benchmark.py) runner executes
+[`run-section-benchmark.py`](../../annotation/evaluation/run-section-benchmark.py) runner executes
 prepared, frozen jobs in fresh ephemeral CLI processes and retains input hashes,
 producer IDs, requested model/effort, raw events, wall time and token usage. Give
 old and new skill arms identical evidence and output contracts. Score only exact
@@ -202,17 +192,16 @@ usage and remain distinct from subscription billing. Pre-extracted section timin
 does not measure discovery, independent audit, or human review time. A shorter
 guide or a passed exposed replay alone is insufficient evidence of improvement.
 
-When actual V3 predictions exist, pin their model/checkpoint and source/scope
+If model predictions are added, identify their model/checkpoint and source/scope
 alignment; add per-dimension calibrated error or independent-model disagreement
 as a measured component. Compare it against this fixed heuristic and a separate
 random evaluation sample. Do not substitute density for uncertainty or report
 training-exposed human corrections as held-out model performance.
 
-The selection tests require PyArrow. Run them with the prepared runtime:
+The Python suite requires the [annotation runtime](corpus-annotation.md#local-inputs-and-runtime):
 
 ```sh
-../Pulsefield-model/.venv/bin/python -m unittest discover -s scripts -p 'test_annotation_priorities.py'
-../Pulsefield-model/.venv/bin/python -m unittest discover -s scripts -p 'test_section_features.py'
-../Pulsefield-model/.venv/bin/python scripts/test_annotation_result.py
-pnpm check:skill
+.local/annotation-venv/bin/python scripts/test-python.py
 ```
+
+Skill/workflow changes also use the [regression gate](../../annotation/evaluation/README.md).

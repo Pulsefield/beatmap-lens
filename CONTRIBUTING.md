@@ -1,68 +1,75 @@
 # Contributing
 
-Beatmap Lens is pre-release software. Describe the beatmap or development workflow a change serves
-before adding a new abstraction.
+Describe the real beatmap or development workflow a change serves. Keep changes
+focused, preserve the distinction between observed structure and semantic judgment,
+and avoid abstractions for hypothetical consumers.
 
-## Product boundary
+## Product and research boundaries
 
-Two workflows guide the project:
+`packages/beatmap-lens` is the independent npm package. Keep its API curated,
+DOM-free, and free of implicit filesystem or network access. Parsing, normalized
+charts, analysis, render scenes, and serialization have separate responsibilities.
+Key count is chart data: every package stage supports 4K–10K through the same API.
+The [package README](packages/beatmap-lens/README.md) owns public API documentation.
 
-1. A program consumes `.osu` text and receives deterministic, explainable evidence.
-2. A human reviews a target `t ± Xs` window with synchronized audio and a chosen visual speed.
+The Inspector's current priority is 4K–7K. File handling, media playback, human
+review, and the local service belong in `apps/inspector`. Use its
+[design guide](apps/inspector/DESIGN.md) for frontend changes. Share scene projection
+with the package; keep visual scroll speed separate from audio playback rate.
+Intelligent assistance for mappers is a product direction, not a claim that an
+editing assistant already exists.
 
-The parse, normalize, in-memory archive/resource model, scene, and SVG foundation exist today.
-Playback and the interactive review loop remain planned and must stay labeled as planned.
+Annotation development combines whole-chart discovery with selected-section
+judgments. Put production orchestration in `annotation/pipeline`, deterministic
+inspection in `harness`, evaluation in `annotation/evaluation`, and natural-chart
+learning in `annotation/learning`. Worker instructions live in `annotation/roles`;
+repository skills live in `.agents/skills`. `scripts/` is for repository maintenance.
+Do not narrow the package's support range to match an annotation campaign.
 
-## Key-count boundary
+Paired Pulsefield development is supported. Pass dataset, checkout, and runtime
+locations through the supported configuration or CLI options. Keep Pulsefield
+model execution and training code in that repository. Do not introduce format
+adapters without a concrete consumer need.
 
-- The publishable package supports every integer key count from 4K through 10K.
-- The Inspector's first-priority product and acceptance range is 4K-7K.
-- App priorities must not narrow package models, geometry, diagnostics, or tests to 4K-7K.
-- All package stages and tests must preserve the full 4K-10K range.
+## Changes and documentation
 
-## Architecture rules
+- Treat valid `.osu` files as the baseline. Add malformed-input handling only for
+  an explicit requirement or demonstrated problem.
+- Prefer direct data flow, small focused functions, and minimal state.
+- Test the supported behavior and meaningful boundary that changed. Performance
+  complexity needs measured evidence.
+- Keep public documentation in English and self-contained. Put reusable operation
+  guides in `docs/annotation`, research findings and limitations in `docs/research`,
+  and durable design choices in `docs/decisions`.
+- Local datasets, generated runs, and unfinished research notes belong outside
+  version control. The [agent-notes skill](.agents/skills/agent-notes/SKILL.md)
+  supports local working records; it is not required for every edit.
+- Publish useful research conclusions that explain skill iteration. Private run
+  links and complete historical execution records are not required public evidence.
+- A package behavior change needs a Changeset describing its effect, including a
+  breaking change when applicable. Documentation and repository maintenance need
+  no Changeset unless they alter the published package. Directory migrations do
+  not require old command aliases or compatibility shims.
 
-- `packages/beatmap-lens` is the only publishable package.
-- The public root export is curated. Internal convenience helpers are not public by default.
-- Core APIs accept strings and objects. Filesystem, upload, Blob URL, and media-element behavior
-  belong at an application boundary.
-- Parser, normalized chart, findings, render scene, and serializer are separate data boundaries.
-- Key count is chart data. Do not create separate public pipelines or model variants for individual
-  supported key counts.
-- One scene projection should feed browser rendering and SVG serialization. Do not create a second
-  note-geometry implementation in an app.
-- Keep archive resource policy explicit on each load operation. Add a longer-lived coordinator only
-  when a real consumer needs shared state or lifecycle management. Any future cache must be
-  measured, bounded, and explicitly releasable.
-- Visual falling speed and audio playback rate are independent. The browser media clock owns
-  playback time.
-- Findings must remain explainable through rule, severity, note, time, and source locations. Do not
-  replace them with an unexplained total score.
-- Do not add a package, adapter, plugin system, or rendering backend for a hypothetical consumer.
-
-A new published package needs a second real consumer, its own runtime or dependency boundary, and an
-independent release lifecycle. A folder name is not a package boundary.
-
-## Changes
-
-- Add or update tests at the boundary being changed.
-- Keep public options honest. Do not expose a setting that the implementation ignores.
-- Prefer structured results and discriminated types over string protocols.
-- Include benchmark evidence when performance is the reason for added complexity.
-- Keep local corpus data private. Pass paths at runtime and do not commit filenames or reports.
-- Keep project documentation in English and separate current behavior from direction.
-
-For a public behavior change, include compatibility notes and a Changeset. Documentation-only and
-repository-maintenance changes do not need one unless they alter the published package.
+Do not change approved Foundation semantics or reinterpret a human annotation as
+part of directory cleanup, tooling maintenance, or an agent-only conclusion.
+Keep the label and its human authority separate from a proposed explanation.
 
 ## Verification
 
-```bash
+Run the checks relevant to the changed behavior, then the repository check before
+merging:
+
+```sh
 pnpm check
 ```
 
-The root check covers source formatting, types, tests, builds, package contents, and the corpus
-validator privacy smoke test.
+This includes source checks, types, tests, builds, and package validation. The
+[annotation regression gate](annotation/evaluation/README.md) separately governs
+changes to judgment instructions, roles, and harness behavior. Critical previous
+cases must remain correct; broader cases require repeated comparison and explicit
+review of regressions. Passing code tests or a shorter skill does not establish
+better agent judgment.
 
 ## License
 

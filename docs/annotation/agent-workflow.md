@@ -45,61 +45,25 @@ assessment. Overlapping sections and mixed sections are allowed; overlaps do not
 create independent training examples. `exemplarRole` records a calibration use
 separately from the concept judgment.
 
-## Experimental campaign vocabulary
+## Vocabulary and authority
 
-Section predicates and selected whole-difficulty community targets are separate
-vocabularies. `Foundation.tags` contains only section predicates. The first consumer
-wants a small experiment for recognizable style learning and generation control;
-see the [experimental supervision decision](decisions/0005-experimental-style-supervision.md).
-The earlier nine-concept set is calibration history, not a required size or a final
-model inventory. Exact chart descriptors help explain claims without each becoming
-another manually annotated target. Style observations do not directly label demand
-state or continuation-response values.
+The annotation workflow uses the approved Jack, Stream, Trill, Tech, and LN
+coordination definitions carried by the task's Foundation. Read the
+[judgment guide](../../.agents/skills/mania-pattern-judgment/references/judgment-guide.md)
+for interpretation and the [design decisions](../decisions/0006-query-assisted-style-recognition.md)
+for the rationale behind the selected vocabulary. A proposed template or documented
+research hypothesis does not acquire approval by being loaded into a task.
 
-The first expert calibration identified incorrect episode scopes and conflated
-pattern types in the historical nine-concept proposal. That proposal remains
-**proposed**, not approved.
-Use the [expert judgment guide](../skills/mania-pattern-judgment/references/judgment-guide.md)
-and [compositional framework proposal](decisions/0004-compositional-pattern-judgments.md)
-when revising it; the initial factory is not sufficient semantic authority for
-human-confirmed observations.
+Section predicates and whole-difficulty community tags have different scopes.
+Community tags can guide discovery; they do not locate or prove section judgments.
+In particular, the local Tech concept is not an alias for a community complex-snap
+tag, an exclusive category, or a fallback for passages that lack other labels.
+Source facts support a judgment; agent agreement cannot approve a semantic change.
 
-The first pilot used Jack organization, Stream organization, Tech, and LN
-coordination. The user approved the four-dimension Foundation and the ten reviewed
-calibration cases with explicit corrections. Revision 2 includes roll/burst in
-Stream organization and excludes the reviewed grouped jumptrill; three consecutive
-complete four-note directional roll groups establish prominent roll structure,
-without automatically establishing prominent Stream style. The current
-[V2 corpus campaign](corpus-annotation.md) adds approved Trill organization as its
-fifth section target. Each task retains its actual frozen Foundation. Community
-whole-difficulty target selection and alignments remain separate proposals. Its
-[`experimental-campaign.ts`](../apps/inspector/src/annotation/workflow/experimental-campaign.ts)
-factory still creates an empty **proposed** template. Record approval on the actual
-reviewed source-backed snapshot; an empty template does not inherit approval. No
-community alignments are declared. The earlier nine-concept
-[`campaign.ts`](../apps/inspector/src/annotation/workflow/campaign.ts) remains as a
-historical proposal. Opening an existing task does not replace its Foundation.
-
-Each concept preserves a local ID and definition independently of any declared
-external catalogue correspondences, their relations, and scopes. The
-[official osu! catalogue](https://osu.ppy.sh/wiki/en/Beatmap/Beatmap_tags), checked
-2026-09-05, names difficulty-level community tags. A catalogue vote is a candidate
-search cue; it does not locate a section or prove its label.
-
-For osu!mania, the catalogue's `skillset/tech` emphasizes frequent complex snaps.
-The approved local Tech concept is broader: a positive must explain particular
-rhythmic, column, chord, or hold/release relationships that make the arrangement
-technical. It can coexist with streams, jacks, and LN concepts. It is not an alias
-of `tech/complex snap`, an exclusive category, or a fallback when other labels fail.
-Positive examples and near-misses must calibrate this broader boundary. Agent
-agreement cannot approve that boundary.
-
-Calibration examples preserve exact source bytes, source identity, the claim, and
-an explanation. A proposed example remains a proposal even when its assessment
-says `present`. Review the example and the local definition before approving the
-Foundation snapshot. Keep unresolved examples unresolved; their inclusion in a
-calibration set does not resolve them. Local corpus files, filenames, candidate
-indexes, and generated research reports stay outside version control.
+Preserve exact human assessments and their optional original comments. Missing
+human explanation does not license an agent rationale to become expert evidence.
+Use the [curator role](../../annotation/roles/curator.md) for actual semantic
+proposals outside routine labeling and audit.
 
 ## Persistent workspace and automatic delivery
 
@@ -108,17 +72,18 @@ sources and approved Foundation. Build the Inspector before serving it:
 
 ```sh
 pnpm --filter @pulsefield/beatmap-lens-inspector build
-pnpm review:workspace --workspace .local/review-pilot/workspace
+pnpm review:workspace --workspace .local/campaign/workspace
 ```
 
 The equivalent service command is
-`node scripts/review-workspace.mjs --workspace .local/review-pilot/workspace`.
+`node apps/inspector/server/review-workspace.mjs --workspace .local/campaign/workspace`.
 The fixed human page is **http://127.0.0.1:4176/review**. It displays incoming
 expert cases, explicit spot-check requests, ordinary agent review status, and saved
 human responses. Normal review requires no JSON import/export or directory picker.
 The selected chart's left rail shows difficulty-level community tags, per-tag votes,
 their sum, and the dataset snapshot date. The service reads metadata on demand from
-`../Pulsefield-model/dataset`; use `--dataset PATH` for another dataset root. These
+`PULSEFIELD_DATASET` or the configured Pulsefield checkout; use `--dataset PATH`
+for another dataset root. See [runtime configuration](corpus-annotation.md#local-inputs-and-runtime). These
 display-only tags are joined by beatmapset and beatmap IDs and are excluded from
 canonical review documents, frozen agent tasks, and agent feedback.
 The service keeps canonical documents in `workflow/*.v2.json` and exchange delivery
@@ -169,9 +134,9 @@ the human does not shuttle files between workers.
 The network endpoints are `GET /api/review/inbox`, `GET`/`POST
 /api/review/task/:sourceSha`, `POST /api/review/submit`, and `GET
 /api/review/dispositions/:sourceSha`. These agent commands expose no Foundation
-approval or human-observation mutation. See [the contracts](../apps/inspector/src/annotation/workflow/contracts.ts),
-[the CLI](../scripts/annotation-workflow.mjs), and
-[the local service](../scripts/review-workspace.mjs).
+approval or human-observation mutation. See [the contracts](../../apps/inspector/src/annotation/workflow/contracts.ts),
+[the CLI](../../apps/inspector/server/annotation-workflow.mjs), and
+[the local service](../../apps/inspector/server/review-workspace.mjs).
 
 ### Explicit spot-check requests
 
@@ -200,10 +165,9 @@ produce a semantic disagreement, or claim that the human requested the sample.
 Each actual human decision, including defer, resolves only that request member;
 other requested claims stay pending. The record of who requested the work remains.
 
-### Offline compatibility
+### File operations
 
-Offline evidence, sealing, and file readback remain available for reproducibility
-and external tools; they are not required human interaction steps:
+Evidence export, sealing, and file readback are also available to local tools:
 
 ```sh
 pnpm annotation:workflow -- evidence --task task.json --out section-evidence/ --start-ms 40000 --end-ms 44000
@@ -260,9 +224,7 @@ settled replacement. A later conflicting audit sends the current replacement to
 expert review; its superseded history remains available through the same lineage.
 
 New handoffs and independent audits require claims. A standalone semantic question
-belongs to the curator lane. Historical empty-proposal handoffs remain readable
-with their questions, but cannot become agent-reviewed through an empty audit.
-
+belongs to the curator lane.
 ### Independent audit
 
 An independent auditor reads the same frozen task and the original sealed labeler
@@ -362,48 +324,7 @@ transfer canonical history. Continue against the original persistent workspace.
 After human changes, use `fetch-task --fresh` for new proposals under current
 approved context while retaining old tasks, packets, and decisions unchanged.
 
-Role guides: [labeler](agent-roles/labeler.md), [auditor](agent-roles/auditor.md), and
-[curator](agent-roles/curator.md). The curator handles proposed semantic revisions
+Role guides: [labeler](../../annotation/roles/labeler.md), [auditor](../../annotation/roles/auditor.md), and
+[curator](../../annotation/roles/curator.md). The curator handles proposed semantic revisions
 outside routine labeling and auditing. It does not automatically rewrite a pinned
 Foundation or make community targets part of the section vocabulary.
-
-## V1 preservation and milestone boundary
-
-The existing **Annotate** mode and V1 dataset contracts retain their original
-meaning. V1 records are preserved without conversion. In particular, V1's numeric
-salience `1` and `2` are not silently reinterpreted as V2 supporting/prominent.
-Missing V1 labels do not acquire negative judgments, assessment coverage, or
-unreviewed claims. A later reinterpretation requires an explicit new human
-judgment; keeping source compatibility does not strengthen old supervision.
-
-Milestone 1 is demonstrated by saving and reopening a mixed section with two
-prominent positives, an explicit negative, an unresolved judgment, and an
-unreviewed dimension, preserving per-claim witnesses and necessary context.
-Foundation approval requires actual human review of the local semantics and
-initial calibration examples.
-
-The selected four-dimension pilot changes the concrete demonstration: two
-positives, one negative, and one unresolved judgment already occupy all four
-coordinates in one scope. Demonstrate an unreviewed dimension in a second scope
-and preserve its mask after reopening. The generic contract can still express all
-five cases together for a larger Foundation, as covered by protocol tests. Do not
-add an artificial fifth experimental target or report that one four-coordinate
-scope contains five independent assessment states.
-
-Milestone 2 additionally requires a real difficulty task, an external labeler's
-source-bound handoff, an independent audit that separates routine results from
-concrete expert questions, and retained human dispositions that the agent can
-read. Confirming some claims and deferring another must retain the original
-proposal through repeated exchanges. Automated fixtures demonstrate
-protocol behavior; they do not substitute for this human decision. The real
-partial-acceptance/deferral demonstration requires those dispositions to be
-actually saved and read back through the outbox. A small honest spot-check request
-can select supported claims for this human interaction; Foundation approval or
-machine agreement alone does not complete it.
-
-For a small manually bounded corpus batch, follow the
-[corpus annotation runbook](corpus-annotation.md). Corpus scheduling, selective
-V2 releases, semantic re-review after Foundation changes, and research split/exposure
-policy are later milestones. The V2 review
-workspace does not claim exhaustive difficulty coverage or research-release
-eligibility from a completed review interaction.
