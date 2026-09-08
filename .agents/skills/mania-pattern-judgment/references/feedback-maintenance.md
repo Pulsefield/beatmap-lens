@@ -27,7 +27,7 @@ frozen packets. Agent experiences remain hypotheses regardless of repetition.
 Run from the checkout:
 
 ```sh
-python3 skills/mania-pattern-judgment/scripts/check_budget.py
+python3 .agents/skills/mania-pattern-judgment/scripts/check_budget.py
 ```
 
 Limits include frontmatter, tables, and examples:

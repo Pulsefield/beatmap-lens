@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent Notes"
+  short_description: "Write and archive local research and decision notes"
+  default_prompt: "Use $agent-notes to record this decision and its evidence, preserving any already approved scope."

@@ -29,7 +29,7 @@
     "prevalidate:corpus": "pnpm --filter beatmap-lens build",
     "validate:corpus": "node scripts/validate-corpus.mjs",
     "version-packages": "changeset version",
-    "check:skill": "python3 skills/mania-pattern-judgment/scripts/check_budget.py"
+    "check:skill": "python3 .agents/skills/mania-pattern-judgment/scripts/check_budget.py"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.6",

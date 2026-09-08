@@ -1,7 +1,7 @@
 # Beatmap Lens exchange
 
 Use only for requested annotation delivery. Read the checkout's
-`docs/agent-workflow.md`, assigned `docs/agent-roles/` guide, and
+`docs/annotation/agent-workflow.md`, assigned `annotation/roles/` guide, and
 `apps/inspector/src/annotation/workflow/contracts.ts` for current commands/fields.
 The entrypoint is `pnpm annotation:workflow --`; use the task's server/workspace.
 Corpus learning does not require this submission workflow.

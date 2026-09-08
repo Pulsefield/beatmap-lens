@@ -65,8 +65,8 @@ and narrow it where it fails. Retain contradictions while continuing exploration
 
 ## Persistent experience
 
-Use the checkout's `scripts/beatmap-learning.py` (`--help`) and
-`docs/beatmap-learning.md` and `docs/beatmap-reading-framework.md` when available.
+Use the checkout's `annotation/learning/beatmap-learning.py` (`--help`) and
+`docs/annotation/beatmap-learning.md` and `docs/research/beatmap-reading-framework.md` when available.
 Portable studies can keep the same
 fields in a task-local record. One experience captures a reusable relationship,
 not a five-label prediction:
@@ -83,8 +83,8 @@ not a five-label prediction:
 | `updateReason` | Required when revising an existing identity; explain changed evidence or interpretation. |
 
 ```sh
-python scripts/beatmap-learning.py remember --bundle BUNDLE --memory MEMORY --input experience.json --producer ACTUAL_AGENT_ID
-python scripts/beatmap-learning.py recall --memory MEMORY --text motif --limit 5
+python annotation/learning/beatmap-learning.py remember --bundle BUNDLE --memory MEMORY --input experience.json --producer ACTUAL_AGENT_ID
+python annotation/learning/beatmap-learning.py recall --memory MEMORY --text motif --limit 5
 ```
 
 The writer binds source/human/community evidence and appends revisions marked

@@ -1,6 +1,6 @@
 # Structural queries
 
-Use `scripts/annotation-queries.py --help` for factual queries against one chart's
+Use `harness/annotation-queries.py --help` for factual queries against one chart's
 Parquet. NDJSON outputs contain provenance, records, counts, and approved
 necessary-condition negatives; they establish neither positive salience nor
 independent semantic audit. During learning, use source facts, not weak labels.
