@@ -1,0 +1,1191 @@
+{
+  "kind": "annotation-regression-cases-v1",
+  "snapshotDate": "2026-09-07",
+  "coverage": "selected-section-labeler",
+  "minimumRepeats": 3,
+  "authority": "Exact human assessments only. Generic confirmations and slash-only rationale establish labels, not independent source reasoning. Critical selection is the repository migration policy, not a new human annotation.",
+  "limits": [
+    "Development-exposed regression cases, not held-out generalization.",
+    "One human gold dimension per section; remaining predictions are mechanically checked but not semantic negatives.",
+    "Historical successful output receipts identify prior correct labels, not an adopted current production baseline.",
+    "Four Trill cases are newly protected human corrections without a prior benchmark result."
+  ],
+  "cases": [
+    {
+      "caseId": "case-01",
+      "sourceSha256": "e9203ca830122d9f0e7fe56361d9689675cfd8ce6afa810547131d854c092f3d",
+      "beatmapId": 4461841,
+      "title": "Brazil",
+      "scope": {
+        "endMs": 3009,
+        "startMs": 1664
+      },
+      "reviewContext": {
+        "endMs": 3548,
+        "startMs": 857
+      },
+      "gold": {
+        "tech": {
+          "presence": "absent"
+        }
+      },
+      "critical": true,
+      "selectionReason": "Ordinary changing chords must not imply Tech.",
+      "human": {
+        "decisionId": "8eec9022-a62a-47ca-bd39-53bf681a3e36",
+        "claimId": "c-chords-no-tech",
+        "disposition": "accepted",
+        "rationale": "Human confirmed the original proposal.",
+        "rationaleOrigin": "decision.rationale",
+        "feedbackSha256": "c9d165e0482be870f013b115aa3ef3e8c9144570692c3246bbaf5e455cd325e2"
+      },
+      "previouslyCorrect": [
+        {
+          "run": "annotation-benchmark-20260907/new-skill-a",
+          "responseSha256": "472c53bf59325580ec48909b6a65ec3d7cf32ad7b97769f3c48de1a6210d518e"
+        },
+        {
+          "run": "annotation-benchmark-20260907/new-skill-b",
+          "responseSha256": "71f6378d8743217f38aa95fb80056926b3c2010a11416a906751e17e03cba367"
+        },
+        {
+          "run": "annotation-benchmark-20260907/old-skill",
+          "responseSha256": "d1e9f86821d0700d0bd418b8f38d4e800c86ec43f6912f435bad800742e7054e"
+        },
+        {
+          "run": "harness-benchmark-20260907/fixed-evidence",
+          "responseSha256": "ac7ae739ec2cfad5a26f25e2860f5ea81b4ff41df983f7a7f349e8ea95c227b3"
+        },
+        {
+          "run": "harness-benchmark-20260907/harness-a",
+          "responseSha256": "35b21205a959b2570441a367e60b0b88aed579273ca0d7a7f1dc92455803fd2f"
+        },
+        {
+          "run": "harness-benchmark-20260907/harness-b",
+          "responseSha256": "f22ca51cf258173e8362e1fb5da0b6ffbf94676547615e845890170469417227"
+        }
+      ]
+    },
+    {
+      "caseId": "case-02",
+      "sourceSha256": "8247319686f4d0ec98c8fd80a6a7812dfd7cc62480f7317a7b8bcf8f503046a9",
+      "beatmapId": 1660802,
+      "title": "Mazare Party",
+      "scope": {
+        "endMs": 56676,
+        "startMs": 54426
+      },
+      "reviewContext": {
+        "endMs": 57076,
+        "startMs": 54026
+      },
+      "gold": {
+        "tech": {
+          "presence": "absent"
+        }
+      },
+      "critical": false,
+      "selectionReason": "Repeated comparison case from the existing human-reviewed pilot.",
+      "human": {
+        "decisionId": "634953b9-1a77-4c51-8160-171ef5668ae4",
+        "claimId": "c5-4-tech",
+        "disposition": "accepted",
+        "rationale": "Human confirmed the original proposal.",
+        "rationaleOrigin": "decision.rationale",
+        "feedbackSha256": "03bc5ede08892e98db7700d8fcfd460b56ffce33f891373509c83260536a8659"
+      },
+      "previouslyCorrect": [
+        {
+          "run": "annotation-benchmark-20260907/new-skill-a",
+          "responseSha256": "472c53bf59325580ec48909b6a65ec3d7cf32ad7b97769f3c48de1a6210d518e"
+        },
+        {
+          "run": "annotation-benchmark-20260907/new-skill-b",
+          "responseSha256": "71f6378d8743217f38aa95fb80056926b3c2010a11416a906751e17e03cba367"
+        },
+        {
+          "run": "annotation-benchmark-20260907/old-skill",
+          "responseSha256": "d1e9f86821d0700d0bd418b8f38d4e800c86ec43f6912f435bad800742e7054e"
+        },
+        {
+          "run": "harness-benchmark-20260907/fixed-evidence",
+          "responseSha256": "ac7ae739ec2cfad5a26f25e2860f5ea81b4ff41df983f7a7f349e8ea95c227b3"
+        },
+        {
+          "run": "harness-benchmark-20260907/harness-a",
+          "responseSha256": "35b21205a959b2570441a367e60b0b88aed579273ca0d7a7f1dc92455803fd2f"
+        },
+        {
+          "run": "harness-benchmark-20260907/harness-b",
+          "responseSha256": "f22ca51cf258173e8362e1fb5da0b6ffbf94676547615e845890170469417227"
+        }
+      ]
+    },
+    {
+      "caseId": "case-03",
+      "sourceSha256": "1a715ad0d64803be90b974b8436f2a14e5272336cd645dcb960012b86a3153b1",
+      "beatmapId": 1040757,
+      "title": "Pumpin' Junkies",
+      "scope": {
+        "endMs": 19930,
+        "startMs": 16219
+      },
+      "reviewContext": {
+        "endMs": 20430,
+        "startMs": 15719
+      },
+      "gold": {
+        "tech": {
+          "presence": "absent"
+        }
+      },
+      "critical": false,
+      "selectionReason": "Repeated comparison case from the existing human-reviewed pilot.",
+      "human": {
+        "decisionId": "cbe22036-ea34-43a3-855d-31d0f7bf256a",
+        "claimId": "c1-7",
+        "disposition": "accepted",
+        "rationale": "Human confirmed the original proposal.",
+        "rationaleOrigin": "decision.rationale",
+        "feedbackSha256": "c200dbf3ee6c42780c1b8b0ac83d0dc9e0fb42f7e875acaf5c0cbc70af66c355"
+      },
+      "previouslyCorrect": [
+        {
+          "run": "annotation-benchmark-20260907/new-skill-a",
+          "responseSha256": "472c53bf59325580ec48909b6a65ec3d7cf32ad7b97769f3c48de1a6210d518e"
+        },
+        {
+          "run": "annotation-benchmark-20260907/new-skill-b",
+          "responseSha256": "71f6378d8743217f38aa95fb80056926b3c2010a11416a906751e17e03cba367"
+        },
+        {
+          "run": "annotation-benchmark-20260907/old-skill",
+          "responseSha256": "d1e9f86821d0700d0bd418b8f38d4e800c86ec43f6912f435bad800742e7054e"
+        },
+        {
+          "run": "harness-benchmark-20260907/fixed-evidence",
+          "responseSha256": "ac7ae739ec2cfad5a26f25e2860f5ea81b4ff41df983f7a7f349e8ea95c227b3"
+        },
+        {
+          "run": "harness-benchmark-20260907/harness-a",
+          "responseSha256": "35b21205a959b2570441a367e60b0b88aed579273ca0d7a7f1dc92455803fd2f"
+        },
+        {
+          "run": "harness-benchmark-20260907/harness-b",
+          "responseSha256": "f22ca51cf258173e8362e1fb5da0b6ffbf94676547615e845890170469417227"
+        }
+      ]
+    },
+    {
+      "caseId": "case-04",
+      "sourceSha256": "ece7388da5337b0cf836f808db2e6b651d7c17095cca1495a05806833e4dac99",
+      "beatmapId": 4791432,
+      "title": "A Fool Moon Night",
+      "scope": {
+        "endMs": 243576,
+        "startMs": 240749
+      },
+      "reviewContext": {
+        "endMs": 244076,
+        "startMs": 240249
+      },
+      "gold": {
+        "tech": {
+          "presence": "present",
+          "salience": "supporting"
+        }
+      },
+      "critical": true,
+      "selectionReason": "Previously correct supporting Tech became prominent in later pilot runs.",
+      "human": {
+        "decisionId": "f11c6ab7-e963-4dc6-bc52-09d8bd3d15d7",
+        "claimId": "c9-4",
+        "disposition": "accepted",
+        "rationale": "Human confirmed the original proposal.",
+        "rationaleOrigin": "decision.rationale",
+        "feedbackSha256": "81699242266e38ebd1ef09e924b991c2fb32c5cf9879aa100d49e1868f408cf3"
+      },
+      "previouslyCorrect": [
+        {
+          "run": "annotation-benchmark-20260907/old-skill",
+          "responseSha256": "d1e9f86821d0700d0bd418b8f38d4e800c86ec43f6912f435bad800742e7054e"
+        }
+      ]
+    },
+    {
+      "caseId": "case-05",
+      "sourceSha256": "48becb6ae141b18562e17de67239ee0a38f9bd424ddf1acc5567c9a5f0dee04f",
+      "beatmapId": 4208924,
+      "title": "Senbonzakura (Camellia's \"KAIKASENGEN\" Remix) [Uncut Version]",
+      "scope": {
+        "endMs": 175704,
+        "startMs": 173990
+      },
+      "reviewContext": {
+        "endMs": 176204,
+        "startMs": 173490
+      },
+      "gold": {
+        "tech": {
+          "presence": "present",
+          "salience": "supporting"
+        }
+      },
+      "critical": false,
+      "selectionReason": "Repeated comparison case from the existing human-reviewed pilot.",
+      "human": {
+        "decisionId": "68c64720-1c30-4750-8e39-457f87c9e427",
+        "claimId": "c2-4",
+        "disposition": "accepted",
+        "rationale": "Human confirmed the original proposal.",
+        "rationaleOrigin": "decision.rationale",
+        "feedbackSha256": "4ccf2d087c3eb1321f4f80d29e825f4d2b3957f3d229f6665c7c529c458ff6a4"
+      },
+      "previouslyCorrect": []
+    },
+    {
+      "caseId": "case-06",
+      "sourceSha256": "c4cad1f8b55f608be51e3a747f5305ac09ca42a7c9ab9808e498f503465e3fde",
+      "beatmapId": 4871228,
+      "title": "Good Luck, Babe!",
+      "scope": {
+        "endMs": 131252,
+        "startMs": 128423
+      },
+      "reviewContext": {
+        "endMs": 131852,
+        "startMs": 127823
+      },
+      "gold": {
+        "tech": {
+          "presence": "present",
+          "salience": "supporting"
+        }
+      },
+      "critical": false,
+      "selectionReason": "Repeated comparison case from the existing human-reviewed pilot.",
+      "human": {
+        "decisionId": "85d0f521-89a1-41f8-90c6-8065883dc088",
+        "claimId": "c12-3-tech",
+        "disposition": "accepted",
+        "rationale": "Human confirmed the original proposal.",
+        "rationaleOrigin": "decision.rationale",
+        "feedbackSha256": "75b358c0c53d9b2c6dce93655cfba077adec164544d2786da2d6b867a86498e5"
+      },
+      "previouslyCorrect": []
+    },
+    {
+      "caseId": "case-07",
+      "sourceSha256": "5baa73d5a65dd3b6c9568e3901e12c7cf2c0817e014a1de76447cbda3cc63c42",
+      "beatmapId": 1403050,
+      "title": "Airborne Robots",
+      "scope": {
+        "endMs": 149858,
+        "startMs": 147608
+      },
+      "reviewContext": {
+        "endMs": 150258,
+        "startMs": 147208
+      },
+      "gold": {
+        "tech": {
+          "presence": "present",
+          "salience": "supporting"
+        }
+      },
+      "critical": false,
+      "selectionReason": "Repeated comparison case from the existing human-reviewed pilot.",
+      "human": {
+        "decisionId": "3a444fe9-a70d-4f0e-bfd8-1d46aebed5fe",
+        "claimId": "c5-4-tech",
+        "disposition": "accepted",
+        "rationale": "Human confirmed the original proposal.",
+        "rationaleOrigin": "decision.rationale",
+        "feedbackSha256": "48bf1dcd0d0f59b216b44303181db1028817ed12e2445a571204aea9ceef726c"
+      },
+      "previouslyCorrect": []
+    },
+    {
+      "caseId": "case-08",
+      "sourceSha256": "89b1abfb1aeb5c187274f7a04df2803be7e3bd44d1412a5286617e4d0bc14530",
+      "beatmapId": 2709106,
+      "title": "Revenge (feat. CaptainSparklez) (ReeK's \"Dude, What's A Genre?\" Remix)",
+      "scope": {
+        "endMs": 243206,
+        "startMs": 240394
+      },
+      "reviewContext": {
+        "endMs": 243706,
+        "startMs": 239894
+      },
+      "gold": {
+        "tech": {
+          "presence": "present",
+          "salience": "prominent"
+        }
+      },
+      "critical": true,
+      "selectionReason": "Explicit human correction establishes prominent Tech.",
+      "human": {
+        "decisionId": "fe46a6ad-cd80-4856-8cbb-a19bed27aa5f",
+        "claimId": "c3-5",
+        "disposition": "modified",
+        "rationale": "/",
+        "rationaleOrigin": "decision.rationale",
+        "feedbackSha256": "2eede2469dc2f21e4d4afbc4de734e487a9fab109c79de28d92a8b8d54ffb0b4"
+      },
+      "previouslyCorrect": [
+        {
+          "run": "annotation-benchmark-20260907/new-skill-a",
+          "responseSha256": "472c53bf59325580ec48909b6a65ec3d7cf32ad7b97769f3c48de1a6210d518e"
+        },
+        {
+          "run": "annotation-benchmark-20260907/new-skill-b",
+          "responseSha256": "71f6378d8743217f38aa95fb80056926b3c2010a11416a906751e17e03cba367"
+        },
+        {
+          "run": "harness-benchmark-20260907/fixed-evidence",
+          "responseSha256": "ac7ae739ec2cfad5a26f25e2860f5ea81b4ff41df983f7a7f349e8ea95c227b3"
+        },
+        {
+          "run": "harness-benchmark-20260907/harness-a",
+          "responseSha256": "35b21205a959b2570441a367e60b0b88aed579273ca0d7a7f1dc92455803fd2f"
+        },
+        {
+          "run": "harness-benchmark-20260907/harness-b",
+          "responseSha256": "f22ca51cf258173e8362e1fb5da0b6ffbf94676547615e845890170469417227"
+        }
+      ]
+    },
+    {
+      "caseId": "case-09",
+      "sourceSha256": "c90c921cbac165c0842880a0ce2195bec5c7cc2f118b8360537545503f0d5c8e",
+      "beatmapId": 4283840,
+      "title": "Onus Regulus",
+      "scope": {
+        "endMs": 50159,
+        "startMs": 49260
+      },
+      "reviewContext": {
+        "endMs": 50759,
+        "startMs": 48660
+      },
+      "gold": {
+        "jack-organization": {
+          "presence": "present",
+          "salience": "prominent"
+        }
+      },
+      "critical": true,
+      "selectionReason": "Prominent Jack anchor.",
+      "human": {
+        "decisionId": "8e16e8e3-1427-42ba-ab6a-bdbcc843885e",
+        "claimId": "c09-01",
+        "disposition": "accepted",
+        "rationale": "Human confirmed the original proposal.",
+        "rationaleOrigin": "decision.rationale",
+        "feedbackSha256": "cfd0e3a2d490dd5292a5c482975f5054b319aee20b2e1d74485947cf4a77c5d2"
+      },
+      "previouslyCorrect": [
+        {
+          "run": "annotation-benchmark-20260907/new-skill-a",
+          "responseSha256": "472c53bf59325580ec48909b6a65ec3d7cf32ad7b97769f3c48de1a6210d518e"
+        },
+        {
+          "run": "annotation-benchmark-20260907/new-skill-b",
+          "responseSha256": "71f6378d8743217f38aa95fb80056926b3c2010a11416a906751e17e03cba367"
+        },
+        {
+          "run": "annotation-benchmark-20260907/old-skill",
+          "responseSha256": "d1e9f86821d0700d0bd418b8f38d4e800c86ec43f6912f435bad800742e7054e"
+        },
+        {
+          "run": "harness-benchmark-20260907/fixed-evidence",
+          "responseSha256": "ac7ae739ec2cfad5a26f25e2860f5ea81b4ff41df983f7a7f349e8ea95c227b3"
+        },
+        {
+          "run": "harness-benchmark-20260907/harness-a",
+          "responseSha256": "35b21205a959b2570441a367e60b0b88aed579273ca0d7a7f1dc92455803fd2f"
+        },
+        {
+          "run": "harness-benchmark-20260907/harness-b",
+          "responseSha256": "f22ca51cf258173e8362e1fb5da0b6ffbf94676547615e845890170469417227"
+        }
+      ]
+    },
+    {
+      "caseId": "case-10",
+      "sourceSha256": "3cd962c9e72b21caf941a3c215bdfe0e93535822703cc17c6562490c288caeb2",
+      "beatmapId": 659239,
+      "title": "Mario Paint (Time Regression Mix for BMS)",
+      "scope": {
+        "endMs": 84575,
+        "startMs": 83607
+      },
+      "reviewContext": {
+        "endMs": 84975,
+        "startMs": 83207
+      },
+      "gold": {
+        "jack-organization": {
+          "presence": "absent"
+        }
+      },
+      "critical": true,
+      "selectionReason": "Negative Jack contrast.",
+      "human": {
+        "decisionId": "dd2c246f-7b2b-4e41-b0fa-fe6edc8583d7",
+        "claimId": "c0-3-jack-organization",
+        "disposition": "accepted",
+        "rationale": "Human confirmed the original proposal.",
+        "rationaleOrigin": "decision.rationale",
+        "feedbackSha256": "272d06c4c9db5c2a78aed97a3217a35f9f74e88c7ad0b643825158cb7bd0e009"
+      },
+      "previouslyCorrect": [
+        {
+          "run": "annotation-benchmark-20260907/new-skill-a",
+          "responseSha256": "472c53bf59325580ec48909b6a65ec3d7cf32ad7b97769f3c48de1a6210d518e"
+        },
+        {
+          "run": "annotation-benchmark-20260907/new-skill-b",
+          "responseSha256": "71f6378d8743217f38aa95fb80056926b3c2010a11416a906751e17e03cba367"
+        },
+        {
+          "run": "annotation-benchmark-20260907/old-skill",
+          "responseSha256": "d1e9f86821d0700d0bd418b8f38d4e800c86ec43f6912f435bad800742e7054e"
+        },
+        {
+          "run": "harness-benchmark-20260907/fixed-evidence",
+          "responseSha256": "ac7ae739ec2cfad5a26f25e2860f5ea81b4ff41df983f7a7f349e8ea95c227b3"
+        },
+        {
+          "run": "harness-benchmark-20260907/harness-a",
+          "responseSha256": "35b21205a959b2570441a367e60b0b88aed579273ca0d7a7f1dc92455803fd2f"
+        },
+        {
+          "run": "harness-benchmark-20260907/harness-b",
+          "responseSha256": "f22ca51cf258173e8362e1fb5da0b6ffbf94676547615e845890170469417227"
+        }
+      ]
+    },
+    {
+      "caseId": "case-11",
+      "sourceSha256": "d4ec78823737c03c2e8702873bcbb2f1998e1be829e1998fe3e7ffa37075f02c",
+      "beatmapId": 2438522,
+      "title": "Singularity",
+      "scope": {
+        "endMs": 107943,
+        "startMs": 105114
+      },
+      "reviewContext": {
+        "endMs": 108443,
+        "startMs": 104614
+      },
+      "gold": {
+        "stream-organization": {
+          "presence": "present",
+          "salience": "prominent"
+        }
+      },
+      "critical": true,
+      "selectionReason": "Prominent Stream anchor.",
+      "human": {
+        "decisionId": "21f7db9c-3642-450b-9e30-e4b6a2c20eff",
+        "claimId": "d4ec7882-3",
+        "disposition": "accepted",
+        "rationale": "Human confirmed the original proposal.",
+        "rationaleOrigin": "decision.rationale",
+        "feedbackSha256": "677acd218036854500a3801a309d4b7a8e33a01f2805b34d04ac4d266e03e74f"
+      },
+      "previouslyCorrect": [
+        {
+          "run": "annotation-benchmark-20260907/new-skill-a",
+          "responseSha256": "472c53bf59325580ec48909b6a65ec3d7cf32ad7b97769f3c48de1a6210d518e"
+        },
+        {
+          "run": "annotation-benchmark-20260907/new-skill-b",
+          "responseSha256": "71f6378d8743217f38aa95fb80056926b3c2010a11416a906751e17e03cba367"
+        },
+        {
+          "run": "annotation-benchmark-20260907/old-skill",
+          "responseSha256": "d1e9f86821d0700d0bd418b8f38d4e800c86ec43f6912f435bad800742e7054e"
+        },
+        {
+          "run": "harness-benchmark-20260907/fixed-evidence",
+          "responseSha256": "ac7ae739ec2cfad5a26f25e2860f5ea81b4ff41df983f7a7f349e8ea95c227b3"
+        },
+        {
+          "run": "harness-benchmark-20260907/harness-a",
+          "responseSha256": "35b21205a959b2570441a367e60b0b88aed579273ca0d7a7f1dc92455803fd2f"
+        },
+        {
+          "run": "harness-benchmark-20260907/harness-b",
+          "responseSha256": "f22ca51cf258173e8362e1fb5da0b6ffbf94676547615e845890170469417227"
+        }
+      ]
+    },
+    {
+      "caseId": "case-12",
+      "sourceSha256": "c3600d4ad75dab22717f0c781c36308ec7c21eb090bf81fb88d40086d4f52966",
+      "beatmapId": 774837,
+      "title": "over the top",
+      "scope": {
+        "endMs": 75496,
+        "startMs": 75086
+      },
+      "reviewContext": {
+        "endMs": 75996,
+        "startMs": 74586
+      },
+      "gold": {
+        "stream-organization": {
+          "presence": "present",
+          "salience": "supporting"
+        }
+      },
+      "critical": true,
+      "selectionReason": "Supporting Stream contrast.",
+      "human": {
+        "decisionId": "97e0d61d-3803-46c3-b1ab-2b0ba35afb8e",
+        "claimId": "c13-0",
+        "disposition": "accepted",
+        "rationale": "Human confirmed the original proposal.",
+        "rationaleOrigin": "decision.rationale",
+        "feedbackSha256": "e29b0ed2e301f3e4f17d2a73cc3e336fe9497903c6678bab879678355bda224d"
+      },
+      "previouslyCorrect": [
+        {
+          "run": "annotation-benchmark-20260907/new-skill-a",
+          "responseSha256": "472c53bf59325580ec48909b6a65ec3d7cf32ad7b97769f3c48de1a6210d518e"
+        },
+        {
+          "run": "annotation-benchmark-20260907/new-skill-b",
+          "responseSha256": "71f6378d8743217f38aa95fb80056926b3c2010a11416a906751e17e03cba367"
+        },
+        {
+          "run": "annotation-benchmark-20260907/old-skill",
+          "responseSha256": "d1e9f86821d0700d0bd418b8f38d4e800c86ec43f6912f435bad800742e7054e"
+        },
+        {
+          "run": "harness-benchmark-20260907/fixed-evidence",
+          "responseSha256": "ac7ae739ec2cfad5a26f25e2860f5ea81b4ff41df983f7a7f349e8ea95c227b3"
+        },
+        {
+          "run": "harness-benchmark-20260907/harness-a",
+          "responseSha256": "35b21205a959b2570441a367e60b0b88aed579273ca0d7a7f1dc92455803fd2f"
+        },
+        {
+          "run": "harness-benchmark-20260907/harness-b",
+          "responseSha256": "f22ca51cf258173e8362e1fb5da0b6ffbf94676547615e845890170469417227"
+        }
+      ]
+    },
+    {
+      "caseId": "case-13",
+      "sourceSha256": "9c3ddfb711f30253d74219dcd2c1178c0730006696f53586611b9adb3d381b51",
+      "beatmapId": 3379609,
+      "title": "Yatsume Ana",
+      "scope": {
+        "endMs": 48899,
+        "startMs": 47052
+      },
+      "reviewContext": {
+        "endMs": 49299,
+        "startMs": 46652
+      },
+      "gold": {
+        "stream-organization": {
+          "presence": "absent"
+        }
+      },
+      "critical": true,
+      "selectionReason": "Negative Stream contrast.",
+      "human": {
+        "decisionId": "40db1397-47ee-42f6-91de-ea987efce838",
+        "claimId": "c3-1",
+        "disposition": "accepted",
+        "rationale": "Human confirmed the original proposal.",
+        "rationaleOrigin": "decision.rationale",
+        "feedbackSha256": "b14d3fa1fc71aff92410fc6b514c10de4187df7c395cedc4fd4f58e2bdd7e0db"
+      },
+      "previouslyCorrect": [
+        {
+          "run": "annotation-benchmark-20260907/new-skill-a",
+          "responseSha256": "472c53bf59325580ec48909b6a65ec3d7cf32ad7b97769f3c48de1a6210d518e"
+        },
+        {
+          "run": "annotation-benchmark-20260907/new-skill-b",
+          "responseSha256": "71f6378d8743217f38aa95fb80056926b3c2010a11416a906751e17e03cba367"
+        },
+        {
+          "run": "annotation-benchmark-20260907/old-skill",
+          "responseSha256": "d1e9f86821d0700d0bd418b8f38d4e800c86ec43f6912f435bad800742e7054e"
+        },
+        {
+          "run": "harness-benchmark-20260907/fixed-evidence",
+          "responseSha256": "ac7ae739ec2cfad5a26f25e2860f5ea81b4ff41df983f7a7f349e8ea95c227b3"
+        },
+        {
+          "run": "harness-benchmark-20260907/harness-a",
+          "responseSha256": "35b21205a959b2570441a367e60b0b88aed579273ca0d7a7f1dc92455803fd2f"
+        },
+        {
+          "run": "harness-benchmark-20260907/harness-b",
+          "responseSha256": "f22ca51cf258173e8362e1fb5da0b6ffbf94676547615e845890170469417227"
+        }
+      ]
+    },
+    {
+      "caseId": "case-14",
+      "sourceSha256": "405a99248e61af8b2941b3d76c70e8488f523417c93f6f86c12f7318ee7d957c",
+      "beatmapId": 4569530,
+      "title": "Eviternity",
+      "scope": {
+        "endMs": 53977,
+        "startMs": 50137
+      },
+      "reviewContext": {
+        "endMs": 54577,
+        "startMs": 49537
+      },
+      "gold": {
+        "ln-coordination": {
+          "presence": "present",
+          "salience": "supporting"
+        }
+      },
+      "critical": true,
+      "selectionReason": "Supporting LN coordination anchor.",
+      "human": {
+        "decisionId": "28ab0421-79a9-4162-b7d0-7ac59f724e20",
+        "claimId": "c03-01-ln-coordination",
+        "disposition": "accepted",
+        "rationale": "Human confirmed the original proposal.",
+        "rationaleOrigin": "decision.rationale",
+        "feedbackSha256": "63d1529565a75fb837c9d36de9bd70336547314560cc26fe5e0ccb0e2936f854"
+      },
+      "previouslyCorrect": [
+        {
+          "run": "annotation-benchmark-20260907/new-skill-a",
+          "responseSha256": "472c53bf59325580ec48909b6a65ec3d7cf32ad7b97769f3c48de1a6210d518e"
+        },
+        {
+          "run": "annotation-benchmark-20260907/old-skill",
+          "responseSha256": "d1e9f86821d0700d0bd418b8f38d4e800c86ec43f6912f435bad800742e7054e"
+        },
+        {
+          "run": "harness-benchmark-20260907/fixed-evidence",
+          "responseSha256": "ac7ae739ec2cfad5a26f25e2860f5ea81b4ff41df983f7a7f349e8ea95c227b3"
+        },
+        {
+          "run": "harness-benchmark-20260907/harness-a",
+          "responseSha256": "35b21205a959b2570441a367e60b0b88aed579273ca0d7a7f1dc92455803fd2f"
+        },
+        {
+          "run": "harness-benchmark-20260907/harness-b",
+          "responseSha256": "f22ca51cf258173e8362e1fb5da0b6ffbf94676547615e845890170469417227"
+        }
+      ]
+    },
+    {
+      "caseId": "case-15",
+      "sourceSha256": "9c843466b31beee4fdc00a6b83ae4996a90d0d698587c21bfa667fa2a8ec1b5f",
+      "beatmapId": 4568556,
+      "title": "Android Girl feat. Hatsune Miku",
+      "scope": {
+        "endMs": 43845,
+        "startMs": 41344
+      },
+      "reviewContext": {
+        "endMs": 44445,
+        "startMs": 40744
+      },
+      "gold": {
+        "ln-coordination": {
+          "presence": "present",
+          "salience": "supporting"
+        }
+      },
+      "critical": false,
+      "selectionReason": "Repeated comparison case from the existing human-reviewed pilot.",
+      "human": {
+        "decisionId": "0867d929-42b7-46f2-8925-ff6dcb12d577",
+        "claimId": "c05-05",
+        "disposition": "accepted",
+        "rationale": "Human confirmed the original proposal.",
+        "rationaleOrigin": "decision.rationale",
+        "feedbackSha256": "af07a97066a4f75cd6085db219042f344ec5b69b3d420a3e682528a26a2f5e40"
+      },
+      "previouslyCorrect": [
+        {
+          "run": "harness-benchmark-20260907/harness-a",
+          "responseSha256": "35b21205a959b2570441a367e60b0b88aed579273ca0d7a7f1dc92455803fd2f"
+        },
+        {
+          "run": "harness-benchmark-20260907/harness-b",
+          "responseSha256": "f22ca51cf258173e8362e1fb5da0b6ffbf94676547615e845890170469417227"
+        }
+      ]
+    },
+    {
+      "caseId": "case-16",
+      "sourceSha256": "e2447044ce9cfeaf0011e5fcd1bf40dd3d8169e3ebe914d3a9ac3526eae0c893",
+      "beatmapId": 2054608,
+      "title": "Nanamori (youth Remix)",
+      "scope": {
+        "endMs": 129639,
+        "startMs": 127266
+      },
+      "reviewContext": {
+        "endMs": 130000,
+        "startMs": 127000
+      },
+      "gold": {
+        "ln-coordination": {
+          "presence": "absent"
+        }
+      },
+      "critical": true,
+      "selectionReason": "Negative LN coordination contrast.",
+      "human": {
+        "decisionId": "8a3142f4-f62a-4828-bfc5-d66bb7620488",
+        "claimId": "c14-06",
+        "disposition": "accepted",
+        "rationale": "Human confirmed the original proposal.",
+        "rationaleOrigin": "decision.rationale",
+        "feedbackSha256": "f274aab6915ea324962f499c7b19d5600cfffdc7fecbec5eae4db96674857e4d"
+      },
+      "previouslyCorrect": [
+        {
+          "run": "annotation-benchmark-20260907/new-skill-a",
+          "responseSha256": "472c53bf59325580ec48909b6a65ec3d7cf32ad7b97769f3c48de1a6210d518e"
+        },
+        {
+          "run": "annotation-benchmark-20260907/new-skill-b",
+          "responseSha256": "71f6378d8743217f38aa95fb80056926b3c2010a11416a906751e17e03cba367"
+        },
+        {
+          "run": "annotation-benchmark-20260907/old-skill",
+          "responseSha256": "d1e9f86821d0700d0bd418b8f38d4e800c86ec43f6912f435bad800742e7054e"
+        },
+        {
+          "run": "harness-benchmark-20260907/fixed-evidence",
+          "responseSha256": "ac7ae739ec2cfad5a26f25e2860f5ea81b4ff41df983f7a7f349e8ea95c227b3"
+        },
+        {
+          "run": "harness-benchmark-20260907/harness-a",
+          "responseSha256": "35b21205a959b2570441a367e60b0b88aed579273ca0d7a7f1dc92455803fd2f"
+        },
+        {
+          "run": "harness-benchmark-20260907/harness-b",
+          "responseSha256": "f22ca51cf258173e8362e1fb5da0b6ffbf94676547615e845890170469417227"
+        }
+      ]
+    },
+    {
+      "caseId": "probe-01",
+      "sourceSha256": "000662977cf314075da22600d2fbabbf140edc15791a5fc5dc473f2f64a58923",
+      "beatmapId": 4439839,
+      "title": "unravel",
+      "scope": {
+        "endMs": 134497,
+        "startMs": 132497
+      },
+      "reviewContext": {
+        "endMs": 134997,
+        "startMs": 131997
+      },
+      "gold": {
+        "tech": {
+          "presence": "present",
+          "salience": "supporting"
+        }
+      },
+      "critical": false,
+      "selectionReason": "Repeated comparison case from the existing human-reviewed pilot.",
+      "human": {
+        "decisionId": "1db960d9-bc10-4455-b712-94b9ba54e21f",
+        "claimId": "c0-1",
+        "disposition": "accepted",
+        "rationale": "Human confirmed the original proposal.",
+        "rationaleOrigin": "decision.rationale",
+        "feedbackSha256": "95e42307d3b9d4567af4d915be8d616358499e5d6342f0ccd48d4b0277fa759f"
+      },
+      "previouslyCorrect": []
+    },
+    {
+      "caseId": "probe-02",
+      "sourceSha256": "03aff5a29072115e809b14970a28c76499a051baf6fa8387dc8c0ab6ba4259f7",
+      "beatmapId": 4975492,
+      "title": "OOPARTS",
+      "scope": {
+        "endMs": 212708,
+        "startMs": 210998
+      },
+      "reviewContext": {
+        "endMs": 213200,
+        "startMs": 210377
+      },
+      "gold": {
+        "tech": {
+          "presence": "present",
+          "salience": "supporting"
+        }
+      },
+      "critical": false,
+      "selectionReason": "Repeated comparison case from the existing human-reviewed pilot.",
+      "human": {
+        "decisionId": "2c252372-cfb5-45ef-83eb-07a47acbb808",
+        "claimId": "split-attacks-211s",
+        "disposition": "accepted",
+        "rationale": "Human confirmed the original proposal.",
+        "rationaleOrigin": "decision.rationale",
+        "feedbackSha256": "65e018f95a56fae009e43a775b762a1fee035f5290e7fd60dc8214eed25137d9"
+      },
+      "previouslyCorrect": []
+    },
+    {
+      "caseId": "probe-03",
+      "sourceSha256": "219dbb277ba33ad9a5c80b4942c4b427c4bd1a7627c50b9894388c3e79e1478d",
+      "beatmapId": 3782005,
+      "title": "Rude Buster (Camellia Remix)",
+      "scope": {
+        "endMs": 194698,
+        "startMs": 192030
+      },
+      "reviewContext": {
+        "endMs": 195314,
+        "startMs": 191530
+      },
+      "gold": {
+        "tech": {
+          "presence": "present",
+          "salience": "supporting"
+        }
+      },
+      "critical": false,
+      "selectionReason": "Repeated comparison case from the existing human-reviewed pilot.",
+      "human": {
+        "decisionId": "1c58746e-c90c-4f15-82f0-ba8013f94267",
+        "claimId": "c1-6-tech",
+        "disposition": "accepted",
+        "rationale": "Human confirmed the original proposal.",
+        "rationaleOrigin": "decision.rationale",
+        "feedbackSha256": "2b12693b6402f98bfd9effb9dc88b1a114cad0a4550a9e356587c304c5ef777a"
+      },
+      "previouslyCorrect": [
+        {
+          "run": "harness-benchmark-20260907/harness-a",
+          "responseSha256": "35b21205a959b2570441a367e60b0b88aed579273ca0d7a7f1dc92455803fd2f"
+        },
+        {
+          "run": "harness-benchmark-20260907/harness-b",
+          "responseSha256": "f22ca51cf258173e8362e1fb5da0b6ffbf94676547615e845890170469417227"
+        }
+      ]
+    },
+    {
+      "caseId": "probe-04",
+      "sourceSha256": "47af5883dc74a9746146b20be5c8911bd74f8d56c06944bb64c80e0cffca2118",
+      "beatmapId": 4649487,
+      "title": "Search And Destroy",
+      "scope": {
+        "endMs": 318949,
+        "startMs": 316949
+      },
+      "reviewContext": {
+        "endMs": 319200,
+        "startMs": 316900
+      },
+      "gold": {
+        "tech": {
+          "presence": "present",
+          "salience": "supporting"
+        }
+      },
+      "critical": false,
+      "selectionReason": "Repeated comparison case from the existing human-reviewed pilot.",
+      "human": {
+        "decisionId": "a0840936-43cb-4b12-b301-f35bc4ce408f",
+        "claimId": "c2-4",
+        "disposition": "accepted",
+        "rationale": "Human confirmed the original proposal.",
+        "rationaleOrigin": "decision.rationale",
+        "feedbackSha256": "2dd9d2f93e0db88d804610312542466f687155be2f96df54887669da6bf8d4dc"
+      },
+      "previouslyCorrect": [
+        {
+          "run": "harness-benchmark-20260907/harness-a",
+          "responseSha256": "35b21205a959b2570441a367e60b0b88aed579273ca0d7a7f1dc92455803fd2f"
+        }
+      ]
+    },
+    {
+      "caseId": "probe-05",
+      "sourceSha256": "6f39948cc58ddce760488db2b0543fb395690a6ca18159c9ba9dc906ce1ee6ce",
+      "beatmapId": 3004962,
+      "title": "Your Soulmate -Undertale first anniversary medley-",
+      "scope": {
+        "endMs": 424177,
+        "startMs": 421284
+      },
+      "reviewContext": {
+        "endMs": 425034,
+        "startMs": 420534
+      },
+      "gold": {
+        "tech": {
+          "presence": "present",
+          "salience": "supporting"
+        }
+      },
+      "critical": false,
+      "selectionReason": "Repeated comparison case from the existing human-reviewed pilot.",
+      "human": {
+        "decisionId": "b4221ffe-6eb4-487b-a022-fc550b60e08d",
+        "claimId": "a-tech-offset",
+        "disposition": "accepted",
+        "rationale": "Human confirmed the original proposal.",
+        "rationaleOrigin": "decision.rationale",
+        "feedbackSha256": "85ece10c241d8e6e8100382e2b76b9c518d4db5fb7d00df4924f8ebc4766990c"
+      },
+      "previouslyCorrect": []
+    },
+    {
+      "caseId": "probe-06",
+      "sourceSha256": "73a872f0f08a60d1150901052493bac3d203ab45da94ee0be9caa72fa65432ba",
+      "beatmapId": 2476309,
+      "title": "Hysteric Night Girl feat. Such (android52 Edit)",
+      "scope": {
+        "endMs": 242366,
+        "startMs": 240960
+      },
+      "reviewContext": {
+        "endMs": 242835,
+        "startMs": 239085
+      },
+      "gold": {
+        "tech": {
+          "presence": "present",
+          "salience": "supporting"
+        }
+      },
+      "critical": false,
+      "selectionReason": "Repeated comparison case from the existing human-reviewed pilot.",
+      "human": {
+        "decisionId": "e219713e-ff91-4926-ba53-b522c3a0e66b",
+        "claimId": "c2-split-chord-tech",
+        "disposition": "accepted",
+        "rationale": "Human confirmed the original proposal.",
+        "rationaleOrigin": "decision.rationale",
+        "feedbackSha256": "09f9a29093edb6079704e080c6368f9f27b012215f0c2bbd0651c1cf493d52e3"
+      },
+      "previouslyCorrect": [
+        {
+          "run": "harness-benchmark-20260907/harness-a",
+          "responseSha256": "35b21205a959b2570441a367e60b0b88aed579273ca0d7a7f1dc92455803fd2f"
+        },
+        {
+          "run": "harness-benchmark-20260907/harness-b",
+          "responseSha256": "f22ca51cf258173e8362e1fb5da0b6ffbf94676547615e845890170469417227"
+        }
+      ]
+    },
+    {
+      "caseId": "probe-07",
+      "sourceSha256": "39fa8030239165860b37923a3d694c9aa346d343d65d5d89b742593870181053",
+      "beatmapId": 2073416,
+      "title": "Through the Fire and Flames",
+      "scope": {
+        "endMs": 341760,
+        "startMs": 340560
+      },
+      "reviewContext": {
+        "endMs": 342000,
+        "startMs": 340200
+      },
+      "gold": {
+        "tech": {
+          "presence": "absent"
+        }
+      },
+      "critical": false,
+      "selectionReason": "Repeated comparison case from the existing human-reviewed pilot.",
+      "human": {
+        "decisionId": "ce6abd4b-5e71-4a3f-8696-bec9e373b1ba",
+        "claimId": "short-hold-regularity",
+        "disposition": "accepted",
+        "rationale": "Human confirmed the original proposal.",
+        "rationaleOrigin": "decision.rationale",
+        "feedbackSha256": "df9d24502e5a45d045e295302efd5259f717b99243f83343320aa2f3a7bf4d35"
+      },
+      "previouslyCorrect": [
+        {
+          "run": "harness-benchmark-20260907/fixed-evidence",
+          "responseSha256": "ac7ae739ec2cfad5a26f25e2860f5ea81b4ff41df983f7a7f349e8ea95c227b3"
+        },
+        {
+          "run": "harness-benchmark-20260907/harness-a",
+          "responseSha256": "35b21205a959b2570441a367e60b0b88aed579273ca0d7a7f1dc92455803fd2f"
+        },
+        {
+          "run": "harness-benchmark-20260907/harness-b",
+          "responseSha256": "f22ca51cf258173e8362e1fb5da0b6ffbf94676547615e845890170469417227"
+        }
+      ]
+    },
+    {
+      "caseId": "probe-08",
+      "sourceSha256": "ef9118c7fc8f836fad7d768db0f606ebfd6af57f70f320191a8380a0127cefdc",
+      "beatmapId": 2399799,
+      "title": "Sesshoku (Cut Ver.)",
+      "scope": {
+        "endMs": 88872,
+        "startMs": 87341
+      },
+      "reviewContext": {
+        "endMs": 89026,
+        "startMs": 87188
+      },
+      "gold": {
+        "tech": {
+          "presence": "absent"
+        }
+      },
+      "critical": false,
+      "selectionReason": "Repeated comparison case from the existing human-reviewed pilot.",
+      "human": {
+        "decisionId": "caabee47-1a1f-49ab-955e-39c26e08b04e",
+        "claimId": "c-tech-coda",
+        "disposition": "accepted",
+        "rationale": "Human confirmed the original proposal.",
+        "rationaleOrigin": "decision.rationale",
+        "feedbackSha256": "b7a30006eb3455fa1a16d20eda7f726cd5cd48ebb6ea5119f80f01c94bf5229e"
+      },
+      "previouslyCorrect": []
+    },
+    {
+      "caseId": "trill-01",
+      "sourceSha256": "04c92e42f99b42efbca4f9f1183e94e17199fde141ebbc6eafc3446b238e37f9",
+      "beatmapId": 708015,
+      "title": "Grimoire of Crimson",
+      "scope": {
+        "endMs": 360380,
+        "startMs": 359532
+      },
+      "reviewContext": {
+        "endMs": 360600,
+        "startMs": 358900
+      },
+      "gold": {
+        "trill-organization": {
+          "presence": "absent"
+        }
+      },
+      "critical": true,
+      "selectionReason": "Explicit human Trill correction: stream context, supporting alternation, clear prominent episode, or sustained slow trill. Newly protected; no historical benchmark success asserted.",
+      "human": {
+        "decisionId": "ea86fbd1-72e8-4878-b061-3979c083cc30",
+        "claimId": "brief-alternation-359s",
+        "disposition": "modified",
+        "rationale": "This is definitely not trill because context is highly stream.",
+        "rationaleOrigin": "decision.rationale",
+        "feedbackSha256": "e7ab023f60dcbecd544f29291e24ab21ec8c4efd524143f7e5f60077d86bf7f1"
+      },
+      "previouslyCorrect": []
+    },
+    {
+      "caseId": "trill-02",
+      "sourceSha256": "0607e9981126b7955de112ce64ae9dd347c0c6edaaf20712649a1f0e65ab0e07",
+      "beatmapId": 2897720,
+      "title": "Lagtrain",
+      "scope": {
+        "endMs": 48640,
+        "startMs": 47414
+      },
+      "reviewContext": {
+        "endMs": 49200,
+        "startMs": 46800
+      },
+      "gold": {
+        "trill-organization": {
+          "presence": "present",
+          "salience": "supporting"
+        }
+      },
+      "critical": true,
+      "selectionReason": "Explicit human Trill correction: stream context, supporting alternation, clear prominent episode, or sustained slow trill. Newly protected; no historical benchmark success asserted.",
+      "human": {
+        "decisionId": "d5fc2cf3-c5be-4cf6-87bf-3f2ed53dfb64",
+        "claimId": "c0-2",
+        "disposition": "modified",
+        "rationale": "not typical 1-1 2-2 trill but regular alternation supports weak trill",
+        "rationaleOrigin": "decision.rationale",
+        "feedbackSha256": "f950ef9749c870dc6bee2740bcc831cabba8e2db6878392a9d2e45ac899c764c"
+      },
+      "previouslyCorrect": []
+    },
+    {
+      "caseId": "trill-03",
+      "sourceSha256": "1e7b2d44af5ceef3051874b791f976cf89953f915c835f6acc61c567e11bea90",
+      "beatmapId": 4663015,
+      "title": "za kazdym razem (kyoto Frenchcore Remix) (Sped Up Ver.)",
+      "scope": {
+        "endMs": 68902,
+        "startMs": 68640
+      },
+      "reviewContext": {
+        "endMs": 69402,
+        "startMs": 68140
+      },
+      "gold": {
+        "trill-organization": {
+          "presence": "present",
+          "salience": "prominent"
+        }
+      },
+      "critical": true,
+      "selectionReason": "Explicit human Trill correction: stream context, supporting alternation, clear prominent episode, or sustained slow trill. Newly protected; no historical benchmark success asserted.",
+      "human": {
+        "decisionId": "af57df97-32a8-4071-a400-b91e5cd7841c",
+        "claimId": "c00-03",
+        "disposition": "modified",
+        "rationale": "this is a clearly seperated trill section with 5 rows.",
+        "rationaleOrigin": "decision.rationale",
+        "feedbackSha256": "c2afad304a4a1e3e5c0f1a095667b3237fab12789806561a4aecdd2406642b57"
+      },
+      "previouslyCorrect": []
+    },
+    {
+      "caseId": "trill-04",
+      "sourceSha256": "d5dc4e0f187b35f803ed3d86cff4f2420559098ee14bc8076d70c633800327ba",
+      "beatmapId": 2272532,
+      "title": "Caravan",
+      "scope": {
+        "endMs": 460548,
+        "startMs": 448389
+      },
+      "reviewContext": {
+        "endMs": 462600,
+        "startMs": 447900
+      },
+      "gold": {
+        "trill-organization": {
+          "presence": "present",
+          "salience": "supporting"
+        }
+      },
+      "critical": true,
+      "selectionReason": "Explicit human Trill correction: stream context, supporting alternation, clear prominent episode, or sustained slow trill. Newly protected; no historical benchmark success asserted.",
+      "human": {
+        "decisionId": "43a32281-d2a7-450b-9bf8-82ac40e10fd9",
+        "claimId": "outer-single-trill-slow-trill-organization",
+        "disposition": "modified",
+        "rationale": "slow trill",
+        "rationaleOrigin": "decision.rationale",
+        "feedbackSha256": "494efa5cd7e5b262d4f0c5bbe2699666b9bd7c322574280f3278e9a89f526f2b"
+      },
+      "previouslyCorrect": []
+    }
+  ]
+}
