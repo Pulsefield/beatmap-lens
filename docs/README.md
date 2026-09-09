@@ -34,6 +34,8 @@ lives in the [judgment skill](../.agents/skills/mania-pattern-judgment/SKILL.md)
   counterexamples, and unresolved distinctions behind the reading workflow.
 - [Annotation performance](research/annotation-performance.md): measured resource
   behavior and its limits.
+- [Annotation context control](research/annotation-context-control.md): observed
+  worker isolation, repeated inputs, and the missing comparison of judgment quality.
 - [Annotation balance](research/annotation-balance.md): human-supervision gaps,
   difficulty coverage, and section-boundary selection biases.
 - [Style across playback rates](research/rate-style-response.md): fixed-section
