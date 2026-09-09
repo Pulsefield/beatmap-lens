@@ -61,6 +61,4 @@ jobs:
         run: uv sync --locked
 
       - name: Run checks
-        env:
-          ANNOTATION_REGRESSION_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: pnpm check

@@ -1,0 +1,1275 @@
+{
+  "approval": {
+    "approvedAt": "2026-09-05T14:05:22.931Z",
+    "humanId": "local-expert",
+    "status": "human-approved"
+  },
+  "calibrationExamples": [
+    {
+      "claim": {
+        "assessment": {
+          "presence": "present",
+          "salience": "prominent"
+        },
+        "evidence": {
+          "contextNoteRefs": [
+            {
+              "column": 3,
+              "endMs": 73975,
+              "kind": "long",
+              "sourceLine": 1168,
+              "startMs": 72604
+            },
+            {
+              "column": 1,
+              "endMs": 72947,
+              "kind": "normal",
+              "sourceLine": 1169,
+              "startMs": 72947
+            },
+            {
+              "column": 0,
+              "endMs": 73290,
+              "kind": "long",
+              "sourceLine": 1170,
+              "startMs": 73118
+            },
+            {
+              "column": 2,
+              "endMs": 73461,
+              "kind": "normal",
+              "sourceLine": 1171,
+              "startMs": 73461
+            },
+            {
+              "column": 0,
+              "endMs": 77747,
+              "kind": "normal",
+              "sourceLine": 1183,
+              "startMs": 77747
+            },
+            {
+              "column": 2,
+              "endMs": 77747,
+              "kind": "normal",
+              "sourceLine": 1184,
+              "startMs": 77747
+            }
+          ],
+          "noteRefs": [
+            {
+              "column": 1,
+              "endMs": 74318,
+              "kind": "long",
+              "sourceLine": 1172,
+              "startMs": 73632
+            },
+            {
+              "column": 2,
+              "endMs": 75347,
+              "kind": "long",
+              "sourceLine": 1173,
+              "startMs": 73975
+            },
+            {
+              "column": 0,
+              "endMs": 74661,
+              "kind": "long",
+              "sourceLine": 1174,
+              "startMs": 74318
+            },
+            {
+              "column": 1,
+              "endMs": 75004,
+              "kind": "long",
+              "sourceLine": 1175,
+              "startMs": 74661
+            },
+            {
+              "column": 3,
+              "endMs": 75347,
+              "kind": "long",
+              "sourceLine": 1176,
+              "startMs": 75004
+            },
+            {
+              "column": 0,
+              "endMs": 75690,
+              "kind": "long",
+              "sourceLine": 1177,
+              "startMs": 75347
+            },
+            {
+              "column": 1,
+              "endMs": 77404,
+              "kind": "long",
+              "sourceLine": 1178,
+              "startMs": 75347
+            },
+            {
+              "column": 3,
+              "endMs": 75690,
+              "kind": "normal",
+              "sourceLine": 1179,
+              "startMs": 75690
+            },
+            {
+              "column": 2,
+              "endMs": 76032,
+              "kind": "long",
+              "sourceLine": 1180,
+              "startMs": 75861
+            },
+            {
+              "column": 0,
+              "endMs": 76204,
+              "kind": "normal",
+              "sourceLine": 1181,
+              "startMs": 76204
+            },
+            {
+              "column": 3,
+              "endMs": 77404,
+              "kind": "long",
+              "sourceLine": 1182,
+              "startMs": 76375
+            }
+          ],
+          "rationale": "列号按 1–4 描述。进入 scope 时，2 列 LN（73632–74318 ms）仍占用；73975 ms 的 3 列 LN 延续至 75347 ms，其间 1 列在 74318–74661 ms 持续、2 列在 74661–75004 ms 持续、4 列在 75004–75347 ms 持续。随后 75347 ms 同时起按 1 列（至 75690）与 2 列（至 77404），在 2 列持续占用时出现 75690 ms 的 4 列 tap、75861–76032 ms 的 3 列短 LN、76204 ms 的 1 列 tap，以及 76375 ms 开始的 4 列 LN。完整的进入 LN 和所有中间事件均为 witness。这段由持续占用与其他列独立起按、结束及 tap 的关系组织，故 LN coordination present/prominent。末尾 2、4 列同在 77404 ms 结束；此判断不把同时释放本身当作独立释放正例。scope 在这一结束边界截止，后续 77747 ms 的 jump 仅为退出 context。"
+        },
+        "id": "pilot-ln-independent-holds-73975",
+        "reviewContext": {
+          "endMs": 77918,
+          "startMs": 72947
+        },
+        "scope": {
+          "endMs": 77404,
+          "startMs": 73975
+        },
+        "sectionId": "pilot-ln-73975-77404",
+        "tagId": "ln-coordination"
+      },
+      "explanation": "Prior human observation 738aa6e1-6e82-4ff7-aa27-0c899eaf7b2a:observation, confirmed by local-expert at 2026-09-05T06:43:51.867Z, under Foundation SHA-256 549222555d98ac4456f5802f0d0c981b758c814911d53662b474528b0552372e. The saved human assessment is {\"presence\":\"present\",\"salience\":\"prominent\"}. Original evidence and rationale are retained verbatim, including any earlier machine uncertainty; that earlier uncertainty does not override the saved human assessment. Human decision rationale: Human confirmed the original proposal.. The preparation provenance retains the complete original observation and decision. Reuse as calibration creates no new human observation.",
+      "id": "prior-human:738aa6e1-6e82-4ff7-aa27-0c899eaf7b2a:observation",
+      "source": {
+        "artist": "Camellia",
+        "beatmapId": 975667,
+        "beatmapSetId": 455164,
+        "byteLength": 132723,
+        "creator": "Hiranaka",
+        "difficulty": "Lightning",
+        "keyCount": 4,
+        "normalizerId": "beatmap-lens-mania-v1",
+        "noteCount": 3700,
+        "osuFormatVersion": 14,
+        "sha256": "901aaaa859e3493de3db4e8516c93c47e707fc1d757fe1d582c397d2e86f245f",
+        "title": "Light It Up"
+      },
+      "sourceSha256": "901aaaa859e3493de3db4e8516c93c47e707fc1d757fe1d582c397d2e86f245f"
+    },
+    {
+      "claim": {
+        "assessment": {
+          "presence": "present",
+          "salience": "supporting"
+        },
+        "evidence": {
+          "contextNoteRefs": [
+            {
+              "column": 2,
+              "endMs": 81049,
+              "kind": "normal",
+              "sourceLine": 1514,
+              "startMs": 81049
+            },
+            {
+              "column": 3,
+              "endMs": 81049,
+              "kind": "normal",
+              "sourceLine": 1515,
+              "startMs": 81049
+            },
+            {
+              "column": 0,
+              "endMs": 81128,
+              "kind": "normal",
+              "sourceLine": 1516,
+              "startMs": 81128
+            },
+            {
+              "column": 1,
+              "endMs": 81128,
+              "kind": "normal",
+              "sourceLine": 1517,
+              "startMs": 81128
+            },
+            {
+              "column": 2,
+              "endMs": 81206,
+              "kind": "normal",
+              "sourceLine": 1518,
+              "startMs": 81206
+            },
+            {
+              "column": 3,
+              "endMs": 81206,
+              "kind": "normal",
+              "sourceLine": 1519,
+              "startMs": 81206
+            },
+            {
+              "column": 0,
+              "endMs": 81285,
+              "kind": "normal",
+              "sourceLine": 1520,
+              "startMs": 81285
+            },
+            {
+              "column": 1,
+              "endMs": 81285,
+              "kind": "normal",
+              "sourceLine": 1521,
+              "startMs": 81285
+            },
+            {
+              "column": 2,
+              "endMs": 81364,
+              "kind": "normal",
+              "sourceLine": 1522,
+              "startMs": 81364
+            },
+            {
+              "column": 3,
+              "endMs": 81364,
+              "kind": "normal",
+              "sourceLine": 1523,
+              "startMs": 81364
+            },
+            {
+              "column": 0,
+              "endMs": 81442,
+              "kind": "normal",
+              "sourceLine": 1524,
+              "startMs": 81442
+            },
+            {
+              "column": 1,
+              "endMs": 81442,
+              "kind": "normal",
+              "sourceLine": 1525,
+              "startMs": 81442
+            },
+            {
+              "column": 2,
+              "endMs": 82149,
+              "kind": "normal",
+              "sourceLine": 1542,
+              "startMs": 82149
+            },
+            {
+              "column": 3,
+              "endMs": 82149,
+              "kind": "normal",
+              "sourceLine": 1543,
+              "startMs": 82149
+            },
+            {
+              "column": 1,
+              "endMs": 82227,
+              "kind": "normal",
+              "sourceLine": 1544,
+              "startMs": 82227
+            },
+            {
+              "column": 2,
+              "endMs": 82306,
+              "kind": "normal",
+              "sourceLine": 1545,
+              "startMs": 82306
+            },
+            {
+              "column": 3,
+              "endMs": 82306,
+              "kind": "normal",
+              "sourceLine": 1546,
+              "startMs": 82306
+            },
+            {
+              "column": 1,
+              "endMs": 82384,
+              "kind": "normal",
+              "sourceLine": 1547,
+              "startMs": 82384
+            },
+            {
+              "column": 0,
+              "endMs": 82463,
+              "kind": "normal",
+              "sourceLine": 1548,
+              "startMs": 82463
+            },
+            {
+              "column": 3,
+              "endMs": 82463,
+              "kind": "normal",
+              "sourceLine": 1549,
+              "startMs": 82463
+            }
+          ],
+          "noteRefs": [
+            {
+              "column": 3,
+              "endMs": 81521,
+              "kind": "normal",
+              "sourceLine": 1526,
+              "startMs": 81521
+            },
+            {
+              "column": 2,
+              "endMs": 81560,
+              "kind": "normal",
+              "sourceLine": 1527,
+              "startMs": 81560
+            },
+            {
+              "column": 1,
+              "endMs": 81599,
+              "kind": "normal",
+              "sourceLine": 1528,
+              "startMs": 81599
+            },
+            {
+              "column": 0,
+              "endMs": 81638,
+              "kind": "normal",
+              "sourceLine": 1529,
+              "startMs": 81638
+            },
+            {
+              "column": 3,
+              "endMs": 81678,
+              "kind": "normal",
+              "sourceLine": 1530,
+              "startMs": 81678
+            },
+            {
+              "column": 2,
+              "endMs": 81717,
+              "kind": "normal",
+              "sourceLine": 1531,
+              "startMs": 81717
+            },
+            {
+              "column": 1,
+              "endMs": 81756,
+              "kind": "normal",
+              "sourceLine": 1532,
+              "startMs": 81756
+            },
+            {
+              "column": 0,
+              "endMs": 81795,
+              "kind": "normal",
+              "sourceLine": 1533,
+              "startMs": 81795
+            },
+            {
+              "column": 3,
+              "endMs": 81835,
+              "kind": "normal",
+              "sourceLine": 1534,
+              "startMs": 81835
+            },
+            {
+              "column": 2,
+              "endMs": 81874,
+              "kind": "normal",
+              "sourceLine": 1535,
+              "startMs": 81874
+            },
+            {
+              "column": 1,
+              "endMs": 81913,
+              "kind": "normal",
+              "sourceLine": 1536,
+              "startMs": 81913
+            },
+            {
+              "column": 0,
+              "endMs": 81953,
+              "kind": "normal",
+              "sourceLine": 1537,
+              "startMs": 81953
+            },
+            {
+              "column": 3,
+              "endMs": 81992,
+              "kind": "normal",
+              "sourceLine": 1538,
+              "startMs": 81992
+            },
+            {
+              "column": 2,
+              "endMs": 82031,
+              "kind": "normal",
+              "sourceLine": 1539,
+              "startMs": 82031
+            },
+            {
+              "column": 1,
+              "endMs": 82070,
+              "kind": "normal",
+              "sourceLine": 1540,
+              "startMs": 82070
+            },
+            {
+              "column": 0,
+              "endMs": 82110,
+              "kind": "normal",
+              "sourceLine": 1541,
+              "startMs": 82110
+            }
+          ],
+          "rationale": "Four successive single-note groups move 3,2,1,0: [81521,81560,81599,81638], [81678,81717,81756,81795], [81835,81874,81913,81953], [81992,82031,82070,82110]. Group joins are separate c0->c3 attacks without chords. The first two groups have literal 39,39,39-ms internal gaps; the latter two have 39,39,40-ms gaps. With the supplied timing point 471 and beat length 314.146, nearest-ms rounding of 471+(2064+i)*39.26825 matches 15/16 attacks but predicts 81796 rather than source 81795; flooring also fails to reproduce this run. Directional Stream evidence is established, including two literally equally spaced complete groups, but whether the entire four-group episode qualifies for the approved prominence criterion is unsettled. Assessment is held unresolved specifically for that salience/episode judgment; this is not an absence or an assertion that source timing is erroneous."
+        },
+        "id": "c8-descending-run-spacing-question",
+        "reviewContext": {
+          "endMs": 82464,
+          "startMs": 81049
+        },
+        "scope": {
+          "endMs": 82149,
+          "startMs": 81521
+        },
+        "sectionId": "c8-grouped-to-descending-run",
+        "tagId": "stream-organization"
+      },
+      "explanation": "Prior human observation 00b0c9e0-3cf3-4485-bfcb-c2f611b03411:observation, confirmed by local-expert at 2026-09-05T12:33:28.187Z, under Foundation SHA-256 549222555d98ac4456f5802f0d0c981b758c814911d53662b474528b0552372e. The saved human assessment is {\"presence\":\"present\",\"salience\":\"supporting\"}. Original evidence and rationale are retained verbatim, including any earlier machine uncertainty; that earlier uncertainty does not override the saved human assessment. Human decision rationale: this is clear roll pattern, but stream often requires more variation than it. Roll pattern is a kind of stream but often played in reality as trill-like, we can give it weak positive for stream.. The preparation provenance retains the complete original observation and decision. Reuse as calibration creates no new human observation.",
+      "id": "prior-human:00b0c9e0-3cf3-4485-bfcb-c2f611b03411:observation",
+      "source": {
+        "artist": "DJ Sharpnel",
+        "beatmapId": 1938170,
+        "beatmapSetId": 827679,
+        "byteLength": 141890,
+        "creator": "IcyWorld",
+        "difficulty": "NB4",
+        "keyCount": 4,
+        "normalizerId": "beatmap-lens-mania-v1",
+        "noteCount": 4953,
+        "osuFormatVersion": 14,
+        "sha256": "d32789577cfde27c2d055eb69106a570485bab94b3dd60de25ff8b0503584a4d",
+        "title": "Cyber Inductance (Speed Up Ver.)"
+      },
+      "sourceSha256": "d32789577cfde27c2d055eb69106a570485bab94b3dd60de25ff8b0503584a4d"
+    },
+    {
+      "claim": {
+        "assessment": {
+          "presence": "absent"
+        },
+        "evidence": {
+          "contextNoteRefs": [
+            {
+              "column": 0,
+              "endMs": 259480,
+              "kind": "normal",
+              "sourceLine": 3069,
+              "startMs": 259480
+            },
+            {
+              "column": 1,
+              "endMs": 259587,
+              "kind": "normal",
+              "sourceLine": 3070,
+              "startMs": 259587
+            },
+            {
+              "column": 3,
+              "endMs": 259587,
+              "kind": "normal",
+              "sourceLine": 3071,
+              "startMs": 259587
+            },
+            {
+              "column": 2,
+              "endMs": 259695,
+              "kind": "normal",
+              "sourceLine": 3072,
+              "startMs": 259695
+            },
+            {
+              "column": 2,
+              "endMs": 260766,
+              "kind": "normal",
+              "sourceLine": 3091,
+              "startMs": 260766
+            },
+            {
+              "column": 0,
+              "endMs": 260873,
+              "kind": "normal",
+              "sourceLine": 3092,
+              "startMs": 260873
+            },
+            {
+              "column": 1,
+              "endMs": 260980,
+              "kind": "normal",
+              "sourceLine": 3093,
+              "startMs": 260980
+            },
+            {
+              "column": 2,
+              "endMs": 261087,
+              "kind": "normal",
+              "sourceLine": 3094,
+              "startMs": 261087
+            },
+            {
+              "column": 3,
+              "endMs": 261087,
+              "kind": "normal",
+              "sourceLine": 3095,
+              "startMs": 261087
+            },
+            {
+              "column": 1,
+              "endMs": 261195,
+              "kind": "normal",
+              "sourceLine": 3096,
+              "startMs": 261195
+            },
+            {
+              "column": 0,
+              "endMs": 261302,
+              "kind": "normal",
+              "sourceLine": 3097,
+              "startMs": 261302
+            }
+          ],
+          "noteRefs": [
+            {
+              "column": 1,
+              "endMs": 259802,
+              "kind": "normal",
+              "sourceLine": 3073,
+              "startMs": 259802
+            },
+            {
+              "column": 3,
+              "endMs": 259802,
+              "kind": "normal",
+              "sourceLine": 3074,
+              "startMs": 259802
+            },
+            {
+              "column": 0,
+              "endMs": 259909,
+              "kind": "normal",
+              "sourceLine": 3075,
+              "startMs": 259909
+            },
+            {
+              "column": 2,
+              "endMs": 259909,
+              "kind": "normal",
+              "sourceLine": 3076,
+              "startMs": 259909
+            },
+            {
+              "column": 1,
+              "endMs": 260016,
+              "kind": "normal",
+              "sourceLine": 3077,
+              "startMs": 260016
+            },
+            {
+              "column": 3,
+              "endMs": 260016,
+              "kind": "normal",
+              "sourceLine": 3078,
+              "startMs": 260016
+            },
+            {
+              "column": 0,
+              "endMs": 260123,
+              "kind": "normal",
+              "sourceLine": 3079,
+              "startMs": 260123
+            },
+            {
+              "column": 2,
+              "endMs": 260123,
+              "kind": "normal",
+              "sourceLine": 3080,
+              "startMs": 260123
+            },
+            {
+              "column": 1,
+              "endMs": 260230,
+              "kind": "normal",
+              "sourceLine": 3081,
+              "startMs": 260230
+            },
+            {
+              "column": 3,
+              "endMs": 260230,
+              "kind": "normal",
+              "sourceLine": 3082,
+              "startMs": 260230
+            },
+            {
+              "column": 0,
+              "endMs": 260337,
+              "kind": "normal",
+              "sourceLine": 3083,
+              "startMs": 260337
+            },
+            {
+              "column": 2,
+              "endMs": 260337,
+              "kind": "normal",
+              "sourceLine": 3084,
+              "startMs": 260337
+            },
+            {
+              "column": 1,
+              "endMs": 260445,
+              "kind": "normal",
+              "sourceLine": 3085,
+              "startMs": 260445
+            },
+            {
+              "column": 3,
+              "endMs": 260445,
+              "kind": "normal",
+              "sourceLine": 3086,
+              "startMs": 260445
+            },
+            {
+              "column": 0,
+              "endMs": 260552,
+              "kind": "normal",
+              "sourceLine": 3087,
+              "startMs": 260552
+            },
+            {
+              "column": 2,
+              "endMs": 260552,
+              "kind": "normal",
+              "sourceLine": 3088,
+              "startMs": 260552
+            },
+            {
+              "column": 1,
+              "endMs": 260659,
+              "kind": "normal",
+              "sourceLine": 3089,
+              "startMs": 260659
+            },
+            {
+              "column": 3,
+              "endMs": 260659,
+              "kind": "normal",
+              "sourceLine": 3090,
+              "startMs": 260659
+            }
+          ],
+          "rationale": "Nine successive two-key attacks alternate {1,3} and {0,2} at 259802/259909/260016/260123/260230/260337/260445/260552/260659, on 107/108-ms gaps. There is no single-note continuation within the run. This is clearly fixed disjoint-group alternation, but unlike the reviewed {0,1}/{2,3} left/right example, both groups span the two hands. The frozen guide leaves generalization to other trill variants open; whether this crossed grouping receives the same Stream exclusion is unresolved."
+        },
+        "id": "crossed-pair-alternation-stream-organization",
+        "reviewContext": {
+          "endMs": 261400,
+          "startMs": 259400
+        },
+        "scope": {
+          "endMs": 260766,
+          "startMs": 259802
+        },
+        "sectionId": "crossed-pair-alternation",
+        "tagId": "stream-organization"
+      },
+      "explanation": "Prior human observation bb1a796d-1058-4e64-9d9d-7c965390d5b0:observation, confirmed by local-expert at 2026-09-05T12:31:17.443Z, under Foundation SHA-256 549222555d98ac4456f5802f0d0c981b758c814911d53662b474528b0552372e. The saved human assessment is {\"presence\":\"absent\"}. Original evidence and rationale are retained verbatim, including any earlier machine uncertainty; that earlier uncertainty does not override the saved human assessment. Human decision rationale: Clear alternation is a signal of trill, not stream.. The preparation provenance retains the complete original observation and decision. Reuse as calibration creates no new human observation.",
+      "id": "prior-human:bb1a796d-1058-4e64-9d9d-7c965390d5b0:observation",
+      "source": {
+        "artist": "Helblinde",
+        "beatmapId": 1101045,
+        "beatmapSetId": 518266,
+        "byteLength": 90213,
+        "creator": "Manwon",
+        "difficulty": "MX",
+        "keyCount": 4,
+        "normalizerId": "beatmap-lens-mania-v1",
+        "noteCount": 3130,
+        "osuFormatVersion": 14,
+        "sha256": "8f01f79e3bed9e2d28b223b610fb59f91d07807b0f4ab534a0805375178552d5",
+        "title": "Memoria (Original Mix)"
+      },
+      "sourceSha256": "8f01f79e3bed9e2d28b223b610fb59f91d07807b0f4ab534a0805375178552d5"
+    },
+    {
+      "claim": {
+        "assessment": {
+          "presence": "present",
+          "salience": "prominent"
+        },
+        "evidence": {
+          "contextNoteRefs": [
+            {
+              "column": 3,
+              "endMs": 9638,
+              "kind": "normal",
+              "sourceLine": 66,
+              "startMs": 9638
+            },
+            {
+              "column": 3,
+              "endMs": 10038,
+              "kind": "normal",
+              "sourceLine": 67,
+              "startMs": 10038
+            },
+            {
+              "column": 3,
+              "endMs": 10438,
+              "kind": "normal",
+              "sourceLine": 68,
+              "startMs": 10438
+            },
+            {
+              "column": 3,
+              "endMs": 10838,
+              "kind": "normal",
+              "sourceLine": 69,
+              "startMs": 10838
+            },
+            {
+              "column": 0,
+              "endMs": 11238,
+              "kind": "normal",
+              "sourceLine": 70,
+              "startMs": 11238
+            },
+            {
+              "column": 0,
+              "endMs": 14438,
+              "kind": "normal",
+              "sourceLine": 78,
+              "startMs": 14438
+            },
+            {
+              "column": 3,
+              "endMs": 14838,
+              "kind": "normal",
+              "sourceLine": 79,
+              "startMs": 14838
+            },
+            {
+              "column": 3,
+              "endMs": 15238,
+              "kind": "normal",
+              "sourceLine": 80,
+              "startMs": 15238
+            },
+            {
+              "column": 3,
+              "endMs": 15638,
+              "kind": "normal",
+              "sourceLine": 81,
+              "startMs": 15638
+            },
+            {
+              "column": 0,
+              "endMs": 16038,
+              "kind": "normal",
+              "sourceLine": 82,
+              "startMs": 16038
+            },
+            {
+              "column": 3,
+              "endMs": 16038,
+              "kind": "normal",
+              "sourceLine": 83,
+              "startMs": 16038
+            },
+            {
+              "column": 2,
+              "endMs": 16238,
+              "kind": "normal",
+              "sourceLine": 84,
+              "startMs": 16238
+            }
+          ],
+          "noteRefs": [
+            {
+              "column": 3,
+              "endMs": 11638,
+              "kind": "normal",
+              "sourceLine": 71,
+              "startMs": 11638
+            },
+            {
+              "column": 3,
+              "endMs": 12038,
+              "kind": "normal",
+              "sourceLine": 72,
+              "startMs": 12038
+            },
+            {
+              "column": 3,
+              "endMs": 12438,
+              "kind": "normal",
+              "sourceLine": 73,
+              "startMs": 12438
+            },
+            {
+              "column": 3,
+              "endMs": 12838,
+              "kind": "normal",
+              "sourceLine": 74,
+              "startMs": 12838
+            },
+            {
+              "column": 3,
+              "endMs": 13238,
+              "kind": "normal",
+              "sourceLine": 75,
+              "startMs": 13238
+            },
+            {
+              "column": 3,
+              "endMs": 13638,
+              "kind": "normal",
+              "sourceLine": 76,
+              "startMs": 13638
+            },
+            {
+              "column": 3,
+              "endMs": 14038,
+              "kind": "normal",
+              "sourceLine": 77,
+              "startMs": 14038
+            }
+          ],
+          "rationale": "Seven c3 attacks at 11638,12038,12438,12838,13238,13638,14038 have exact 400-ms gaps, bounded by c0 at 11238 and 14438. Source recurrence is certain. Whether this sparse pulse alone should receive the broad Jack organization target remains unsettled here: the calibrated longjack wording requires fast recurrence but supplies no numerical rate boundary, and that subtype rule should not silently define the broad tag. This records the concrete boundary case without asserting absence or inventing a cutoff."
+        },
+        "id": "slow-right-column-pulse",
+        "reviewContext": {
+          "endMs": 16300,
+          "startMs": 9400
+        },
+        "scope": {
+          "endMs": 14438,
+          "startMs": 11638
+        },
+        "sectionId": "slow-right-column-pulse-episode",
+        "tagId": "jack-organization"
+      },
+      "explanation": "Prior human observation e58c0257-9ab6-4a25-b3e1-d875f84771c5:observation, confirmed by local-expert at 2026-09-05T12:30:24.539Z, under Foundation SHA-256 549222555d98ac4456f5802f0d0c981b758c814911d53662b474528b0552372e. The saved human assessment is {\"presence\":\"present\",\"salience\":\"prominent\"}. Original evidence and rationale are retained verbatim, including any earlier machine uncertainty; that earlier uncertainty does not override the saved human assessment. Human decision rationale: This is clear jack pattern but not speedjack.. The preparation provenance retains the complete original observation and decision. Reuse as calibration creates no new human observation.",
+      "id": "prior-human:e58c0257-9ab6-4a25-b3e1-d875f84771c5:observation",
+      "source": {
+        "artist": "Holo Bass & Spikey Wikey",
+        "beatmapId": 2802207,
+        "beatmapSetId": 1353659,
+        "byteLength": 62695,
+        "creator": "arcwinolivirus",
+        "difficulty": "4K Jumps Streams Arc",
+        "keyCount": 4,
+        "normalizerId": "beatmap-lens-mania-v1",
+        "noteCount": 2164,
+        "osuFormatVersion": 14,
+        "sha256": "e613eacc59db702a0f86d35b355f9c1071db6329e835241e4be2cbae6ad81742",
+        "title": "300 Nuts Per Minute"
+      },
+      "sourceSha256": "e613eacc59db702a0f86d35b355f9c1071db6329e835241e4be2cbae6ad81742"
+    },
+    {
+      "claim": {
+        "assessment": {
+          "presence": "present",
+          "salience": "supporting"
+        },
+        "evidence": {
+          "contextNoteRefs": [
+            {
+              "column": 3,
+              "endMs": 93092,
+              "kind": "normal",
+              "sourceLine": 1562,
+              "startMs": 93092
+            },
+            {
+              "column": 2,
+              "endMs": 93092,
+              "kind": "normal",
+              "sourceLine": 1563,
+              "startMs": 93092
+            },
+            {
+              "column": 1,
+              "endMs": 93233,
+              "kind": "normal",
+              "sourceLine": 1564,
+              "startMs": 93233
+            },
+            {
+              "column": 3,
+              "endMs": 93375,
+              "kind": "normal",
+              "sourceLine": 1565,
+              "startMs": 93375
+            },
+            {
+              "column": 0,
+              "endMs": 94931,
+              "kind": "normal",
+              "sourceLine": 1583,
+              "startMs": 94931
+            },
+            {
+              "column": 2,
+              "endMs": 95073,
+              "kind": "normal",
+              "sourceLine": 1584,
+              "startMs": 95073
+            },
+            {
+              "column": 1,
+              "endMs": 95214,
+              "kind": "normal",
+              "sourceLine": 1585,
+              "startMs": 95214
+            },
+            {
+              "column": 3,
+              "endMs": 95356,
+              "kind": "normal",
+              "sourceLine": 1586,
+              "startMs": 95356
+            },
+            {
+              "column": 1,
+              "endMs": 95497,
+              "kind": "normal",
+              "sourceLine": 1587,
+              "startMs": 95497
+            },
+            {
+              "column": 2,
+              "endMs": 95639,
+              "kind": "normal",
+              "sourceLine": 1588,
+              "startMs": 95639
+            },
+            {
+              "column": 0,
+              "endMs": 95780,
+              "kind": "normal",
+              "sourceLine": 1589,
+              "startMs": 95780
+            },
+            {
+              "column": 3,
+              "endMs": 95922,
+              "kind": "normal",
+              "sourceLine": 1590,
+              "startMs": 95922
+            },
+            {
+              "column": 1,
+              "endMs": 95922,
+              "kind": "normal",
+              "sourceLine": 1591,
+              "startMs": 95922
+            },
+            {
+              "column": 2,
+              "endMs": 96205,
+              "kind": "normal",
+              "sourceLine": 1592,
+              "startMs": 96205
+            },
+            {
+              "column": 1,
+              "endMs": 96488,
+              "kind": "normal",
+              "sourceLine": 1593,
+              "startMs": 96488
+            },
+            {
+              "column": 0,
+              "endMs": 96488,
+              "kind": "normal",
+              "sourceLine": 1594,
+              "startMs": 96488
+            }
+          ],
+          "noteRefs": [
+            {
+              "column": 0,
+              "endMs": 93516,
+              "kind": "normal",
+              "sourceLine": 1566,
+              "startMs": 93516
+            },
+            {
+              "column": 2,
+              "endMs": 93640,
+              "kind": "normal",
+              "sourceLine": 1567,
+              "startMs": 93640
+            },
+            {
+              "column": 3,
+              "endMs": 93658,
+              "kind": "normal",
+              "sourceLine": 1568,
+              "startMs": 93658
+            },
+            {
+              "column": 0,
+              "endMs": 93799,
+              "kind": "normal",
+              "sourceLine": 1569,
+              "startMs": 93799
+            },
+            {
+              "column": 3,
+              "endMs": 93941,
+              "kind": "normal",
+              "sourceLine": 1570,
+              "startMs": 93941
+            },
+            {
+              "column": 1,
+              "endMs": 94082,
+              "kind": "normal",
+              "sourceLine": 1571,
+              "startMs": 94082
+            },
+            {
+              "column": 0,
+              "endMs": 94224,
+              "kind": "normal",
+              "sourceLine": 1572,
+              "startMs": 94224
+            },
+            {
+              "column": 3,
+              "endMs": 94224,
+              "kind": "normal",
+              "sourceLine": 1573,
+              "startMs": 94224
+            },
+            {
+              "column": 1,
+              "endMs": 94365,
+              "kind": "normal",
+              "sourceLine": 1574,
+              "startMs": 94365
+            },
+            {
+              "column": 0,
+              "endMs": 94365,
+              "kind": "normal",
+              "sourceLine": 1575,
+              "startMs": 94365
+            },
+            {
+              "column": 2,
+              "endMs": 94507,
+              "kind": "normal",
+              "sourceLine": 1576,
+              "startMs": 94507
+            },
+            {
+              "column": 3,
+              "endMs": 94507,
+              "kind": "normal",
+              "sourceLine": 1577,
+              "startMs": 94507
+            },
+            {
+              "column": 3,
+              "endMs": 94648,
+              "kind": "normal",
+              "sourceLine": 1578,
+              "startMs": 94648
+            },
+            {
+              "column": 0,
+              "endMs": 94648,
+              "kind": "normal",
+              "sourceLine": 1579,
+              "startMs": 94648
+            },
+            {
+              "column": 3,
+              "endMs": 94790,
+              "kind": "normal",
+              "sourceLine": 1580,
+              "startMs": 94790
+            },
+            {
+              "column": 1,
+              "endMs": 94790,
+              "kind": "normal",
+              "sourceLine": 1581,
+              "startMs": 94790
+            },
+            {
+              "column": 2,
+              "endMs": 94807,
+              "kind": "normal",
+              "sourceLine": 1582,
+              "startMs": 94807
+            }
+          ],
+          "rationale": "Human clarification of decision b8388957-a01c-4a88-b6c1-34fbfebfa19e: “存在，弱／supporting”. Tech is present with supporting salience in 93516–94931 ms. Original scoped source evidence and timestamps retained."
+        },
+        "id": "c14-03-tech",
+        "reviewContext": {
+          "endMs": 97000,
+          "startMs": 93000
+        },
+        "scope": {
+          "endMs": 94931,
+          "startMs": 93516
+        },
+        "sectionId": "episode-93516-94931",
+        "tagId": "tech"
+      },
+      "explanation": "Prior human observation clarification-17f86a3715624367b4b665dd95dd7a1f:c14-03-tech, confirmed by local-expert at 2026-09-05T12:23:29.136Z, under Foundation SHA-256 549222555d98ac4456f5802f0d0c981b758c814911d53662b474528b0552372e. The saved human assessment is {\"presence\":\"present\",\"salience\":\"supporting\"}. Original evidence and rationale are retained verbatim, including any earlier machine uncertainty; that earlier uncertainty does not override the saved human assessment. The preparation provenance retains the complete original observation and decision. Reuse as calibration creates no new human observation.",
+      "id": "prior-human:clarification-17f86a3715624367b4b665dd95dd7a1f:c14-03-tech",
+      "source": {
+        "artist": "LeaF",
+        "beatmapId": 4234404,
+        "beatmapSetId": 2031577,
+        "byteLength": 69615,
+        "creator": "Ryax",
+        "difficulty": "Royal Pain",
+        "keyCount": 4,
+        "normalizerId": "beatmap-lens-mania-v1",
+        "noteCount": 2426,
+        "osuFormatVersion": 14,
+        "sha256": "bbdb957a74b163703e385f9211a6acaba137871ec5175974ce2d421e0d5dac14",
+        "title": "Queen Aluett"
+      },
+      "sourceSha256": "bbdb957a74b163703e385f9211a6acaba137871ec5175974ce2d421e0d5dac14"
+    }
+  ],
+  "contract": "beatmap-lens-judgment-foundation",
+  "createdAt": "2026-09-05T14:02:59.310Z",
+  "foundationId": "pulsefield-query-style-pilot",
+  "policies": {
+    "collectionPolicy": "positive-first",
+    "coordinates": "source-ms",
+    "datasetSemantics": "partially-exhaustive",
+    "missingAssessment": "unreviewed-not-negative",
+    "rangeConvention": "half-open",
+    "saliencePolicy": "independent-per-tag-multiple-prominent"
+  },
+  "revision": 1,
+  "tags": [
+    {
+      "communityAlignments": [],
+      "definition": "Repeated attacks on the same columns organize the local episode. Judge the recurrence sequence without using speed alone, retaining the distinction between fixed-group jacks, changing-chord arrangements, and localized repetitions.",
+      "displayName": "Jack organization",
+      "exclusionCues": [
+        "Pure fixed, disjoint A/B Trill with no repeated columns between adjacent attack rows is broad Jack absent, even though each column returns two rows later.",
+        "An isolated repetition does not automatically establish prominent Jack organization across a larger section.",
+        "Density, chord size, or a gameplay difficulty estimate is insufficient by itself."
+      ],
+      "id": "jack-organization",
+      "inclusionCues": [
+        "Explain which columns recur and how their recurrence organizes the selected scope.",
+        "Slow recurrence around 400 ms can be a positive Jack countercase; speed alone does not determine presence or salience.",
+        "Supporting/prominent express the strength of the target style. Typicality can inform that strength; coverage or duration alone does not decide it.",
+        "Pattern witnesses may select only part of the source notes. Preserve the remaining notes and entering holds as context, check them for counterevidence, and hand uncertain selection or salience to an agent.",
+        "Judge continuity through the dominant organization: an intervening row may be part of the pattern or mark a mini-section boundary. There is no blanket row-skipping rule.",
+        "Preserve raw osu! times. Differences from 1 ms quantization that do not change the pattern need no separate expert question; no universal numerical tolerance is assumed."
+      ]
+    },
+    {
+      "communityAlignments": [],
+      "definition": "Recognizable flowing note motion organizes the local episode, including stream, jumpstream, and directional roll or burst passages. Explain continuity, direction, chord placement, and resets in the actual sequence.",
+      "displayName": "Stream organization",
+      "exclusionCues": [
+        "A roll-group count does not automatically establish prominent Stream organization; no numerical count-to-salience rule is supplied for this pilot.",
+        "Continuous activity, density, or fixed-group A/B alternation alone is insufficient to establish flowing Stream organization.",
+        "The reviewed pure left/right-pair and crossed-pair Trill episodes are Stream absent. Do not extend a Stream scope through them simply because the surrounding crop has continuous activity."
+      ],
+      "id": "stream-organization",
+      "inclusionCues": [
+        "Inspect the complete local flow and its entry and exit, preserving changes of organization.",
+        "Directional roll groups can support a Stream judgment, while salience remains a separate judgment of this episode.",
+        "A local 4K roll group has four notes moving across successive columns in one direction with evenly spaced rhythm, retaining raw source times and no jump/chord bridge between groups. Burst is the faster description without a supplied speed threshold.",
+        "Three or more consecutive complete roll groups establish prominent roll structure, not automatic Stream prominence.",
+        "Supporting/prominent express the strength of the target style. Typicality can inform that strength; coverage or duration alone does not decide it.",
+        "Pattern witnesses may select only part of the source notes. Preserve the remaining notes and entering holds as context, check them for counterevidence, and hand uncertain selection or salience to an agent.",
+        "Judge continuity through the dominant organization: an intervening row may be part of the pattern or mark a mini-section boundary. There is no blanket row-skipping rule.",
+        "Preserve raw osu! times. Differences from 1 ms quantization that do not change the pattern need no separate expert question; no universal numerical tolerance is assumed."
+      ]
+    },
+    {
+      "communityAlignments": [],
+      "definition": "Two fixed, disjoint column groups repeatedly alternate A/B/A/B within the local episode. Each group may be a single key or a chord; both same-hand and cross-hand alternation are included.",
+      "displayName": "Trill organization",
+      "exclusionCues": [
+        "Four A/B/A/B attack rows alone are insufficient to establish Trill presence.",
+        "Changing group membership, overlapping groups, or repeated attacks on only one group do not by themselves establish this fixed, disjoint A/B organization.",
+        "A hand switch alone does not establish Trill, and same-hand organization does not exclude it."
+      ],
+      "id": "trill-organization",
+      "inclusionCues": [
+        "Identify the exact membership of groups A and B and show their recurring alternation from source attacks.",
+        "Presence must consider both speed and duration in the selected episode; no numerical speed, duration, or repetition-count threshold is supplied.",
+        "Supporting/prominent express the strength of the target style. Typicality can inform that strength; coverage or duration alone does not decide it.",
+        "Pattern witnesses may select only part of the source notes. Preserve the remaining notes and entering holds as context, check them for counterevidence, and hand uncertain selection or salience to an agent.",
+        "Judge continuity through the dominant organization: an intervening row may be part of the pattern or mark a mini-section boundary. There is no blanket row-skipping rule.",
+        "Preserve raw osu! times. Differences from 1 ms quantization that do not change the pattern need no separate expert question; no universal numerical tolerance is assumed."
+      ]
+    },
+    {
+      "communityAlignments": [],
+      "definition": "A local arrangement that is hard to anticipate or follow through familiar patterns. Explain how the concrete sequence, rhythm, or articulation relationships create this character rather than treating generic variation as the target.",
+      "displayName": "Tech",
+      "exclusionCues": [
+        "Variation, irregularity, or regularity alone is insufficient to settle Tech presence or absence.",
+        "Density, reviewer unfamiliarity, complex snap, or failure to identify another target is not sufficient positive evidence.",
+        "An expected-attack comparison does not assert mapper error or hidden musical intent."
+      ],
+      "id": "tech",
+      "inclusionCues": [
+        "An ideal-pattern comparison can explain added or omitted expected attacks or other departures; it is an optional explanation method, not a required template-first procedure.",
+        "Preserve weak but certain positives separately from uncertainty; Tech may coexist with other independently supported targets.",
+        "Supporting/prominent express the strength of the target style. Typicality can inform that strength; coverage or duration alone does not decide it.",
+        "Pattern witnesses may select only part of the source notes. Preserve the remaining notes and entering holds as context, check them for counterevidence, and hand uncertain selection or salience to an agent.",
+        "Judge continuity through the dominant organization: an intervening row may be part of the pattern or mark a mini-section boundary. There is no blanket row-skipping rule.",
+        "Preserve raw osu! times. Differences from 1 ms quantization that do not change the pattern need no separate expert question; no universal numerical tolerance is assumed."
+      ]
+    },
+    {
+      "communityAlignments": [],
+      "definition": "Coordinated presses, releases, and taps across occupied columns characterize the local episode. At some instant, at least two columns must be occupied by LNs; this necessary condition is not sufficient. Explain the independent control relationships using complete source holds and the order of interacting events.",
+      "displayName": "LN coordination",
+      "exclusionCues": [
+        "Exact temporal overlap, LN presence, or simultaneous holds alone is insufficient to establish LN coordination.",
+        "One held column with taps on all other columns generally is not LN coordination. Regular synchronized interactions or a 1 ms overlap alone do not establish a positive.",
+        "A tap during a hold or short-LN articulation does not automatically establish coordination-focused organization.",
+        "Player-specific difficulty and numerical control demand are not annotation targets."
+      ],
+      "id": "ln-coordination",
+      "inclusionCues": [
+        "Inspect how presses, releases, and taps interact, including holds that enter from before the scope.",
+        "Use exact LN occupancy as evidence for the arrangement-level judgment, preserving short-LN articulation and release timing.",
+        "No required LN percentage or fraction of the episode is supplied.",
+        "Supporting/prominent express the strength of the target style. Typicality can inform that strength; coverage or duration alone does not decide it.",
+        "Pattern witnesses may select only part of the source notes. Preserve the remaining notes and entering holds as context, check them for counterevidence, and hand uncertain selection or salience to an agent.",
+        "Judge continuity through the dominant organization: an intervening row may be part of the pattern or mark a mini-section boundary. There is no blanket row-skipping rule.",
+        "Preserve raw osu! times. Differences from 1 ms quantization that do not change the pattern need no separate expert question; no universal numerical tolerance is assumed."
+      ]
+    }
+  ],
+  "version": 2
+}

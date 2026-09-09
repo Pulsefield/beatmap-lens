@@ -28,6 +28,8 @@ past experiment is not a public maintenance commitment.
 Dataset publication is planned for Hugging Face: human annotations, with optional
 agent-reviewed annotations selectable by version. That release is separate from
 publishing the npm package; it does not require a general dataset conversion layer.
+The [publication pipeline](docs/annotation/dataset-publication.md) builds compact
+Parquet snapshots with immutable references to GitHub artifacts and external charts.
 
 ## Repository map
 
@@ -56,6 +58,10 @@ uv sync --locked
 pnpm check
 pnpm dev
 ```
+
+`pnpm check` runs engineering checks. `pnpm check:regression` separately evaluates
+method changes; missing semantic replay remains missing evidence, not a quality
+pass. Dataset publication checks its own frozen snapshot and declared policy.
 
 Paired development with the neighboring Pulsefield checkout is the default for
 annotation work. Paths and Python environments are configurable; see the

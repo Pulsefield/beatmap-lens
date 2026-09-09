@@ -22,8 +22,11 @@ uv run --locked python annotation/evaluation/regression_gate.py check
 uv run --locked python -m unittest discover -s annotation/evaluation/tests -p 'test_regression_gate.py'
 ```
 
-The normal repository check runs the first command. An unchanged source snapshot
-passes without local datasets, model calls, or historical research artifacts. A
+`pnpm check:regression` runs the first command separately from the engineering
+checks in `pnpm check`. Dataset publication validates the selected frozen snapshot
+under its own declared admission policy; this method comparator does not block
+human editing or an independently valid human-only release. An unchanged source
+snapshot passes without local datasets, model calls, or historical artifacts. A
 judgment change needs fresh baseline and candidate evidence. The command exits
 nonzero for missing or stale evidence, incomplete output, reused repeat workers,
 different model settings or source sections, any protected error, or an unreviewed
@@ -38,14 +41,16 @@ a named accepted disposition with its reason. A higher aggregate score cannot hi
 these losses. A named review of source evidence and reasoning is also required;
 matching labels alone do not establish correct reasoning.
 
-CI sets `ANNOTATION_REGRESSION_BASE` to the pull request base SHA or push's prior SHA
-and fetches that Git history. The checker computes sources from that tree, so editing
+When running this method evaluation in CI, set `ANNOTATION_REGRESSION_BASE` to the
+pull request base SHA or push's prior SHA and fetch that Git history. The checker
+computes sources from that tree, so editing
 `source-baseline.json` cannot erase a regression in the same change. A first push
 with an all-zero prior SHA uses the reviewed initial snapshot. The initial migration
 snapshot records unchanged annotation semantics, not a successful model replay.
 There is no reset or unconditional acceptance command. After a reviewed update,
 the source baseline may advance in the same commit as its accepted evidence; CI
-still checks that commit against its prior tree.
+can still check that commit against its prior tree. The normal engineering CI
+does not invoke this method evaluation or claim that it passed.
 
 Direct auditor-role, discovery workflow, selected-workflow controller, Foundation,
 or corpus changes currently fail with explicit unsupported coverage. They need a

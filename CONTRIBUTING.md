@@ -22,7 +22,8 @@ editing assistant already exists.
 Annotation development combines whole-chart discovery with selected-section
 judgments. Put production orchestration in `annotation/pipeline`, deterministic
 inspection in `harness`, evaluation in `annotation/evaluation`, and natural-chart
-learning in `annotation/learning`. Worker instructions live in `annotation/roles`;
+learning in `annotation/learning`. Snapshot publication belongs in
+`annotation/release`. Worker instructions live in `annotation/roles`;
 repository skills live in `.agents/skills`. `scripts/` is for repository maintenance.
 Do not narrow the package's support range to match an annotation campaign.
 
@@ -56,6 +57,13 @@ part of directory cleanup, tooling maintenance, or an agent-only conclusion.
 Keep the label and its human authority separate from a proposed explanation.
 
 ## Verification
+
+`pnpm check` verifies engineering behavior and packaging. Run
+`pnpm check:regression` separately for judgment-affecting method changes; its
+evidence requirements and reported missing replay remain intact. Engineering
+success does not certify a method. The [dataset publication pipeline](docs/annotation/dataset-publication.md)
+checks a frozen snapshot under its declared admission policy; an optional machine
+method's missing evaluation does not block a valid human-only dataset.
 
 Python dependencies live in the root `pyproject.toml` and `uv.lock`; `.python-version`
 selects Python 3.10. Run `uv sync --locked` to prepare `.venv`, and use

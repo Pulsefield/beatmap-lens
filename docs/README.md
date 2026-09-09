@@ -20,6 +20,8 @@ and design choices.
   revise interpretations without creating human labels.
 - [Regression gate](../annotation/evaluation/README.md): checks for candidate skill
   and workflow updates.
+- [Dataset publication](annotation/dataset-publication.md): collect, configure,
+  build, validate, preview, and publish compact Hugging Face snapshots.
 
 Worker prompts live in [annotation/roles](../annotation/roles/), and reading guidance
 lives in the [judgment skill](../.agents/skills/mania-pattern-judgment/SKILL.md).
