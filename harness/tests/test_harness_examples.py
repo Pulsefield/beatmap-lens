@@ -52,6 +52,52 @@ def pool():
 
 
 class ExtractionTest(unittest.TestCase):
+    def test_effective_gold_excludes_append_only_history_and_preserves_current_human_comment(self):
+        data = feedback()
+        old = review(claim(), rationale='Old human explanation.')
+        data['agentReviews'] = [old]
+        data['directObservations'] = [direct(claim('old-direct'))]
+        revised = direct(claim('new-direct', presence='absent'), 'revised-observation')
+        revised.update(observationSha256='a' * 64, humanComment='  Revised human words.\nExact spacing.  ')
+        data['effectiveHumanObservations'] = [revised]
+        record, = examples.extract_examples([data], {})
+        self.assertEqual(record['assessment'], {'presence': 'absent'})
+        self.assertEqual(examples.public_example(record)['humanComment'], revised['humanComment'])
+        self.assertEqual(examples.evidence_ref(record), {'sourceSha256': data['sourceSha256'],
+                         'observationId': revised['id'], 'observationSha256': 'a' * 64})
+        data['effectiveHumanObservations'] = []
+        self.assertEqual(examples.extract_examples([data], {}), [])
+
+    def test_effective_agent_gold_retains_existing_example_handle_and_observation_binding(self):
+        data = feedback()
+        row = review(claim(), rationale='  Exact human comment.  ')
+        data['agentReviews'] = [row]
+        legacy, = examples.extract_examples([data], {})
+        self.assertIsNone(examples.evidence_ref(legacy))
+        data['effectiveHumanObservations'] = [{
+            'id': row['decision']['observationId'], 'summary': row['summary'],
+            'humanId': row['decision']['humanId'], 'confirmedAt': row['decision']['decidedAt'],
+            'foundationSha256': 'stored-human-foundation', 'observationSha256': 'b' * 64,
+            'humanComment': row['decision']['rationale'],
+            'origin': {'kind': 'agent-proposal', 'handoffId': row['handoffId'], 'claimId': row['claimId']}}]
+        current, = examples.extract_examples([data], {})
+        self.assertEqual(examples.public_example(current), examples.public_example(legacy))
+        self.assertEqual(current['provenance']['decisionId'], row['decision']['id'])
+        self.assertEqual(examples.evidence_ref(current)['observationSha256'], 'b' * 64)
+
+    def test_effective_gold_with_changed_source_or_foundation_is_not_a_current_harness_example(self):
+        data = feedback()
+        observation = {**direct(claim()), 'humanComment': 'Current expert judgment.',
+                       'observationSha256': 'c' * 64, 'trust': {'source': 'current', 'foundation': 'current'}}
+        data['effectiveHumanObservations'] = [observation]
+        current, = examples.extract_examples([data], {})
+        self.assertEqual(current['provenance']['foundationSha256'], observation['foundationSha256'])
+        for layer in ('source', 'foundation'):
+            with self.subTest(layer=layer):
+                changed = deepcopy(data)
+                changed['effectiveHumanObservations'][0]['trust'][layer] = 'changed'
+                self.assertEqual(examples.extract_examples([changed], {}), [])
+
     def test_modified_scope_assessment_and_exact_human_rationale_override_old_claim(self):
         data = feedback()
         original = claim()

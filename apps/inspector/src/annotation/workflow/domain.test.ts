@@ -11,16 +11,325 @@ import {
   assertTaskPacketV2,
   baseForTaskV2,
   decideClaimV2,
+  effectiveHumanObservationsV2,
   handoffBaseStatusV2,
+  handoffTrustV2,
   hashWorkflowValueV2,
+  importAuditV2,
   importHandoffV2,
+  readAgentReviewsV2,
   readDispositionsV2,
+  sealAuditV2,
+  sealHandoffV2,
+  validateAuditV2,
   validateHandoffV2,
 } from "./domain";
 import { createExperimentalFoundationV2 } from "./experimental-campaign";
 import { historicalAcceptance, NOW, workflowFixture } from "./test-fixtures";
 
 describe("V2 source-backed agent–human domain", () => {
+  it("includes independent auditor evidence in confidence without rerouting audited claims", async () => {
+    const f = await workflowFixture();
+    const human = await addHumanObservationV2(
+      f.registered,
+      { claim: f.claim, humanId: "expert", id: "audit-evidence" },
+      f.sourceBytes,
+    );
+    const observation = human.observations[0];
+    if (!observation) throw new Error("Missing audit evidence observation.");
+    const handoff = await sealHandoffV2(f.task, {
+      handoffId: "tracked-labeler",
+      createdAt: NOW,
+      agent: f.handoff.agent,
+      proposals: [f.claim],
+      questions: [],
+      audit: [],
+      humanEvidenceRefs: [],
+    });
+    const imported = await importHandoffV2(human, handoff, f.sourceBytes);
+    expect((await handoffTrustV2(imported.document, handoff.handoffId)).humanContext).toBe(
+      "current",
+    );
+    const auditInput = {
+      auditId: "legacy-auditor",
+      createdAt: NOW,
+      agent: { producerId: "independent-auditor", role: "auditor" as const },
+      claims: [
+        {
+          claimId: f.claim.id,
+          outcome: "supported" as const,
+          rationale: "Independent source inspection.",
+        },
+      ],
+      questions: [],
+    };
+    const legacy = await sealAuditV2(f.task, handoff, auditInput);
+    const legacyImported = await importAuditV2(imported.document, legacy, f.sourceBytes);
+    expect((await handoffTrustV2(legacyImported.document, handoff.handoffId)).humanContext).toBe(
+      "untracked",
+    );
+    const humanEvidenceRefs = [
+      {
+        sourceSha256: f.task.source.sha256,
+        observationId: observation.id,
+        observationSha256: await hashWorkflowValueV2(observation),
+      },
+    ];
+    const audit = await sealAuditV2(f.task, handoff, {
+      ...auditInput,
+      auditId: "tracked-auditor",
+      humanEvidenceRefs,
+    });
+    expect(audit.humanEvidenceRefs).toEqual(humanEvidenceRefs);
+    const tracked = await importAuditV2(imported.document, audit, f.sourceBytes);
+    expect((await handoffTrustV2(tracked.document, handoff.handoffId)).humanContext).toBe(
+      "current",
+    );
+    const mixed = await importAuditV2(legacyImported.document, audit, f.sourceBytes);
+    expect((await handoffTrustV2(mixed.document, handoff.handoffId)).humanContext).toBe(
+      "untracked",
+    );
+    const revised = await addHumanObservationV2(
+      mixed.document,
+      {
+        claim: { ...f.claim, assessment: { presence: "absent" } },
+        humanId: "expert",
+        supersedesObservationId: observation.id,
+      },
+      f.sourceBytes,
+    );
+    expect(await handoffTrustV2(revised, handoff.handoffId)).toEqual({
+      source: "current",
+      foundation: "current",
+      humanContext: "changed",
+    });
+    expect((await readAgentReviewsV2(revised))[0]?.status).toBe("agent-reviewed");
+    const foundationChanged = {
+      ...tracked.document,
+      foundation: {
+        ...tracked.document.foundation,
+        revision: tracked.document.foundation.revision + 1,
+      },
+    };
+    expect(await handoffTrustV2(foundationChanged, handoff.handoffId)).toEqual({
+      source: "current",
+      foundation: "changed",
+      humanContext: "changed",
+    });
+    await expect(
+      validateAuditV2(
+        {
+          ...audit,
+          humanEvidenceRefs: [{ ...humanEvidenceRefs[0], observationSha256: "invalid" }],
+        },
+        f.task,
+        handoff,
+      ),
+    ).rejects.toThrow("SHA-256");
+  });
+  it("keeps other sections reviewable after a decision and ignores historical imported stale flags", async () => {
+    const f = await workflowFixture();
+    const first = await importHandoffV2(f.registered, f.handoff, f.sourceBytes);
+    const second = await importHandoffV2(
+      first.document,
+      { ...f.handoff, handoffId: "other-section" },
+      f.sourceBytes,
+    );
+    const decided = await decideClaimV2(
+      second.document,
+      {
+        handoffId: f.handoff.handoffId,
+        claimId: f.claim.id,
+        disposition: "accepted",
+        humanId: "expert",
+      },
+      f.sourceBytes,
+    );
+    const legacy = {
+      ...decided,
+      handoffs: decided.handoffs.map((entry) => ({ ...entry, baseStatus: "stale" as const })),
+    };
+    expect(
+      (await readAgentReviewsV2(legacy))
+        .filter((row) => row.handoffId === "other-section")
+        .every((row) => row.status === "awaiting-audit" && row.baseStatus === "current"),
+    ).toBe(true);
+    expect(legacy.decisions).toHaveLength(1);
+  });
+
+  it("appends human corrections and only exports the latest effective judgment", async () => {
+    const f = await workflowFixture();
+    const imported = await importHandoffV2(f.registered, f.handoff, f.sourceBytes);
+    const input = { handoffId: f.handoff.handoffId, claimId: f.claim.id, humanId: "expert" };
+    const accepted = await decideClaimV2(
+      imported.document,
+      { ...input, disposition: "accepted", id: "accept" },
+      f.sourceBytes,
+    );
+    const modified = await decideClaimV2(
+      accepted,
+      {
+        ...input,
+        disposition: "modified",
+        id: "correct",
+        modifiedClaim: { ...f.claim, assessment: { presence: "absent" } },
+      },
+      f.sourceBytes,
+    );
+    expect(modified.decisions.slice(0, 1)).toEqual(accepted.decisions);
+    expect(modified.observations.slice(0, 1)).toEqual(accepted.observations);
+    expect(effectiveHumanObservationsV2(modified).map((row) => row.id)).toEqual([
+      "correct:observation",
+    ]);
+    expect((await readDispositionsV2(modified)).effectiveObservations[0]?.claim.assessment).toEqual(
+      { presence: "absent" },
+    );
+    await expect(assertReviewDocumentV2(modified, f.sourceBytes)).resolves.toEqual(modified);
+    const withdrawn = await decideClaimV2(
+      modified,
+      { ...input, disposition: "rejected", id: "withdraw" },
+      f.sourceBytes,
+    );
+    expect(withdrawn.observations).toHaveLength(2);
+    expect(effectiveHumanObservationsV2(withdrawn)).toEqual([]);
+  });
+
+  it("revises direct observations through a linear append-only history", async () => {
+    const f = await workflowFixture();
+    const original = await addHumanObservationV2(
+      f.registered,
+      { claim: f.claim, humanId: "expert", id: "initial" },
+      f.sourceBytes,
+    );
+    const originalObservation = original.observations[0];
+    if (!originalObservation) throw new Error("Missing original observation.");
+    const originalId = originalObservation.id;
+    const corrected = await addHumanObservationsV2(
+      original,
+      {
+        claims: [{ ...f.claim, assessment: { presence: "unresolved" } }],
+        humanId: "expert",
+        id: "revision",
+        supersedesObservationId: originalId,
+      },
+      f.sourceBytes,
+    );
+    expect(corrected.observations).toHaveLength(2);
+    expect(effectiveHumanObservationsV2(corrected)).toEqual([corrected.observations[1]]);
+    await expect(assertReviewDocumentV2(corrected, f.sourceBytes)).resolves.toEqual(corrected);
+    await expect(
+      addHumanObservationV2(
+        corrected,
+        { claim: f.claim, humanId: "expert", supersedesObservationId: originalId },
+        f.sourceBytes,
+      ),
+    ).rejects.toThrow("current direct-human");
+    const revision = corrected.observations[1];
+    if (!revision) throw new Error("Missing revision observation.");
+    const forged = {
+      ...corrected,
+      observations: [{ ...originalObservation, supersedesObservationId: revision.id }, revision],
+    };
+    await expect(assertReviewDocumentV2(forged, f.sourceBytes)).rejects.toThrow(
+      "preceding current",
+    );
+  });
+
+  it("separates changed source and Foundation from human context and requires explicit Foundation review", async () => {
+    const f = await workflowFixture();
+    const imported = await importHandoffV2(f.registered, f.handoff, f.sourceBytes);
+    const changed = {
+      ...imported.document,
+      foundation: {
+        ...imported.document.foundation,
+        revision: imported.document.foundation.revision + 1,
+        tags: imported.document.foundation.tags.map((tag) => ({
+          ...tag,
+          definition: `${tag.definition} Updated definition.`,
+        })),
+      },
+    };
+    expect(await handoffTrustV2(changed, f.handoff.handoffId)).toEqual({
+      source: "current",
+      foundation: "changed",
+      humanContext: "untracked",
+    });
+    const input = { handoffId: f.handoff.handoffId, claimId: f.claim.id, humanId: "expert" };
+    await expect(
+      decideClaimV2(changed, { ...input, disposition: "accepted" }, f.sourceBytes),
+    ).rejects.toThrow("explicitly revise");
+    const reviewed = await decideClaimV2(
+      changed,
+      { ...input, disposition: "modified", modifiedClaim: f.claim },
+      f.sourceBytes,
+    );
+    expect(reviewed.observations[0]?.foundationSha256).toBe(
+      await hashWorkflowValueV2(changed.foundation),
+    );
+    expect(reviewed.handoffs).toEqual(imported.document.handoffs);
+    await expect(assertReviewDocumentV2(reviewed, f.sourceBytes)).resolves.toEqual(reviewed);
+    expect(
+      (
+        await handoffTrustV2(
+          { ...changed, source: { ...changed.source, sha256: "f".repeat(64) } },
+          f.handoff.handoffId,
+        )
+      ).source,
+    ).toBe("changed");
+  });
+
+  it("preserves exact human evidence references and reports revised evidence without invalidating claims", async () => {
+    const f = await workflowFixture();
+    const human = await addHumanObservationV2(
+      f.registered,
+      { claim: f.claim, humanId: "expert", id: "reference" },
+      f.sourceBytes,
+    );
+    const observation = human.observations[0];
+    if (!observation) throw new Error("Missing evidence observation.");
+    const humanEvidenceRefs = [
+      {
+        sourceSha256: f.task.source.sha256,
+        observationId: observation.id,
+        observationSha256: await hashWorkflowValueV2(observation),
+      },
+    ];
+    const handoff = await sealHandoffV2(f.task, {
+      handoffId: "referenced",
+      createdAt: NOW,
+      agent: f.handoff.agent,
+      proposals: [f.claim],
+      audit: [],
+      questions: [],
+      humanEvidenceRefs,
+    });
+    expect(handoff.humanEvidenceRefs).toEqual(humanEvidenceRefs);
+    const imported = await importHandoffV2(human, handoff, f.sourceBytes);
+    expect((await handoffTrustV2(imported.document, handoff.handoffId)).humanContext).toBe(
+      "current",
+    );
+    const revised = await addHumanObservationV2(
+      imported.document,
+      {
+        claim: { ...f.claim, assessment: { presence: "absent" } },
+        humanId: "expert",
+        supersedesObservationId: observation.id,
+      },
+      f.sourceBytes,
+    );
+    expect((await handoffTrustV2(revised, handoff.handoffId)).humanContext).toBe("changed");
+    expect((await readAgentReviewsV2(revised))[0]?.status).toBe("awaiting-audit");
+    await expect(
+      validateHandoffV2(
+        {
+          ...handoff,
+          humanEvidenceRefs: [{ ...humanEvidenceRefs[0], observationSha256: "invalid" }],
+        },
+        f.task,
+      ),
+    ).rejects.toThrow("SHA-256");
+  });
+
   it("requires explicit presence for new confirmations while preserving historical uncertain acceptances", async () => {
     const f = await workflowFixture();
     const imported = await importHandoffV2(f.registered, f.handoff, f.sourceBytes);
@@ -277,7 +586,7 @@ describe("V2 source-backed agent–human domain", () => {
     await expect(assertReviewDocumentV2(document, f.sourceBytes)).resolves.toEqual(document);
   });
 
-  it("makes late and subsequently stale proposals visible without allowing them to overwrite human work", async () => {
+  it("keeps human context changes separate from packet integrity and permits explicit human review", async () => {
     const f = await workflowFixture();
     const imported = await importHandoffV2(f.registered, f.handoff, f.sourceBytes);
     const human = await addHumanObservationV2(
@@ -285,8 +594,9 @@ describe("V2 source-backed agent–human domain", () => {
       { claim: f.claim, humanId: "expert" },
       f.sourceBytes,
     );
-    expect(await handoffBaseStatusV2(human, f.handoff.handoffId)).toBe("stale");
-    expect((await readDispositionsV2(human)).handoffs[0]?.baseStatus).toBe("stale");
+    expect(await handoffBaseStatusV2(human, f.handoff.handoffId)).toBe("current");
+    expect((await handoffTrustV2(human, f.handoff.handoffId)).humanContext).toBe("untracked");
+    expect((await readDispositionsV2(human)).handoffs[0]?.baseStatus).toBe("current");
     await expect(
       decideClaimV2(
         human,
@@ -299,13 +609,13 @@ describe("V2 source-backed agent–human domain", () => {
         },
         f.sourceBytes,
       ),
-    ).rejects.toThrow("Stale task base");
+    ).resolves.toMatchObject({ decisions: [{ disposition: "accepted" }] });
     const lateResult = await importHandoffV2(
       human,
       { ...f.handoff, handoffId: "late" },
       f.sourceBytes,
     );
-    expect(lateResult.baseStatus).toBe("stale");
+    expect(lateResult.baseStatus).toBe("current");
     expect(lateResult.document.observations).toEqual(human.observations);
   });
 
@@ -360,7 +670,9 @@ describe("V2 source-backed agent–human domain", () => {
         },
         f.sourceBytes,
       ),
-    ).rejects.toThrow("already has a final human decision");
+    ).resolves.toMatchObject({
+      decisions: [...resolved.decisions, expect.objectContaining({ disposition: "accepted" })],
+    });
   });
 
   it("rejects human authority fields, forged evidence and mismatched source at the actual handoff boundary", async () => {

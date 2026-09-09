@@ -38,10 +38,16 @@ class Harness:
             if name.startswith('tools/') and digest(self.bundle / name) != self.manifest['files'][name]:
                 raise ValueError(f'Frozen harness tool changed: {name}')
         self.examples = self.load('examples.json')
+        self.example_refs = self.load('example-refs.json') if 'example-refs.json' in self.manifest['files'] else {}
         self.contrast_sets = self.load('contrast-sets.json')['sets']
         self.exclusions = {'excluded_sources': self.manifest['excludedSources'],
                            'excluded_groups': self.manifest['excludedGroups']}
         self.calls = Counter()
+        if self.trace:
+            # An initialized, empty trace distinguishes no tool evidence from a
+            # legacy or missing trace whose dependencies are unknown.
+            self.trace.parent.mkdir(parents=True, exist_ok=True)
+            self.trace.touch(exist_ok=True)
 
     def load(self, relative):
         path = self.bundle / relative
@@ -170,6 +176,16 @@ class Harness:
                           'repeatCount': self.calls[identity],
                           'imageBytes': len(png) if png else 0,
                           'imageSha256': hashlib.sha256(png).hexdigest() if png else None}
+                if self.manifest.get('humanEvidenceTracking') == 'returned-examples-v1':
+                    examples = (response.get('cards', []) if name == 'find_human_examples' else
+                                [response] if name == 'get_human_example' and not failed else
+                                response.get('existingHumanJudgments', []) if name == 'chart_context' else [])
+                    section_id = arguments.get('section_id', '')
+                    if not failed and section_id.startswith('example:'):
+                        examples = [*examples, {'id': section_id[8:]}]
+                    refs = [self.example_refs.get(example['id']) for example in examples]
+                    record['humanEvidenceRefs'] = list({compact(ref): ref for ref in refs if ref is not None}.values())
+                    record['humanEvidenceTrackingComplete'] = all(ref is not None for ref in refs)
                 with self.trace.open('a') as stream:
                     stream.write(compact(record) + '\n')
 

@@ -163,9 +163,12 @@ def account_section(section, feedback):
         origins[id(claim)].update(auditIds=[a['auditId'] for a in row.get('audits', [])],
                                   decisionId=row.get('decision', {}).get('id'),
                                   base=handoff.get('base'), agent=handoff.get('agent'))
-    for observation in feedback.get('directObservations', []):
+    for observation in feedback.get('effectiveHumanObservations', feedback.get('directObservations', [])):
         claim = observation.get('claim', observation.get('summary'))
-        origins[id(claim)] = {'observationId': observation['id'], 'claimId': claim['id']}
+        origin = observation.get('origin', {})
+        origins[id(claim)] = {'observationId': observation['id'], 'claimId': claim['id'],
+                             **{key: origin[key] for key in ('handoffId', 'decisionId') if key in origin},
+                             **{key: observation[key] for key in ('observationSha256', 'trust') if key in observation}}
     issues = [{'issueId': '/'.join((section['sourceSha256'], s['handoffId'], s['claimId'])),
                'tagId': s['claim']['tagId'], 'scope': s['claim']['scope'],
                **{k: s[k] for k in ('status', 'question', 'expertReason') if k in s}}

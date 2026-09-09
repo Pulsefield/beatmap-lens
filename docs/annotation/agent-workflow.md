@@ -195,8 +195,10 @@ applies to all claims in that handoff.
 Sealing copies source, Foundation, task, and base bindings from the frozen task.
 Keep an unchanged packet and its ID when retrying. A changed proposal is a new
 handoff with a new ID; the old proposal remains intact. Do not silently replace
-bindings with the current browser state. Source mismatches are rejected; a changed
-review base is shown as stale and requires a fresh task before confirmation.
+bindings with the current browser state. Source mismatches are rejected. A change
+to unrelated human judgments does not invalidate the proposal or require rereading.
+Source/Foundation compatibility and consulted human evidence are reported separately
+from review status, as described below.
 Repeated imports of identical content do not create duplicates.
 
 A new machine review of an unresolved claim can include `supersedes`, with
@@ -262,7 +264,7 @@ and any saved human decision; offline `review-status` exposes the same routing. 
 | `superseded` | Follow `supersededBy` to the current reviewed replacement, which can itself need the expert; retain this row as history. |
 | `needs-revision` | Return the concrete defect to the labeler; submit a new immutable proposal and audit its new content. |
 | `needs-expert` | Present the specific unresolved choice, evidence, and reason to the expert. Conflicting audit outcomes also enter this queue. |
-| `stale` | Read current review state and obtain a fresh task; do not silently rebase an old packet. |
+| `stale` | The original source or Foundation no longer matches. Keep the immutable proposal as history; humans may inspect it and save an explicit judgment under the current Foundation. |
 | `accepted`, `modified`, `rejected`, `deferred` | Follow the recorded human disposition. |
 
 The human Review inbox has separate **Labeler version** and **Auditor version**
@@ -270,7 +272,50 @@ filters for requests, sampling, and history. Each option identifies a frozen ski
 by its full content hash; the displayed version name alone can be shared by
 different snapshots. Selecting an auditor finds claims it reviewed without
 recomputing their recorded status from only that auditor's findings. A current
-task base means compatibility with the human review state, not the latest skill.
+task base means source/Foundation compatibility, not the latest skill or unchanged
+workspace-wide human history.
+
+### Human revisions and evidence confidence
+
+Humans may open every section, including stale, superseded, unaudited and already
+reviewed proposals. An existing gold judgment can be revised. Each save appends a
+new decision and observation; previous records remain available in history. Direct
+human observations use an explicit `supersedesObservationId` revision link. Agent
+proposals and audits remain immutable and cannot overwrite human decisions.
+
+Consumers use `effectiveHumanObservations` in service feedback for current gold;
+full dispositions retain the decision and observation history. An explicit revision
+replaces its predecessor in that current view, even if its scope changes. Separate
+overlapping human judgments are not silently merged or resolved by timestamps.
+Concurrent writes still compare the actual document version and reject an obsolete
+editor save, so revision support does not permit lost updates.
+
+Review status describes who has judged a claim and the audit outcome. `trust`
+separately records evidence compatibility, without numerical confidence scores:
+
+| Layer | Meaning |
+| --- | --- |
+| `source` | Whether the exact source bytes match the frozen proposal. |
+| `foundation` | Whether the definitions match the frozen proposal or current human observation. |
+| `humanContext` | Whether the particular human examples exposed to the worker are still effective gold with the same content. |
+
+The harness records the exact returned examples in an evidence trace. Delivery seals
+their source hashes, observation IDs and observation hashes in `humanEvidenceRefs`
+on both labeler handoffs and independent audits. The combined evidence flag covers
+both roles; a legacy audit with missing tracking cannot count as tracked evidence.
+The service checks those references across charts when reading feedback. Changing an
+unrelated human judgment has no effect. A revised referenced example produces
+`humanContext: changed`; unavailable or unrecorded provenance is `untracked`.
+An explicitly tracked empty reference set is current, whereas legacy packets without
+reference tracking remain untracked. These flags do not claim that a judgment is
+correct or incorrect.
+
+Auxiliary evidence changes never automatically enqueue rereading, remove a result
+from human sampling, or prevent a human save. Publication and coverage analysis
+can assess these layers independently; coverage reports expose `confidenceCounts`
+without treating every evidence change as a repair request. Accepting an original
+proposal under changed definitions is not implicit: the human reviews and saves an
+explicit modified judgment against the current Foundation.
 
 Requests, Sample, and History are separate views. A saved sample offers direct
 continuation, with new-sample settings collapsed. In chart review, the judgment,
@@ -321,8 +366,9 @@ only actual remaining doubt.
 
 Opening a frozen task in a different workspace retains its old base; it does not
 transfer canonical history. Continue against the original persistent workspace.
-After human changes, use `fetch-task --fresh` for new proposals under current
-approved context while retaining old tasks, packets, and decisions unchanged.
+Use `fetch-task --fresh` when creating new proposals under current approved context,
+while retaining old tasks, packets, and decisions unchanged. Human edits alone do
+not require new agent proposals.
 
 Role guides: [labeler](../../annotation/roles/labeler.md), [auditor](../../annotation/roles/auditor.md), and
 [curator](../../annotation/roles/curator.md). The curator handles proposed semantic revisions

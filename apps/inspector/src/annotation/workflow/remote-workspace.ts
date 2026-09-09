@@ -5,6 +5,7 @@ import type {
   AssessmentV2,
   AuditClaimResultV2,
   ReviewBaseV2,
+  ReviewTrustV2,
 } from "./contracts";
 import type { StoredReviewV2, WorkflowDirectoryV2 } from "./directory";
 import { decodeReviewResponse } from "./review-transport";
@@ -16,6 +17,7 @@ export interface CommunityTagMetadata {
   readonly fetchedAt: string;
 }
 export interface RemoteSourceV2 extends StoredReviewV2 {
+  readonly handoffTrust?: Readonly<Record<string, ReviewTrustV2>>;
   readonly sourceBytes: readonly number[];
   readonly audio?: { readonly url: string; readonly filename: string } | null;
   readonly communityTags?: CommunityTagMetadata | null;
@@ -44,6 +46,7 @@ export type InboxClaimV2 = Pick<
   AgentReviewV2,
   "handoffId" | "claimId" | "status" | "rationale" | "question" | "expertReason" | "supersededBy"
 > & {
+  readonly trust?: ReviewTrustV2;
   readonly tagId: string;
   readonly scope: { readonly startMs: number; readonly endMs: number };
   readonly assessment?: AssessmentV2;

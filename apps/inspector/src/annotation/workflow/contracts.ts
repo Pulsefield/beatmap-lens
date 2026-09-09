@@ -126,6 +126,12 @@ export interface AgentProvenanceV2 {
   readonly skill?: SkillProvenanceV2;
 }
 
+export interface HumanEvidenceRefV2 {
+  readonly sourceSha256: string;
+  readonly observationId: string;
+  readonly observationSha256: string;
+}
+
 export interface HandoffV2 {
   readonly contract: typeof HANDOFF_CONTRACT_V2;
   readonly version: 2;
@@ -138,6 +144,8 @@ export interface HandoffV2 {
   readonly createdAt: string;
   readonly agent: AgentProvenanceV2;
   readonly proposals: readonly ClaimV2[];
+  /** Exact human observations actually consulted, including cross-source examples. */
+  readonly humanEvidenceRefs?: readonly HumanEvidenceRefV2[];
   /** Revision lineage activated by an independent settled judgment or expert referral. */
   readonly supersedes?: readonly {
     readonly handoffId: string;
@@ -174,6 +182,7 @@ export type AuditClaimResultV2 = {
 );
 
 export interface AuditPacketV2 {
+  readonly humanEvidenceRefs?: readonly HumanEvidenceRefV2[];
   readonly contract: typeof AUDIT_CONTRACT_V2;
   readonly version: 2;
   readonly auditId: string;
@@ -201,7 +210,14 @@ export interface ImportedAuditV2 {
   readonly baseStatus: "current" | "stale";
 }
 
+export interface ReviewTrustV2 {
+  readonly source: "current" | "changed";
+  readonly foundation: "current" | "changed";
+  readonly humanContext: "current" | "changed" | "untracked";
+}
+
 export interface AgentReviewV2 {
+  readonly trust: ReviewTrustV2;
   readonly handoffId: string;
   readonly claimId: string;
   readonly claim: ClaimV2;
@@ -239,6 +255,8 @@ export interface HumanDecisionV2 {
 
 export interface HumanObservationV2 {
   readonly id: string;
+  /** Explicit append-only revision of a direct human observation. */
+  readonly supersedesObservationId?: string;
   readonly claim: ClaimV2;
   readonly foundationSha256: string;
   readonly humanId: string;

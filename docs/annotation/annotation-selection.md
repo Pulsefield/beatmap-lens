@@ -137,8 +137,14 @@ Report human, current independently reviewed machine-only, and combined usable
 labels separately. Count only present/absent judgments. Read a modification's exact
 replacement scope/assessment and its human decision rationale; the original
 summary and retained evidence prose may describe the rejected interpretation.
-Keep human decisions after unrelated base changes. Exclude stale machine claims,
+Use `effectiveHumanObservations` for the current human revision of each explicitly
+linked judgment; retain earlier revisions in history rather than as parallel gold.
+Keep human decisions after unrelated base changes. Exclude source/Foundation-stale machine claims,
 superseded proposals, unresolved/unreviewed judgments, rejection and deferral.
+`confidenceCounts` reports source, Foundation and consulted-human-evidence currency
+separately. Changed or untracked auxiliary evidence is not an automatic repair
+request or a human review lock. Machine coverage alone does not assert publication
+eligibility; publication can select its evidence requirements explicitly.
 
 Human intervals take precedence over overlapping machine-only intervals for this
 report. Contradictory overlapping human assessments are listed and removed from

@@ -305,8 +305,8 @@ describe("audited machine revisions", () => {
       f.sourceBytes,
     );
     expect((await readAgentReviewsV2(uncertainHuman)).map((row) => row.status)).toEqual([
-      "stale",
-      "stale",
+      "needs-expert",
+      "awaiting-audit",
       "deferred",
     ]);
   });

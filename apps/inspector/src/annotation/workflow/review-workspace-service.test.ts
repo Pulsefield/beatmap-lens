@@ -106,6 +106,167 @@ async function get(url: string, pathname: string) {
 }
 
 describe("local Review service exchange", () => {
+  it("tracks referenced gold revisions across charts without blocking human review or rewriting packets", async () => {
+    const f = await fixture();
+    const service = await start(f.workspace);
+    const referenceBytes = Array.from(
+      new TextEncoder().encode(
+        new TextDecoder().decode(f.sourceBytes).replace("Workflow fixture", "Reference fixture"),
+      ),
+    );
+    const registered = await post(service.url, "source", {
+      sourceBytes: referenceBytes,
+      foundationSourceSha256: f.sha,
+      foundationSha256: f.task.foundationSha256,
+    });
+    expect(registered.status).toBe(200);
+    const referenceSha = registered.value.source.sha256;
+    const reference = await get(service.url, `source/${referenceSha}`);
+    const gold = await post(service.url, `human/${referenceSha}/addObservations`, {
+      expectedBase: reference.version,
+      input: { claims: [f.claim], humanId: "expert" },
+    });
+    expect(gold.status).toBe(200);
+    const originalObservation = gold.value.document.observations[0];
+    const handoff = await sealHandoffV2(f.task, {
+      handoffId: "reference-aware-handoff",
+      createdAt: NOW,
+      agent: f.handoff.agent,
+      proposals: [f.claim],
+      audit: [],
+      questions: [],
+      humanEvidenceRefs: [],
+    });
+    const audit = await sealAuditV2(f.task, handoff, {
+      auditId: "reference-aware-audit",
+      createdAt: NOW,
+      agent: f.audit.agent,
+      claims: [{ claimId: f.claim.id, outcome: "supported", rationale: "Independent review." }],
+      questions: [],
+      humanEvidenceRefs: [
+        {
+          sourceSha256: referenceSha,
+          observationId: originalObservation.id,
+          observationSha256: await hashWorkflowValueV2(originalObservation),
+        },
+      ],
+    });
+    expect((await post(service.url, "submit", { kind: "handoff", packet: handoff })).status).toBe(
+      200,
+    );
+    expect((await post(service.url, "submit", { kind: "audit", packet: audit })).status).toBe(200);
+    const before = await get(service.url, `source/${f.sha}`);
+    expect(before.handoffTrust[handoff.handoffId]).toEqual({
+      source: "current",
+      foundation: "current",
+      humanContext: "current",
+    });
+    // An unrelated additional observation does not invalidate a consulted example.
+    const unrelated = await post(service.url, `human/${referenceSha}/addObservations`, {
+      expectedBase: gold.value.version,
+      input: { claims: [{ ...f.claim, id: "unrelated" }], humanId: "expert" },
+    });
+    expect(unrelated.status).toBe(200);
+    expect((await get(service.url, `feedback/${f.sha}`)).agentReviews[0].trust.humanContext).toBe(
+      "current",
+    );
+    const revised = await post(service.url, `human/${referenceSha}/addObservations`, {
+      expectedBase: unrelated.value.version,
+      input: {
+        claims: [{ ...f.claim, assessment: { presence: "absent" } }],
+        humanId: "expert",
+        supersedesObservationId: originalObservation.id,
+      },
+    });
+    expect(revised.status).toBe(200);
+    expect(revised.value.document.observations[0]).toEqual(originalObservation);
+    const feedback = await get(service.url, `feedback/${f.sha}`);
+    expect(feedback.agentReviews[0]).toMatchObject({
+      status: "agent-reviewed",
+      baseStatus: "current",
+      trust: { source: "current", foundation: "current", humanContext: "changed" },
+    });
+    const unchanged = await get(service.url, `source/${f.sha}`);
+    expect(unchanged.version).toEqual(before.version);
+    expect(unchanged.document.handoffs[0].handoff).toEqual(handoff);
+    expect(unchanged.handoffTrust[handoff.handoffId].humanContext).toBe("changed");
+    const dispositions = await get(service.url, `dispositions/${f.sha}`);
+    expect(dispositions.agentReviews[0].trust.humanContext).toBe("changed");
+    expect(dispositions.handoffs[0].trust.humanContext).toBe("changed");
+    const inbox = await get(service.url, "inbox");
+    expect(
+      inbox.sources.find((row: { source: { sha256: string } }) => row.source.sha256 === f.sha)
+        .reviews[0].trust.humanContext,
+    ).toBe("changed");
+    const accepted = await post(service.url, `human/${f.sha}/decide`, {
+      expectedBase: unchanged.version,
+      input: {
+        handoffId: handoff.handoffId,
+        claimId: f.claim.id,
+        disposition: "accepted",
+        humanId: "expert",
+        rationale: "Checked current evidence.",
+      },
+    });
+    expect(accepted.status).toBe(200);
+    const correction = await post(service.url, `human/${f.sha}/decide`, {
+      expectedBase: accepted.value.version,
+      input: {
+        handoffId: handoff.handoffId,
+        claimId: f.claim.id,
+        disposition: "modified",
+        humanId: "expert",
+        rationale: "Revised gold.",
+        modifiedClaim: {
+          ...f.claim,
+          tagId: "streams",
+          scope: { startMs: 900, endMs: 1800 },
+          assessment: { presence: "absent" },
+        },
+      },
+    });
+    expect(correction.status).toBe(200);
+    expect(correction.value.document.decisions).toHaveLength(2);
+    expect(correction.value.document.observations).toHaveLength(2);
+    const correctedInbox = await get(service.url, "inbox");
+    expect(
+      correctedInbox.sources.find(
+        (row: { source: { sha256: string } }) => row.source.sha256 === f.sha,
+      ).reviews[0],
+    ).toMatchObject({
+      tagId: "streams",
+      scope: { startMs: 900, endMs: 1800 },
+      assessment: { presence: "absent" },
+    });
+    const currentGold = (await get(service.url, `feedback/${f.sha}`)).effectiveHumanObservations;
+    expect(currentGold).toHaveLength(1);
+    expect(currentGold[0]).toMatchObject({
+      summary: { assessment: { presence: "absent" } },
+      humanComment: "Revised gold.",
+    });
+    // A concurrent editor still must refresh before saving: trust is not a write lock.
+    expect(
+      (
+        await post(service.url, `human/${f.sha}/decide`, {
+          expectedBase: accepted.value.version,
+          input: {
+            handoffId: handoff.handoffId,
+            claimId: f.claim.id,
+            disposition: "accepted",
+            humanId: "other-expert",
+          },
+        })
+      ).status,
+    ).toBe(409);
+    await service.close();
+    const restarted = await start(f.workspace);
+    expect((await get(restarted.url, `feedback/${f.sha}`)).effectiveHumanObservations).toEqual(
+      currentGold,
+    );
+    expect(
+      (await get(restarted.url, `source/${f.sha}`)).handoffTrust[handoff.handoffId].humanContext,
+    ).toBe("changed");
+  });
   it("negotiates compressed shared snapshots without changing the canonical source", async () => {
     const f = await fixture();
     const service = await start(f.workspace);
@@ -742,7 +903,7 @@ describe("local Review service exchange", () => {
       { auditId: audit.auditId, result: audit.claims[0] },
     ]);
     expect(JSON.stringify(initial)).not.toMatch(
-      /"(?:sourceBytes|foundation|structure|noteRefs|contextNoteRefs)":/,
+      /"(?:sourceBytes|structure|noteRefs|contextNoteRefs)":|"foundation":\{/,
     );
     const modifiedClaim = {
       ...f.claim,
@@ -786,12 +947,12 @@ describe("local Review service exchange", () => {
       unreviewed: 0,
     });
     expect(JSON.stringify(inbox)).not.toMatch(
-      /"(?:sourceBytes|foundation|structure|noteRefs|contextNoteRefs)":/,
+      /"(?:sourceBytes|structure|noteRefs|contextNoteRefs)":|"foundation":\{/,
     );
     const withoutModified = structuredClone(feedback);
     delete withoutModified.agentReviews[0].modifiedClaim;
     expect(JSON.stringify(withoutModified)).not.toMatch(
-      /"(?:sourceBytes|foundation|structure|noteRefs|contextNoteRefs)":/,
+      /"(?:sourceBytes|structure|noteRefs|contextNoteRefs)":|"foundation":\{/,
     );
     expect((await get(service.url, `dispositions/${f.sha}`)).agentReviews[0].claim).toEqual(
       f.claim,

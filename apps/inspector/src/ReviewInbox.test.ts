@@ -18,13 +18,14 @@ import ReviewInbox from "./ReviewInbox.vue";
 
 vi.mock("./ReviewWorkspace.vue", () => ({
   default: defineComponent({
-    props: ["openClaim"],
+    props: ["openClaim", "remoteSource"],
     emits: ["saved", "back-to-inbox"],
     setup:
       (props, { emit }) =>
       () =>
         h("div", { class: "test-review" }, [
           h("output", JSON.stringify(props.openClaim)),
+          h("output", { class: "test-trust" }, JSON.stringify(props.remoteSource?.handoffTrust)),
           h("button", { onClick: () => emit("saved") }, "Save test judgment"),
         ]),
   }),
@@ -103,6 +104,126 @@ async function change(control: HTMLInputElement | HTMLSelectElement, value: stri
 }
 
 describe("machine review sampling", () => {
+  it("refreshes active and cached evidence context without reloading unchanged chart bytes", async () => {
+    const { source, inbox } = await fixture();
+    const trust = { source: "current", foundation: "current", humanContext: "current" } as const;
+    Object.assign(source.reviews[0] ?? {}, { trust });
+    const fetcher = vi.fn(async (url: string) =>
+      Response.json(
+        url.endsWith("inbox")
+          ? inbox
+          : {
+              document: { source: source.source },
+              version: source.version,
+              handoffTrust: { handoff: trust },
+            },
+      ),
+    );
+    vi.stubGlobal("fetch", fetcher);
+    const { container } = mount();
+    await vi.waitFor(() =>
+      expect(
+        container.querySelector("#review-history > .inbox-history-list button"),
+      ).not.toBeNull(),
+    );
+    (
+      container.querySelector("#review-history > .inbox-history-list button") as HTMLButtonElement
+    ).click();
+    await vi.waitFor(() =>
+      expect(container.querySelector(".test-trust")?.textContent).toContain(
+        '"humanContext":"current"',
+      ),
+    );
+    Object.assign(source.reviews[0] ?? {}, { trust: { ...trust, humanContext: "changed" } });
+    await click(container, "Save test judgment");
+    await vi.waitFor(() =>
+      expect(container.querySelector(".test-trust")?.textContent).toContain(
+        '"humanContext":"changed"',
+      ),
+    );
+    expect(fetcher.mock.calls.filter(([url]) => !url.endsWith("inbox"))).toHaveLength(1);
+    await click(container, "Inbox ·");
+    (
+      container.querySelector("#review-history > .inbox-history-list button") as HTMLButtonElement
+    ).click();
+    await vi.waitFor(() =>
+      expect(container.querySelector(".test-trust")?.textContent).toContain(
+        '"humanContext":"changed"',
+      ),
+    );
+    expect(fetcher.mock.calls.filter(([url]) => !url.endsWith("inbox"))).toHaveLength(1);
+  });
+
+  it("opens charts containing human judgments without agent proposals", async () => {
+    const { source, inbox, fetcher } = await fixture();
+    Object.assign(source, {
+      reviews: [],
+      humanAssessmentCounts: { settled: 1, unresolved: 0, unreviewed: 0 },
+    });
+    vi.stubGlobal("fetch", fetcher);
+    const { container } = mount();
+    await vi.waitFor(() =>
+      expect(container.textContent).toContain("Charts and human judgments · 1"),
+    );
+    await click(container, "Open chart");
+    await vi.waitFor(() => expect(container.querySelector(".test-review")).not.toBeNull());
+    expect(fetcher).toHaveBeenCalledWith(
+      expect.stringContaining(source.source.sha256),
+      expect.anything(),
+    );
+    expect(inbox.sources[0]?.reviews).toEqual([]);
+  });
+
+  it.each(["stale", "superseded", "awaiting-audit", "needs-revision"] as const)(
+    "opens a saved sample with %s status",
+    async (status) => {
+      const { source, inbox, fetcher } = await fixture();
+      assert(source.reviews[0]);
+      Object.assign(source.reviews[0], {
+        status,
+        trust: { source: "current", foundation: "current", humanContext: "changed" },
+      });
+      localStorage.setItem(
+        `beatmap-lens-review-sample:${inbox.workspace}`,
+        JSON.stringify({
+          createdAt: "2026-09-09",
+          tagId: "",
+          strength: "all",
+          claims: [{ sourceSha256: source.source.sha256, handoffId: "handoff", claimId: "one" }],
+        }),
+      );
+      vi.stubGlobal("fetch", fetcher);
+      const { container } = mount();
+      await vi.waitFor(() =>
+        expect(container.querySelector(".inbox-sample-list button")).not.toBeNull(),
+      );
+      const row = container.querySelector<HTMLButtonElement>(".inbox-sample-list button");
+      assert(row);
+      expect(row.disabled).toBe(false);
+      expect(row.textContent).toContain("human context changed");
+      expect(container.textContent).not.toContain("Awaiting agent reread");
+      row.click();
+      await vi.waitFor(() =>
+        expect(container.querySelector("output")?.textContent).toContain('"claimId":"one"'),
+      );
+    },
+  );
+
+  it("samples work with changed human context independently of its work status", async () => {
+    const { source, claim } = await fixture();
+    const reviews = ["stale", "awaiting-audit", "needs-revision", "agent-reviewed"].map(
+      (status, index) =>
+        claim(`pending-${index}`, {
+          status: status as InboxClaimV2["status"],
+          scope: { startMs: index * 100, endMs: 1800 },
+          trust: { source: "current", foundation: "current", humanContext: "changed" },
+        }),
+    );
+    expect(
+      sampleCandidates([{ ...source, reviews }], "", "all").map((item) => item.claim.claimId),
+    ).toEqual(reviews.map((item) => item.claimId));
+  });
+
   it("prefetches the next sample, reuses recent sources, and invalidates changed versions", async () => {
     const { inbox, source, claim } = await fixture();
     const second: InboxSourceV2 = {
@@ -240,7 +361,9 @@ describe("machine review sampling", () => {
       container.querySelector('select[name="labelerVersion"]') as HTMLSelectElement,
       "a".repeat(64),
     );
-    expect(container.querySelectorAll(".inbox-history-list button")).toHaveLength(2);
+    expect(container.querySelectorAll("#review-history > .inbox-history-list button")).toHaveLength(
+      2,
+    );
     await change(
       container.querySelector('select[name="historyStatus"]') as HTMLSelectElement,
       "superseded",
@@ -331,7 +454,7 @@ describe("machine review sampling", () => {
     expect(container.querySelector(".inbox-active [role='alert']")).toBeNull();
   });
 
-  it("filters by tag and strength and excludes human, stale, superseded and already requested work", async () => {
+  it("filters by tag and strength and excludes human, superseded and already requested work", async () => {
     const { source, claim } = await fixture();
     const input = {
       ...source,
@@ -418,12 +541,10 @@ describe("machine review sampling", () => {
     Object.assign(stale, { status: "stale" });
     await click(container, "Save test judgment");
     await vi.waitFor(() =>
-      expect(container.querySelector(".inbox-sample-list")?.textContent).toContain(
-        "Awaiting agent reread",
-      ),
+      expect(container.querySelector(".inbox-sample-list")?.textContent).toContain("stale"),
     );
     expect(
       (container.querySelectorAll(".inbox-sample-list button")[1] as HTMLButtonElement).disabled,
-    ).toBe(true);
+    ).toBe(false);
   });
 });

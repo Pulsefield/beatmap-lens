@@ -48,6 +48,198 @@ afterEach(() => {
 });
 
 describe("ReviewWorkspace mounted workflow", () => {
+  it("shows remote evidence context separately and permits human review without an agent reread", async () => {
+    const f = await workspaceFixture(true);
+    if (!f.handoff) throw new Error("Missing handoff.");
+    const initial = await f.read();
+    if (!initial) throw new Error("Missing review.");
+    const imported = await f.directory.importHandoff(f.sourceBytes, initial.version, f.handoff);
+    const container = document.createElement("div");
+    document.body.append(container);
+    const app = createApp(ReviewWorkspace, {
+      remoteSource: {
+        ...imported.stored,
+        sourceBytes: Array.from(f.sourceBytes),
+        handoffTrust: {
+          [f.handoff.handoffId]: {
+            source: "current",
+            foundation: "current",
+            humanContext: "changed",
+          },
+        },
+      },
+      openClaim: { handoffId: f.handoff.handoffId, claimId: "claim-a" },
+    });
+    app.config.errorHandler = (error) => appErrors.push(error);
+    apps.push(app);
+    app.mount(container);
+    await vi.waitFor(() => expect(container.textContent).toContain("Human context changed"));
+    await setValue(control(container, "Human reviewer"), "fixture-human", "input");
+    expect(button(container, "Accept original").disabled).toBe(false);
+    await click(container, "Modify judgment");
+    expect(control(container, "Assessment").disabled).toBe(false);
+    expect(button(container, "Save modified").disabled).toBe(false);
+    expect((await f.read())?.document.decisions).toEqual([]);
+  });
+
+  it("reopens the latest saved proposal judgment and appends a human revision", async () => {
+    const f = await workspaceFixture(true);
+    if (!f.handoff) throw new Error("Missing handoff.");
+    const initial = await f.read();
+    if (!initial) throw new Error("Missing review.");
+    const imported = await f.directory.importHandoff(f.sourceBytes, initial.version, f.handoff);
+    const { transition: _transition, ...revisedClaim } = f.claim;
+    const first = await f.directory.decide(f.sourceBytes, imported.stored.version, {
+      handoffId: f.handoff.handoffId,
+      claimId: "claim-a",
+      disposition: "modified",
+      humanId: "fixture-human",
+      modifiedClaim: {
+        ...revisedClaim,
+        assessment: { presence: "absent" },
+        scope: { startMs: 1100, endMs: 1750 },
+        reviewContext: { startMs: 200, endMs: 1801 },
+        evidence: {
+          ...f.claim.evidence,
+          noteRefs: f.claim.evidence.noteRefs.filter((note) => note.endMs >= 1100),
+        },
+      },
+      rationale: "First synthetic revision.",
+    });
+    const container = document.createElement("div");
+    document.body.append(container);
+    const app = createApp(ReviewWorkspace, {
+      remoteSource: { ...first, sourceBytes: Array.from(f.sourceBytes) },
+      openClaim: { handoffId: f.handoff.handoffId, claimId: "claim-a" },
+    });
+    app.config.errorHandler = (error) => appErrors.push(error);
+    apps.push(app);
+    app.mount(container);
+    await vi.waitFor(() => expect(container.textContent).toContain("Revise human judgment"));
+    await setValue(control(container, "Human reviewer"), "fixture-human", "input");
+    expect(control(container, "Source time").value).toBe("200");
+    await click(container, "Revise human judgment");
+    expect(control(container, "Assessment").value).toBe("absent");
+    expect(
+      [...container.querySelectorAll<HTMLInputElement>(".claim-range input")].map(
+        (input) => input.value,
+      ),
+    ).toEqual(["1100", "1750", "200", "1801"]);
+    expect(
+      container.querySelectorAll('.claim-fields button[aria-label^="Remove witness"]'),
+    ).toHaveLength(2);
+    expect(control(container, "Assessment").disabled).toBe(false);
+    await setValue(control(container, "Assessment"), "present");
+    await setValue(control(container, "Salience"), "supporting");
+    const request = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
+      const body = JSON.parse(String(options?.body));
+      return Response.json(await f.directory.decide(f.sourceBytes, body.expectedBase, body.input));
+    });
+    try {
+      await click(container, "Save modified");
+      await vi.waitFor(() => expect(container.textContent).toContain("Human decision history · 2"));
+      const final = await f.read();
+      expect(final?.document.decisions[0]).toEqual(first.document.decisions[0]);
+      expect(final?.document.observations[0]).toEqual(first.document.observations[0]);
+      expect(final?.document.observations.at(-1)?.claim.assessment).toEqual({
+        presence: "present",
+        salience: "supporting",
+      });
+      expect(final?.document.handoffs).toEqual(first.document.handoffs);
+      const observationList = [...container.querySelectorAll(".review-source details")].find(
+        (entry) => entry.querySelector("summary")?.textContent?.startsWith("Human observations"),
+      );
+      observationList?.querySelector<HTMLButtonElement>("button")?.click();
+      await nextTick();
+      expect(container.textContent).toContain("Historical human judgment");
+      expect(control(container, "Assessment").value).toBe("absent");
+      expect(control(container, "Assessment").disabled).toBe(true);
+      await click(container, "View current judgment");
+      await click(container, "Revise human judgment");
+      expect(control(container, "Assessment").value).toBe("present");
+      expect(control(container, "Salience").value).toBe("supporting");
+      expect(container.textContent).not.toContain("Save revised judgment");
+      expect(button(container, "Save modified").disabled).toBe(false);
+      observationList?.querySelector<HTMLButtonElement>("button")?.click();
+      await nextTick();
+      await click(container, "Revise current judgment using this version");
+      expect(control(container, "Assessment").value).toBe("absent");
+      expect(control(container, "Assessment").disabled).toBe(false);
+      await click(container, "Save modified");
+      const restored = await f.read();
+      expect(restored?.document.decisions).toHaveLength(3);
+      expect(restored?.document.observations.at(-1)?.claim.assessment).toEqual({
+        presence: "absent",
+      });
+      expect(restored?.document.observations.slice(0, 2)).toEqual(final?.document.observations);
+    } finally {
+      request.mockRestore();
+    }
+  });
+
+  it("revises direct saved gold append-only and retains its observation history", async () => {
+    const f = await workspaceFixture();
+    const initial = await f.read();
+    if (!initial) throw new Error("Missing review.");
+    const first = await f.directory.addObservations(f.sourceBytes, initial.version, {
+      claims: [{ ...f.claim, assessment: { presence: "absent" } }],
+      humanId: "fixture-human",
+    });
+    const { container } = await openWorkspace(f);
+    await setValue(control(container, "Human reviewer"), "fixture-human", "input");
+    await click(container, "New section at playhead");
+    await setValue(
+      control(container, "Evidence / judgment rationale"),
+      "Unrelated direct draft stays saved.",
+      "input",
+    );
+    const observations = [...container.querySelectorAll(".review-source details")].find((entry) =>
+      entry.querySelector("summary")?.textContent?.startsWith("Human observations"),
+    );
+    observations?.querySelector<HTMLButtonElement>("button")?.click();
+    await nextTick();
+    expect(control(container, "Assessment").value).toBe("absent");
+    expect(control(container, "Assessment").disabled).toBe(false);
+    await setValue(control(container, "Assessment"), "present");
+    await setValue(control(container, "Salience"), "supporting");
+    await click(container, "Save revised judgment");
+    const final = await f.read();
+    expect(final?.document.observations).toHaveLength(2);
+    expect(final?.document.observations[0]).toEqual(first.document.observations[0]);
+    expect(final?.document.observations[1]?.supersedesObservationId).toBe(
+      first.document.observations[0]?.id,
+    );
+    expect(final?.document.observations[1]?.claim.assessment).toEqual({
+      presence: "present",
+      salience: "supporting",
+    });
+    expect(container.querySelector(".review-observation-history")?.textContent).toContain(
+      "Human observation history · 2",
+    );
+    observations?.querySelector<HTMLButtonElement>("button")?.click();
+    await nextTick();
+    expect(container.textContent).toContain("Historical human judgment");
+    expect(control(container, "Assessment").value).toBe("absent");
+    await click(container, "View current judgment");
+    expect(control(container, "Assessment").value).toBe("present");
+    expect(control(container, "Salience").value).toBe("supporting");
+    observations?.querySelector<HTMLButtonElement>("button")?.click();
+    await nextTick();
+    await click(container, "Revise current judgment using this version");
+    expect(control(container, "Assessment").value).toBe("absent");
+    await click(container, "Save revised judgment");
+    const restored = await f.read();
+    expect(restored?.document.observations).toHaveLength(3);
+    expect(restored?.document.observations.at(-1)?.supersedesObservationId).toBe(
+      final?.document.observations[1]?.id,
+    );
+    expect(restored?.document.observations.slice(0, 2)).toEqual(final?.document.observations);
+    await click(container, "Restore section draft");
+    expect(control(container, "Evidence / judgment rationale").value).toBe(
+      "Unrelated direct draft stays saved.",
+    );
+  });
+
   it("shows frozen versions and opens an earlier judgment for the same range", async () => {
     const f = await workspaceFixture(true);
     if (!f.task) throw new Error("Missing task.");
@@ -525,7 +717,7 @@ describe("ReviewWorkspace mounted workflow", () => {
     await click(container, "View human clarification");
     expect(control(container, "Assessment").value).toBe("present");
     expect(control(container, "Salience").value).toBe("supporting");
-    expect(control(container, "Assessment").disabled).toBe(true);
+    expect(control(container, "Assessment").disabled).toBe(false);
   });
 
   it("preserves a human draft when an independent audit arrives through the connected inbox", async () => {
@@ -846,7 +1038,7 @@ describe("ReviewWorkspace mounted workflow", () => {
     );
     observationSection?.querySelector<HTMLButtonElement>("button")?.click();
     await nextTick();
-    expect(control(container, "Assessment").disabled).toBe(true);
+    expect(control(container, "Assessment").disabled).toBe(false);
     await chooseProposal(container, "synthetic-b");
     expect(control(container, "Evidence / judgment rationale").value).toBe(
       "Unsaved B modification.",
@@ -914,7 +1106,12 @@ describe("ReviewWorkspace mounted workflow", () => {
       "This imported task has no local human approval.",
       "input",
     );
-    expect(button(container, "Accept original").disabled).toBe(true);
+    expect(
+      [...container.querySelectorAll("button")].some(
+        (node) => node.textContent === "Accept original" && !node.disabled,
+      ),
+    ).toBe(false);
+    expect(button(container, "Save modified").disabled).toBe(true);
     expect(container.querySelector(".review-handoff")?.textContent).toContain("Task base: stale");
   });
 });

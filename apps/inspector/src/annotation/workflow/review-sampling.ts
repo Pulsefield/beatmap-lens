@@ -59,7 +59,8 @@ export function sampleCandidates(
       .filter((claim) => {
         const level = assessmentStrength(claim);
         const eligible =
-          claim.status === "agent-reviewed" &&
+          !["accepted", "modified", "rejected", "deferred", "superseded"].includes(claim.status) &&
+          !claim.supersededBy &&
           ["absent", "supporting", "prominent"].includes(level) &&
           (!tagId || claim.tagId === tagId) &&
           (strength === "all" || level === strength) &&

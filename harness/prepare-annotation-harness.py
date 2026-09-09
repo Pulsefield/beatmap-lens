@@ -7,7 +7,7 @@ import shutil
 
 import pyarrow.parquet as pq
 
-from harness_examples import extract_examples, filter_contrast_sets, public_example
+from harness_examples import evidence_ref, extract_examples, filter_contrast_sets, public_example
 
 REPO = Path(__file__).resolve().parents[1]
 CONTRAST_SETS = REPO / '.agents/skills/mania-pattern-judgment/references/human-contrast-sets.json'
@@ -48,6 +48,9 @@ def prepare(campaign, section_file, feedback_dir, out, mode='annotation', source
     # Held-out labels never enter the worker bundle, including other difficulties in its group.
     examples = [e for e in examples if e['sourceSha256'] in sources
                 and e['sourceSha256'] not in excluded_sources and e['groupId'] not in excluded_groups]
+    # Keep provenance outside the worker-facing example projection. Merely
+    # freezing this library does not mean the worker consulted every example.
+    save(out / 'example-refs.json', {e['id']: evidence_ref(e) for e in examples})
     examples = [public_example(e) | {'groupId': e['groupId']} for e in examples]
     for example in examples:
         source = sources[example['sourceSha256']]['source']
@@ -78,6 +81,7 @@ def prepare(campaign, section_file, feedback_dir, out, mode='annotation', source
         shutil.copyfile(REPO / 'harness' / name, out / 'tools' / name)
     files = {str(p.relative_to(out)): digest(p) for p in sorted(out.rglob('*')) if p.is_file()}
     manifest = {'kind': 'beatmap-lens-annotation-harness-v1', 'mode': mode,
+                'humanEvidenceTracking': 'returned-examples-v1',
                 'foundationSha256': read(campaign / 'controller/config.json')['foundationSha256'],
                 'sections': sections, 'charts': chart_refs, 'files': files,
                 'excludedSources': excluded_sources, 'excludedGroups': excluded_groups,

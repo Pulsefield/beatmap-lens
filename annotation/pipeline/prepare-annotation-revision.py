@@ -23,7 +23,8 @@ from pathlib import Path
 import re
 import subprocess
 from urllib.error import HTTPError
-from urllib.request import Request, urlopen
+from urllib.parse import urlsplit
+from urllib.request import ProxyHandler, Request, build_opener, urlopen
 import uuid
 
 
@@ -82,8 +83,12 @@ def request(server, path, body=None):
     payload = None if body is None else json.dumps(body).encode()
     req = Request(f"{server.rstrip('/')}/api/review/{path}", data=payload,
                   headers={'Content-Type': 'application/json'})
+    # The local workspace service must remain local even when shell proxy
+    # variables are configured. Preserve normal proxy behavior for remote hosts.
+    open_request = (build_opener(ProxyHandler({})).open
+                    if urlsplit(server).hostname in ('localhost', '127.0.0.1', '::1') else urlopen)
     try:
-        with urlopen(req, timeout=60) as response:
+        with open_request(req, timeout=60) as response:
             raw = response.read()
     except HTTPError as error:
         detail = json.loads(error.read())

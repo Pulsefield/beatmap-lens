@@ -80,6 +80,39 @@ def completed_job(job, role):
     return run, agent
 
 
+def human_evidence(job, run):
+    """Return only human observations actually exposed by a tracked harness.
+
+    Dependencies are shared across the labeler job: the worker can use any
+    returned example for any case. Legacy/missing provenance stays unknown;
+    it must not become an explicit claim that no human examples were used.
+    """
+    harness = run.get('harness')
+    if not harness:
+        return None, None
+    bundle = Path(harness['bundle'])
+    manifest_path = bundle / 'manifest.json'
+    require(sha(manifest_path) == harness['manifestSha256'], 'Frozen worker harness changed.')
+    manifest = read(manifest_path)
+    if manifest.get('humanEvidenceTracking') != 'returned-examples-v1':
+        return None, None
+    trace_path = Path(job) / 'harness-trace.jsonl'
+    if not trace_path.exists():
+        return None, None
+    refs_path = bundle / 'example-refs.json'
+    require(sha(refs_path) == manifest['files']['example-refs.json'], 'Frozen human evidence references changed.')
+    available = [ref for ref in read(refs_path).values() if ref is not None]
+    references, complete = {}, True
+    for line in trace_path.read_text().splitlines():
+        event = json.loads(line)
+        if not event.get('humanEvidenceTrackingComplete', False):
+            complete = False
+        for ref in event.get('humanEvidenceRefs', []):
+            require(ref in available, 'Harness trace references an observation outside the frozen examples.')
+            references[(ref['sourceSha256'], ref['observationId'], ref['observationSha256'])] = ref
+    return ([references[key] for key in sorted(references)] if complete else None), sha(trace_path)
+
+
 def keyed(items, key, expected=None):
     result = {item[key]: item for item in items}
     require(len(result) == len(items), f'Duplicate {key}.')
@@ -158,11 +191,16 @@ def bind_source(case, task, foundation, config):
     return byline
 
 
-def check_feedback(current, source_sha, foundation_sha, base=None):
+def check_feedback(current, source_sha, foundation_sha):
     require(current['sourceSha256'] == source_sha, 'Feedback source differs.')
     require(current['taskBinding']['foundationSha256'] == foundation_sha, 'Current Foundation differs.')
-    if base is not None:
-        require(current['reviewBase'] == base, 'Sealed review base is stale; preserve the packet.')
+
+
+def machine_binding_current(row):
+    trust = row.get('trust')
+    if trust:
+        return trust['source'] == 'current' and trust['foundation'] == 'current'
+    return row['baseStatus'] == 'current'
 
 
 def terminal_lineage(case, current, foundation_sha, include_exact_stale=False):
@@ -233,9 +271,13 @@ def select_cells(case, judgments, current, foundation_sha):
     bykey = {(row['handoffId'], row['claimId']): row for row in rows}
     handoffs = {handoff['handoffId']: handoff for handoff in current['handoffs']}
     references = {(ref['handoffId'], ref['claimId']): ref for ref in case.get('originalReferences', [])}
-    humans = [claim for row in rows if row.get('decision') or row['status'] in HUMAN
-              for claim in [row['summary'], *([row['modifiedClaim']] if 'modifiedClaim' in row else [])]]
-    humans += [item['summary'] for item in current.get('directObservations', [])]
+    if 'effectiveHumanObservations' in current:
+        humans = [item.get('claim', item.get('summary')) for item in current['effectiveHumanObservations']]
+        humans += [row['summary'] for row in rows if row['status'] in ('rejected', 'deferred')]
+    else:
+        humans = [claim for row in rows if row.get('decision') or row['status'] in HUMAN
+                  for claim in [row['summary'], *([row['modifiedClaim']] if 'modifiedClaim' in row else [])]]
+        humans += [item['summary'] for item in current.get('directObservations', [])]
     selected, links, skipped = [], [], []
     for judgment in judgments:
         tag = judgment['tagId']
@@ -247,7 +289,8 @@ def select_cells(case, judgments, current, foundation_sha):
                             else 'human-overlap', 'conflict': False})
             continue
         exact = [row for row in rows if row['summary']['tagId'] == tag
-                 and row['summary']['scope'] == case['scope'] and row['status'] != 'superseded']
+                 and row['summary']['scope'] == case['scope'] and row['status'] != 'superseded'
+                 and not row.get('decision')]
         reason, conflict, replacements = None, False, []
         for identity, ref in references.items():
             row = bykey.get(identity)
@@ -261,7 +304,7 @@ def select_cells(case, judgments, current, foundation_sha):
             identity = (row['handoffId'], row['claimId'])
             original = handoffs[row['handoffId']]
             stale_tail = identity in case.get('staleLineageTargets', [])
-            if (row['baseStatus'] != 'current' or row['status'] == 'stale') and not stale_tail:
+            if (not machine_binding_current(row) or row['status'] == 'stale') and not stale_tail:
                 reason, conflict = 'stale-machine-cell', True
                 break
             if original['foundationSha256'] != foundation_sha:
@@ -319,6 +362,7 @@ def prepare_handoffs(batch_root, label_job, campaign, *, follow_terminal_lineage
     require(not follow_terminal_lineage or handoff_suffix, 'Lineage repair needs a distinct new handoff suffix.')
     require(not include_exact_stale or follow_terminal_lineage, 'Exact stale coalescing requires explicit lineage repair.')
     run, agent = completed_job(label_job, 'labeler')
+    human_refs, evidence_trace_sha = human_evidence(label_job, run)
     cases = keyed(read(label_job / 'cases.json')['cases'], 'caseId')
     outputs = keyed(read(label_job / 'response.json')['cases'], 'caseId', cases)
     for case_id, case in cases.items():
@@ -326,6 +370,8 @@ def prepare_handoffs(batch_root, label_job, campaign, *, follow_terminal_lineage
     manifest_path = batch_root / 'packets/manifest.json'
     labeler = {'path': str(label_job / 'run.json'), 'sha256': sha(label_job / 'run.json'),
                'producerId': agent['producerId'], 'responseSha256': run['responseSha256'], 'skill': agent['skill']}
+    if evidence_trace_sha is not None:
+        labeler['humanEvidenceTraceSha256'] = evidence_trace_sha
     if manifest_path.exists():
         manifest = read(manifest_path)
         require(manifest['labelerRun'] == labeler and manifest['server'] == config['server'],
@@ -350,7 +396,7 @@ def prepare_handoffs(batch_root, label_job, campaign, *, follow_terminal_lineage
         byline = bind_source(case, task, foundation, config)
         current = feedback(config['server'], case['sourceSha256'])
         save(folder / 'feedback-current.json', current)
-        check_feedback(current, case['sourceSha256'], task['foundationSha256'], task['base'])
+        check_feedback(current, case['sourceSha256'], task['foundationSha256'])
         target, review, lineages = (terminal_lineage(case, current, task['foundationSha256'], include_exact_stale)
                                     if follow_terminal_lineage else (case, current, []))
         selected, links, skipped = select_cells(target, outputs[case_id]['judgments'], review, task['foundationSha256'])
@@ -370,6 +416,8 @@ def prepare_handoffs(batch_root, label_job, campaign, *, follow_terminal_lineage
         handoff_id = agent['producerId'] + '-' + case_id + ('-' + handoff_suffix if handoff_suffix else '')
         proposal = {'handoffId': handoff_id, 'createdAt': run['finishedAt'],
                     'agent': agent, 'proposals': proposals, 'audit': [], 'questions': [], 'supersedes': links}
+        if human_refs is not None:
+            proposal['humanEvidenceRefs'] = human_refs
         proposal_path = folder / 'proposal.json'
         if handoff_path.exists():
             require(read(proposal_path) == proposal, 'Existing sealed proposal changed; preserve its packet.')
@@ -423,7 +471,7 @@ def human_records(current):
 
 
 def check_delivery(current, entry, handoff):
-    check_feedback(current, entry['sourceSha256'], entry['foundationSha256'], entry['base'])
+    check_feedback(current, entry['sourceSha256'], entry['foundationSha256'])
     # Ignore this exact handoff on retries; every other current cell still applies.
     other = {**current, 'agentReviews': [row for row in current['agentReviews'] if row['handoffId'] != entry['handoffId']],
              'handoffs': [item for item in current['handoffs'] if item['handoffId'] != entry['handoffId']]}
@@ -441,7 +489,7 @@ def check_delivery(current, entry, handoff):
 
 
 def verify_applied(current, entry, handoff, audit, audit_sha):
-    check_feedback(current, entry['sourceSha256'], entry['foundationSha256'], entry['base'])
+    check_feedback(current, entry['sourceSha256'], entry['foundationSha256'])
     original = next(item for item in current['handoffs'] if item['handoffId'] == entry['handoffId'])
     require(original['handoffSha256'] == entry['handoffSha256'], 'Stored handoff hash differs.')
     stored = next(item for item in current['audits'] if item['auditId'] == audit['auditId'])
@@ -453,7 +501,7 @@ def verify_applied(current, entry, handoff, audit, audit_sha):
     for claim in handoff['proposals']:
         row, result = rows[(entry['handoffId'], claim['id'])], results[claim['id']]
         expected = 'agent-reviewed' if result['outcome'] == 'supported' else result['outcome']
-        require(row['baseStatus'] == 'current' and row['status'] == expected, 'Delivered claim has a conflicting current status.')
+        require(machine_binding_current(row) and row['status'] == expected, 'Delivered claim has a conflicting current status.')
         require(all(row['summary'][key] == claim[key] for key in ('scope', 'reviewContext', 'tagId', 'assessment')),
                 'Delivered claim content differs.')
         require(any(item['auditId'] == audit['auditId'] and item['result'] == result for item in row['audits']),
@@ -497,6 +545,7 @@ def deliver_audits(batch_root, audit_job, campaign):
     require(manifest['server'] == config['server'], 'Delivery server differs from preparation.')
     require(sha(manifest['labelerRun']['path']) == manifest['labelerRun']['sha256'], 'Labeler run record changed.')
     run, agent = completed_job(audit_job, 'auditor')
+    human_refs, evidence_trace_sha = human_evidence(audit_job, run)
     require(agent['producerId'].strip() != manifest['labelerRun']['producerId'].strip(), 'Auditor must be independent.')
     entries = keyed(manifest['entries'], 'caseId')
     keyed(read(audit_job / 'cases.json')['cases'], 'caseId', entries)
@@ -505,6 +554,16 @@ def deliver_audits(batch_root, audit_job, campaign):
                       'handoffManifestSha256': sha(manifest_path), 'auditorRunPath': str(audit_job / 'run.json'),
                       'auditorRunSha256': sha(audit_job / 'run.json'), 'producerId': agent['producerId'],
                       'responseSha256': run['responseSha256'], 'entries': []}
+    if evidence_trace_sha is not None:
+        audit_manifest['humanEvidenceTraceSha256'] = evidence_trace_sha
+    audit_manifest_path = batch_root / 'packets/audit-manifest.json'
+    if audit_manifest_path.exists():
+        previous = read(audit_manifest_path)
+        identity_fields = ('handoffManifestSha256', 'auditorRunPath', 'auditorRunSha256',
+                           'producerId', 'responseSha256', 'humanEvidenceTraceSha256')
+        require(all(previous.get(key) == audit_manifest.get(key) for key in identity_fields),
+                'Existing independent audit belongs to different immutable worker evidence.')
+        audit_manifest['createdAt'] = previous['createdAt']
     # Validate every response before any public submission, including the worker's
     # frozen copies of the exact task and original handoff.
     prepared = []
@@ -515,7 +574,10 @@ def deliver_audits(batch_root, audit_job, campaign):
                 'Auditor inputs do not pin the exact task and handoff files.')
         require(read(audit_job / 'foundation.json')['foundationSha256'] == task['foundationSha256'],
                 'Auditor Foundation differs from the sealed task.')
-        prepared.append((entry, handoff, audit_proposal(entry, handoff, verdicts[case_id], run, agent)))
+        proposal = audit_proposal(entry, handoff, verdicts[case_id], run, agent)
+        if human_refs is not None:
+            proposal['humanEvidenceRefs'] = human_refs
+        prepared.append((entry, handoff, proposal))
     for entry, handoff, proposal in prepared:
         folder = Path(entry['handoffPath']).parent
         input_path, audit_path = folder / 'audit-input.json', folder / 'audit.json'
@@ -532,8 +594,9 @@ def deliver_audits(batch_root, audit_job, campaign):
         audit_manifest['entries'].append({'caseId': entry['caseId'], 'auditPath': str(audit_path),
                                          'auditSha256': sha(audit_path), 'auditId': audit['auditId'],
                                          'coverageRationale': verdicts[entry['caseId']]['coverageRationale']})
-    save(batch_root / 'packets/audit-manifest.json', audit_manifest)
+    save(audit_manifest_path, audit_manifest)
     delivery = {'kind': 'section-annotation-delivery-v1', 'startedAt': now(), 'status': 'in-progress',
+                'auditManifestSha256': sha(audit_manifest_path),
                 'entries': [], 'skippedCells': manifest['skippedCells']}
     for (entry, handoff, _), sealed in zip(prepared, audit_manifest['entries']):
         folder = batch_root / 'receipts' / entry['caseId']
@@ -555,14 +618,13 @@ def deliver_audits(batch_root, audit_job, campaign):
                 interim = feedback(config['server'], entry['sourceSha256'])
                 save(folder / 'feedback-after-handoff.json', interim)
                 check_delivery(interim, entry, handoff)
-                require(human_records(interim) == humans, 'Human records changed before audit delivery.')
                 submit_packet(config['server'], sealed['auditPath'], folder / 'audit-receipt.json',
                               'audit', sealed['auditId'], entry['sourceSha256'])
                 after = feedback(config['server'], entry['sourceSha256'])
                 save(folder / 'feedback-after.json', after)
-                require(human_records(after) == humans, 'Human records changed during audit delivery.')
                 statuses = verify_applied(after, entry, handoff, audit, sealed['auditSha256'])
-                result.update(status='delivered', claimStatuses=statuses, humanRecordsUnchanged=True)
+                result.update(status='delivered', claimStatuses=statuses,
+                              humanRecordsUnchanged=human_records(after) == humans)
         except (ValueError, RuntimeError, OSError) as error:
             result.update(status='blocked', error=str(error))
         delivery['entries'].append(result)

@@ -77,7 +77,7 @@ def feedback_labels(feedback):
         if row['status'] == 'superseded':
             continue
         claim = row.get('modifiedClaim', row['summary'])
-        if row['status'] in ('accepted', 'modified') and known(claim):
+        if 'effectiveHumanObservations' not in feedback and row['status'] in ('accepted', 'modified') and known(claim):
             human.append(claim)
         elif row['status'] == 'agent-reviewed' and row['baseStatus'] == 'current' and known(claim):
             machine.append(claim)
@@ -88,11 +88,23 @@ def feedback_labels(feedback):
         if row.get('decision', {}).get('disposition') in ('modified', 'rejected'):
             signals.append({'kind': 'correction', 'claim': claim, 'claimId': row['claimId'],
                             'handoffId': row['handoffId'], 'decisionId': row['decision'].get('id')})
-    for observation in feedback.get('directObservations', []):
+    for observation in feedback.get('effectiveHumanObservations', feedback.get('directObservations', [])):
         claim = observation.get('claim', observation.get('summary'))
-        if known(claim):
+        if known(claim) and all(value == 'current' for value in observation.get('trust', {}).values()):
             human.append(claim)
     return human, machine, signals
+
+
+def confidence_counts(feedback):
+    """Report evidence currency separately; it never creates an automatic repair request."""
+    machine = [row for row in feedback.get('agentReviews', []) if not row.get('decision') and row['status'] != 'superseded']
+    gold = feedback.get('effectiveHumanObservations', [])
+    return {
+        'machine': {layer: dict(Counter(row.get('trust', {}).get(layer, 'untracked') for row in machine))
+                    for layer in ('source', 'foundation', 'humanContext')},
+        'human': {layer: dict(Counter(row.get('trust', {}).get(layer, 'untracked') for row in gold))
+                  for layer in ('source', 'foundation')},
+    }
 
 
 def human_conflicts(claims):
@@ -300,6 +312,7 @@ def main():
         chart = {'title': source['source'].get('title', sha[:12]),
                  'difficulty': source['source'].get('difficulty', ''),
                  'labelCounts': label_counts, 'sourceSha256': sha, 'beatmapSetId': set_id, 'selectionGroup': group,
+                 'confidenceCounts': confidence_counts(feedback[sha]),
                  'durationMs': chart_range[1] - chart_range[0], 'noteCount': len(notes),
                  'human': human_metrics, 'machineOnly': machine_metrics, 'combined': combined_metrics,
                  'parquetSha256': digest(parquet), 'feedbackSha256': digest(feedback_dir / f'{sha}.json')}
@@ -366,6 +379,7 @@ def main():
                          'Correction similarity retrieves different sources only; settled human cells are reused, never inferred from similarity.',
                          'Grid windows are inspection targets; labelers choose semantic episode boundaries.',
                          'Coverage counts explicit present/absent judgments only; review context and unresolved are excluded.',
+                         'Machine coverage is not publication eligibility: consult confidenceCounts for source, Foundation and referenced human evidence separately.',
                          'Time denominator is full Lens chart range including leading silence; note coverage counts attack starts.',
                          'Live per-source snapshots are captured over the reported interval, not an atomic workspace snapshot.',
                          'Exploration is a coverage check, not an unbiased accuracy estimate.',
@@ -379,6 +393,9 @@ def main():
               'selectionRoutes': dict(Counter(c['selectionRoute'] for c in batch)),
               'labelCounts': {tier: {tag: dict(sum((Counter(c['labelCounts'][tier][tag]) for c in charts), Counter())) for tag in TAGS} for tier in ('human', 'machineOnly')},
               'humanConflicts': conflicts, 'reviewStates': dict(states), 'grouping': 'curated-song' if song_groups else 'mapset (not unique song)',
+              'confidenceCounts': {tier: {layer: dict(sum((Counter(c['confidenceCounts'][tier][layer]) for c in charts), Counter()))
+                                         for layer in (('source', 'foundation', 'humanContext') if tier == 'machine' else ('source', 'foundation'))}
+                                   for tier in ('human', 'machine')},
               'groupCount': len(groups),
               'groupsWithHumanLabels': sum(g['human']['anyDimension']['ms'] > 0 for g in grouped),
               'groupsWithAnyLabels': sum(g['combined']['anyDimension']['ms'] > 0 for g in grouped),

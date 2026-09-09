@@ -78,8 +78,8 @@ export async function startReviewWorkspace(options) {
         throw httpError(404, "Source is not registered in this workspace.");
       throw error;
     });
-    // Rebuild pre-provenance summaries even when canonical source files are unchanged.
-    return `provenance-v1:${info.mtimeMs}:${info.size}`;
+    // Cached projections must follow the current review semantics, not frozen packet metadata.
+    return `review-trust-v2:${info.mtimeMs}:${info.size}`;
   }
 
   async function source(sha) {
@@ -113,6 +113,7 @@ export async function startReviewWorkspace(options) {
         claimId,
         claim,
         status,
+        trust,
         rationale,
         question,
         expertReason,
@@ -124,6 +125,7 @@ export async function startReviewWorkspace(options) {
         tagId: claim.tagId,
         scope: claim.scope,
         status,
+        trust,
         rationale,
         agent: handoffsById.get(handoffId).agent,
         submittedAt: handoffsById.get(handoffId).createdAt,
@@ -241,10 +243,15 @@ export async function startReviewWorkspace(options) {
 
   async function dispositions(sha) {
     const { stored } = await source(sha);
+    const original = await domain.readDispositionsV2(stored.document);
+    const trust = await resolveHandoffTrust(summaries.get(sha));
     const value = {
-      ...(await domain.readDispositionsV2(stored.document)),
+      ...original,
+      agentReviews: original.agentReviews.map((row) => ({ ...row, trust: trust[row.handoffId] })),
+      handoffs: original.handoffs.map((row) => ({ ...row, trust: trust[row.handoffId] })),
       documentVersion: stored.version,
       reviewRequests: reviewRequests(summaries.get(sha)),
+      handoffTrust: trust,
     };
     await atomicWrite(join(exchange, "outbox", `${sha}.dispositions.json`), json(value));
     return value;
@@ -252,13 +259,93 @@ export async function startReviewWorkspace(options) {
 
   async function feedback(sha) {
     const current = await summary(sha);
-    return { ...current.feedback, reviewRequests: reviewRequests(current) };
+    const trust = await resolveHandoffTrust(current);
+    return {
+      ...current.feedback,
+      agentReviews: current.feedback.agentReviews.map((row) => ({
+        ...row,
+        trust: trust[row.handoffId],
+      })),
+      handoffs: current.feedback.handoffs.map((row) => ({ ...row, trust: trust[row.handoffId] })),
+      reviewRequests: reviewRequests(current),
+    };
+  }
+
+  // Reference freshness is computed on read: changing another chart's gold must be
+  // visible even when this chart's persisted summary has not changed.
+  async function resolveHandoffTrust(current) {
+    const referenced = new Map();
+    const result = {};
+    for (const handoff of current.feedback.handoffs) {
+      const packets = [
+        handoff,
+        ...current.feedback.audits.filter((audit) => audit.handoffId === handoff.handoffId),
+      ];
+      let humanContext = packets.some((packet) => packet.humanEvidenceRefs === undefined)
+        ? "untracked"
+        : "current";
+      for (const ref of packets.flatMap((packet) => packet.humanEvidenceRefs ?? [])) {
+        if (!referenced.has(ref.sourceSha256)) {
+          let evidence;
+          try {
+            evidence =
+              ref.sourceSha256 === current.row.source.sha256
+                ? current
+                : await summary(ref.sourceSha256);
+          } catch (error) {
+            if (error.status !== 404) throw error;
+          }
+          referenced.set(
+            ref.sourceSha256,
+            evidence
+              ? new Map(
+                  evidence.feedback.effectiveHumanObservations
+                    .filter(
+                      (observation) =>
+                        observation.trust.source === "current" &&
+                        observation.trust.foundation === "current",
+                    )
+                    .map((observation) => [observation.id, observation.observationSha256]),
+                )
+              : undefined,
+          );
+        }
+        const observations = referenced.get(ref.sourceSha256);
+        if (observations && observations.get(ref.observationId) !== ref.observationSha256)
+          humanContext = "changed";
+        else if (!observations && humanContext !== "changed") humanContext = "untracked";
+      }
+      result[handoff.handoffId] = { ...handoff.trust, humanContext };
+    }
+    return result;
   }
 
   async function createFeedback({ stored, task }, reviews, current) {
     const { document, version } = stored;
     const observations = new Map(document.observations.map((entry) => [entry.id, entry]));
     const baseStatuses = new Map(reviews.map((row) => [row.handoffId, row.baseStatus]));
+    const trusts = new Map(reviews.map((row) => [row.handoffId, row.trust]));
+    const foundationSha256 = await domain.hashWorkflowValueV2(document.foundation);
+    const effectiveHumanObservations = await Promise.all(
+      domain.effectiveHumanObservationsV2(document).map(async (observation) => {
+        const { claim, ...entry } = observation;
+        const decision =
+          observation.origin.kind === "agent-proposal"
+            ? document.decisions.find((row) => row.id === observation.origin.decisionId)
+            : undefined;
+        return {
+          ...entry,
+          summary: claimSummary(claim),
+          humanComment: decision ? decision.rationale : claim.evidence.rationale,
+          observationSha256: await domain.hashWorkflowValueV2(observation),
+          trust: {
+            source: "current",
+            foundation: observation.foundationSha256 === foundationSha256 ? "current" : "changed",
+          },
+        };
+      }),
+    );
+    const effectiveById = new Map(effectiveHumanObservations.map((row) => [row.id, row]));
     return {
       contract: "beatmap-lens-agent-feedback",
       version: 2,
@@ -272,9 +359,13 @@ export async function startReviewWorkspace(options) {
         claimId: row.claimId,
         status: row.status,
         baseStatus: row.baseStatus,
+        trust: row.trust,
         summary: claimSummary(row.claim),
         audits: row.audits.map(({ auditId, result }) => ({ auditId, result })),
         ...(row.decision ? { decision: row.decision } : {}),
+        ...(row.decision?.observationId
+          ? { observationSha256: effectiveById.get(row.decision.observationId)?.observationSha256 }
+          : {}),
         ...(row.supersededBy ? { supersededBy: row.supersededBy } : {}),
         ...(row.decision?.disposition === "modified"
           ? { modifiedClaim: observations.get(row.decision.observationId).claim }
@@ -287,6 +378,12 @@ export async function startReviewWorkspace(options) {
           handoffId: handoff.handoffId,
           handoffSha256,
           ...(handoff.supersedes ? { supersedes: handoff.supersedes } : {}),
+          ...(handoff.humanEvidenceRefs === undefined
+            ? {}
+            : { humanEvidenceRefs: handoff.humanEvidenceRefs }),
+          trust:
+            trusts.get(handoff.handoffId) ??
+            (await domain.handoffTrustV2(document, handoff.handoffId)),
           ...taskBinding(handoff),
           agent: handoff.agent,
           baseStatus:
@@ -304,12 +401,16 @@ export async function startReviewWorkspace(options) {
         handoffSha256: audit.handoffSha256,
         ...taskBinding(audit),
         agent: audit.agent,
+        ...(audit.humanEvidenceRefs === undefined
+          ? {}
+          : { humanEvidenceRefs: audit.humanEvidenceRefs }),
         importedBaseStatus: baseStatus,
         questions: audit.questions,
       })),
-      directObservations: document.observations
-        .filter((entry) => entry.origin.kind === "direct-human")
-        .map(({ claim, ...entry }) => ({ ...entry, summary: claimSummary(claim) })),
+      effectiveHumanObservations,
+      directObservations: effectiveHumanObservations.filter(
+        (entry) => entry.origin.kind === "direct-human",
+      ),
     };
   }
 
@@ -537,17 +638,16 @@ export async function startReviewWorkspace(options) {
     for (const filename of files.filter((name) => /^[a-f\d]{64}\.v2\.json$/.test(name)).sort()) {
       try {
         const current = await summary(filename.slice(0, 64));
-        const assessments = new Map(
+        const trust = await resolveHandoffTrust(current);
+        const displayedClaims = new Map(
           current.feedback.agentReviews.map((review) => [
             json([review.handoffId, review.claimId]),
-            (review.modifiedClaim ?? review.summary).assessment,
+            review.modifiedClaim ?? review.summary,
           ]),
         );
-        const humanClaims = current.feedback.agentReviews
-          .flatMap((review) =>
-            review.decision?.observationId ? [review.modifiedClaim ?? review.summary] : [],
-          )
-          .concat(current.feedback.directObservations.map((observation) => observation.summary));
+        const humanClaims = current.feedback.effectiveHumanObservations.map(
+          (observation) => observation.summary,
+        );
         const humanAssessmentCounts = { settled: 0, unresolved: 0, unreviewed: 0 };
         for (const claim of humanClaims) {
           const presence = claim.assessment.presence;
@@ -559,7 +659,10 @@ export async function startReviewWorkspace(options) {
           ...current.row,
           reviews: current.row.reviews.map((review) => ({
             ...review,
-            assessment: assessments.get(json([review.handoffId, review.claimId])),
+            trust: trust[review.handoffId],
+            assessment: displayedClaims.get(json([review.handoffId, review.claimId])).assessment,
+            scope: displayedClaims.get(json([review.handoffId, review.claimId])).scope,
+            tagId: displayedClaims.get(json([review.handoffId, review.claimId])).tagId,
           })),
           humanAssessmentCounts,
           requests: reviewRequests(current),
@@ -608,6 +711,7 @@ export async function startReviewWorkspace(options) {
           200,
           {
             ...current.stored,
+            handoffTrust: await resolveHandoffTrust(summaries.get(sha)),
             sourceBytes: Array.from(current.sourceBytes),
             communityTags: await communityTags(current.stored.document.source),
             audio: audio ? { url: `/api/review/audio/${sha}`, filename: audio.filename } : null,

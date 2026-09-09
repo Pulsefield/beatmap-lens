@@ -112,6 +112,23 @@ class CoverageTest(unittest.TestCase):
         salient, = priorities.human_conflicts([a, claim("prominent", start=25, end=75, salience="prominent")])
         self.assertEqual(salient["ranges"], [[25, 75]])
 
+    def test_effective_gold_and_auxiliary_confidence_are_separate_from_repair_routing(self):
+        old = claim('old-gold')
+        current = claim('current-gold', presence='absent')
+        machine = claim('machine')
+        feedback = {'agentReviews': [
+            review(old, 'accepted', decision={'disposition': 'accepted'}),
+            review(machine, trust={'source': 'current', 'foundation': 'current', 'humanContext': 'changed'}),
+        ], 'directObservations': [{'summary': old}],
+            'effectiveHumanObservations': [{'summary': current, 'trust': {'source': 'current', 'foundation': 'current'}}]}
+        human, machines, signals = priorities.feedback_labels(feedback)
+        self.assertEqual(human, [current])
+        self.assertEqual(machines, [machine])
+        self.assertEqual(signals, [])
+        self.assertEqual(priorities.confidence_counts(feedback), {
+            'machine': {'source': {'current': 1}, 'foundation': {'current': 1}, 'humanContext': {'changed': 1}},
+            'human': {'source': {'current': 1}, 'foundation': {'current': 1}}})
+
     def test_conflicting_audit_repair_keeps_both_explanations(self):
         audits = [
             {"auditId": "support", "result": {"outcome": "supported", "rationale": "The repeated group supports the claim."}},

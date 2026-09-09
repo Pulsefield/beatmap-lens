@@ -1,6 +1,7 @@
 """Focused controller tests; the exchange is simulated and no packets are submitted."""
 from copy import deepcopy
 import hashlib
+import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
@@ -69,6 +70,80 @@ class SectionDeliveryTest(unittest.TestCase):
     def label(self):
         self.write_job(self.label_job, 'labeler', [self.case], [{'caseId': self.case['caseId'], 'judgments': self.judgments}])
         return delivery.prepare_handoffs(self.batch, self.label_job, self.config)
+
+    def attach_human_evidence(self, refs, events, tracked=True, job=None):
+        job = job or self.label_job
+        bundle = self.root / (job.name + '-harness')
+        delivery.save(bundle / 'example-refs.json', refs)
+        manifest = {'files': {'example-refs.json': delivery.sha(bundle / 'example-refs.json')}}
+        if tracked:
+            manifest['humanEvidenceTracking'] = 'returned-examples-v1'
+        delivery.save(bundle / 'manifest.json', manifest)
+        run = delivery.read(job / 'run.json')
+        run['harness'] = {'bundle': str(bundle), 'manifestSha256': delivery.sha(bundle / 'manifest.json')}
+        delivery.save(job / 'run.json', run)
+        trace = job / 'harness-trace.jsonl'
+        if events is not None:
+            trace.write_text(''.join(json.dumps(event) + '\n' for event in events))
+        return run
+
+    def test_sealed_handoff_pins_returned_human_evidence_only_and_detects_trace_changes(self):
+        self.write_job(self.label_job, 'labeler', [self.case], [{'caseId': self.case['caseId'], 'judgments': self.judgments}])
+        used = {'sourceSha256': 'a' * 64, 'observationId': 'used', 'observationSha256': 'b' * 64}
+        unrelated = {'sourceSha256': 'c' * 64, 'observationId': 'unseen', 'observationSha256': 'd' * 64}
+        event = {'tool': 'find_human_examples', 'humanEvidenceRefs': [used], 'humanEvidenceTrackingComplete': True}
+        self.attach_human_evidence({'example-used': used, 'example-unseen': unrelated}, [event, event])
+        manifest = delivery.prepare_handoffs(self.batch, self.label_job, self.config)
+        handoff = delivery.read(manifest['entries'][0]['handoffPath'])
+        self.assertEqual(handoff['humanEvidenceRefs'], [used])
+        self.assertEqual(manifest['labelerRun']['humanEvidenceTraceSha256'],
+                         delivery.sha(self.label_job / 'harness-trace.jsonl'))
+        with (self.label_job / 'harness-trace.jsonl').open('a') as trace:
+            trace.write(json.dumps({**event, 'humanEvidenceRefs': [unrelated]}) + '\n')
+        with self.assertRaisesRegex(ValueError, 'different immutable inputs'):
+            delivery.prepare_handoffs(self.batch, self.label_job, self.config)
+
+    def test_empty_dependency_set_requires_a_complete_initialized_trace(self):
+        self.write_job(self.label_job, 'labeler', [self.case], [{'caseId': self.case['caseId'], 'judgments': self.judgments}])
+        for tracked, events, expected in [
+                (False, [], None), (True, None, None), (True, [], []),
+                (True, [{'humanEvidenceRefs': [], 'humanEvidenceTrackingComplete': False}], None)]:
+            with self.subTest(tracked=tracked, events=events):
+                (self.label_job / 'harness-trace.jsonl').unlink(missing_ok=True)
+                run = self.attach_human_evidence({}, events, tracked)
+                actual, _ = delivery.human_evidence(self.label_job, run)
+                self.assertEqual(actual, expected)
+        self.attach_human_evidence({}, [])
+        manifest = delivery.prepare_handoffs(self.batch, self.label_job, self.config)
+        self.assertEqual(delivery.read(manifest['entries'][0]['handoffPath'])['humanEvidenceRefs'], [])
+
+    def test_audit_seals_its_own_actual_human_examples_and_binds_the_trace_to_delivery(self):
+        manifest = self.label()
+        self.auditor(manifest)
+        used = {'sourceSha256': 'e' * 64, 'observationId': 'auditor-example', 'observationSha256': 'f' * 64}
+        unseen = {'sourceSha256': 'a' * 64, 'observationId': 'unseen-example', 'observationSha256': 'b' * 64}
+        event = {'tool': 'get_human_example', 'humanEvidenceRefs': [used], 'humanEvidenceTrackingComplete': True}
+        self.attach_human_evidence({'used': used, 'unseen': unseen}, [event], job=self.audit_job)
+        result = delivery.deliver_audits(self.batch, self.audit_job, self.config)
+        audit_manifest_path = self.batch / 'packets/audit-manifest.json'
+        sealed = delivery.read(audit_manifest_path)
+        audit = delivery.read(sealed['entries'][0]['auditPath'])
+        self.assertEqual(audit['humanEvidenceRefs'], [used])
+        self.assertNotIn('humanEvidenceRefs', delivery.read(manifest['entries'][0]['handoffPath']))
+        self.assertEqual(sealed['humanEvidenceTraceSha256'], delivery.sha(self.audit_job / 'harness-trace.jsonl'))
+        self.assertEqual(result['auditManifestSha256'], delivery.sha(audit_manifest_path))
+        with (self.audit_job / 'harness-trace.jsonl').open('a') as trace:
+            trace.write(json.dumps(event) + '\n')
+        with self.assertRaisesRegex(ValueError, 'immutable worker evidence'):
+            delivery.deliver_audits(self.batch, self.audit_job, self.config)
+
+    def test_tracked_auditor_with_no_human_tool_results_seals_explicit_empty_evidence(self):
+        manifest = self.label()
+        self.auditor(manifest)
+        self.attach_human_evidence({}, [], job=self.audit_job)
+        delivery.deliver_audits(self.batch, self.audit_job, self.config)
+        audit_manifest = delivery.read(self.batch / 'packets/audit-manifest.json')
+        self.assertEqual(delivery.read(audit_manifest['entries'][0]['auditPath'])['humanEvidenceRefs'], [])
 
     def auditor(self, manifest, outcomes=None):
         cases, responses, copies = [], [], []
@@ -156,6 +231,7 @@ class SectionDeliveryTest(unittest.TestCase):
         manifest = self.label()
         entry = manifest['entries'][0]
         handoff = delivery.read(entry['handoffPath'])
+        self.assertNotIn('humanEvidenceRefs', handoff)
         self.assertEqual(len(handoff['proposals']), 5)
         hold = handoff['proposals'][-1]['evidence']['noteRefs'][0]
         self.assertEqual((hold['startMs'], hold['endMs']), (700, 1200))
@@ -202,6 +278,19 @@ class SectionDeliveryTest(unittest.TestCase):
         result = delivery.deliver_audits(self.batch, self.audit_job, self.config)
         self.assertEqual(result['status'], 'needs-controller')
         self.assertEqual(result['skippedCells'], manifest['skippedCells'])
+
+    def test_effective_gold_protects_current_revision_without_retaining_the_old_scope(self):
+        old = {'id': 'old-human', 'summary': {'tagId': 'tech', 'scope': self.case['scope']}}
+        self.current['directObservations'] = [old]
+        self.current['effectiveHumanObservations'] = [
+            {'id': 'revised-human', 'summary': {'tagId': 'tech', 'scope': {'startMs': 1500, 'endMs': 1600}}}]
+        selected, _, skipped = delivery.select_cells(self.case, self.judgments, self.current, self.config['foundationSha256'])
+        self.assertEqual(len(selected), 5)
+        self.assertEqual(skipped, [])
+        self.current['effectiveHumanObservations'][0]['summary']['scope'] = self.case['scope']
+        selected, _, skipped = delivery.select_cells(self.case, self.judgments, self.current, self.config['foundationSha256'])
+        self.assertEqual(len(selected), 4)
+        self.assertEqual(skipped[0]['reason'], 'human-exact')
 
     def test_current_pending_machine_cells_require_exact_explicit_lineage(self):
         self.case['originalReferences'] = [self.add_review('tech', 'needs-expert')]
@@ -317,6 +406,7 @@ class SectionDeliveryTest(unittest.TestCase):
         self.assertEqual(statuses['episode-1-ln-coordination'], 'needs-revision')
         self.assertEqual(self.current['agentReviews'][0]['status'], 'superseded')
         self.assertEqual(self.current['audits'][0]['agent']['producerId'], 'actual-auditor')
+        self.assertNotIn('humanEvidenceRefs', self.current['audits'][0])
         self.assertEqual(self.commands.count('submit'), 2)
         result = delivery.deliver_audits(self.batch, self.audit_job, self.config)
         self.assertEqual(result['entries'][0]['status'], 'already-delivered')
@@ -364,16 +454,39 @@ class SectionDeliveryTest(unittest.TestCase):
         self.assertEqual(self.current['audits'], [])
         self.assertIn('human-exact', result['entries'][0]['error'])
 
-    def test_stale_base_preserves_sealed_packets_and_stops_delivery(self):
+    def test_unrelated_human_update_during_audit_keeps_the_sealed_packet_deliverable(self):
         manifest = self.label()
         self.auditor(manifest)
         entry = manifest['entries'][0]
         self.current['reviewBase'] = {'reviewRevision': 1, 'reviewSha256': 'changed'}
+        self.current['effectiveHumanObservations'] = [
+            {'id': 'unrelated-human', 'summary': {'tagId': 'tech', 'scope': {'startMs': 1500, 'endMs': 1600}}}]
         result = delivery.deliver_audits(self.batch, self.audit_job, self.config)
-        self.assertEqual(result['status'], 'blocked')
-        self.assertIn('stale', result['entries'][0]['error'])
+        self.assertEqual(result['status'], 'complete')
         self.assertEqual(delivery.sha(entry['handoffPath']), entry['handoffSha256'])
-        self.assertNotIn('submit', self.commands)
+        self.assertEqual(self.commands.count('submit'), 2)
+
+    def test_unrelated_human_saves_between_both_delivery_writes_are_preserved_and_reported(self):
+        manifest = self.label()
+        self.auditor(manifest)
+        exchange = self.exchange
+
+        def concurrent_human(command, *arguments):
+            exchange(command, *arguments)
+            if command == 'submit':
+                index = len(self.current['directObservations'])
+                self.current['directObservations'].append({
+                    'id': f'concurrent-human-{index}',
+                    'summary': {'tagId': 'tech', 'scope': {'startMs': 800 + index * 100, 'endMs': 900 + index * 100},
+                                'assessment': {'presence': 'absent'}}})
+
+        with patch.object(delivery, 'cli', side_effect=concurrent_human):
+            result = delivery.deliver_audits(self.batch, self.audit_job, self.config)
+        self.assertEqual(result['status'], 'complete')
+        self.assertFalse(result['entries'][0]['humanRecordsUnchanged'])
+        self.assertEqual(self.commands.count('submit'), 2)
+        self.assertEqual([row['id'] for row in self.current['directObservations']],
+                         ['concurrent-human-0', 'concurrent-human-1'])
 
 
 if __name__ == '__main__':

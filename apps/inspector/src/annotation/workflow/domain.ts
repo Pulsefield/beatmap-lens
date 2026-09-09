@@ -17,6 +17,7 @@ import {
   type ImportedAuditV2,
   type ReviewBaseV2,
   type ReviewDocumentV2,
+  type ReviewTrustV2,
   TASK_CONTRACT_V2,
   type TaskPacketV2,
   WORKFLOW_CONTRACT_V2,
@@ -37,6 +38,7 @@ export interface DecideClaimInputV2 extends OperationOptionsV2 {
 }
 
 export interface AddObservationsInputV2 extends OperationOptionsV2 {
+  readonly supersedesObservationId?: string;
   readonly claims: readonly ClaimV2[];
   readonly humanId: string;
 }
@@ -203,17 +205,44 @@ export async function registerTaskV2(
   return changed(document, { tasks: [...document.tasks, task] }, false, options);
 }
 
+function assertHumanEvidenceRefs(input: unknown): void {
+  const seen = new Set<string>();
+  for (const item of array(input, "humanEvidenceRefs")) {
+    const ref = record(
+      item,
+      ["sourceSha256", "observationId", "observationSha256"],
+      [],
+      "humanEvidenceRef",
+    );
+    nonempty(ref.observationId, "humanEvidenceRef.observationId");
+    for (const key of ["sourceSha256", "observationSha256"]) {
+      if (typeof ref[key] !== "string" || !/^[a-f0-9]{64}$/.test(ref[key] as string))
+        throw new Error(`humanEvidenceRef.${key} must be a SHA-256 hash.`);
+    }
+    const key = `${ref.sourceSha256}:${ref.observationId}`;
+    if (seen.has(key)) throw new Error("Duplicate human evidence reference.");
+    seen.add(key);
+  }
+}
+
 export async function sealHandoffV2(
   task: TaskPacketV2,
   input: Pick<
     HandoffV2,
-    "handoffId" | "createdAt" | "agent" | "proposals" | "audit" | "questions" | "supersedes"
+    | "handoffId"
+    | "createdAt"
+    | "agent"
+    | "proposals"
+    | "audit"
+    | "questions"
+    | "supersedes"
+    | "humanEvidenceRefs"
   >,
 ): Promise<HandoffV2> {
   record(
     input,
     ["handoffId", "createdAt", "agent", "proposals", "audit", "questions"],
-    ["supersedes"],
+    ["supersedes", "humanEvidenceRefs"],
     "submission",
   );
   if (!array(input.proposals, "submission.proposals").length) {
@@ -255,7 +284,7 @@ export async function validateHandoffV2(input: unknown, task: TaskPacketV2): Pro
       "audit",
       "questions",
     ],
-    ["supersedes"],
+    ["supersedes", "humanEvidenceRefs"],
     "handoff",
   );
   equal(handoff.contract, HANDOFF_CONTRACT_V2, "handoff.contract");
@@ -282,6 +311,7 @@ export async function validateHandoffV2(input: unknown, task: TaskPacketV2): Pro
   for (const claim of proposals) assertClaimV2(claim, task.structure.notes, task.foundation);
   uniqueIds(proposals, "proposals");
   const claimIds = new Set(proposals.map((claim) => (claim as ClaimV2).id));
+  if ("humanEvidenceRefs" in handoff) assertHumanEvidenceRefs(handoff.humanEvidenceRefs);
   if ("supersedes" in handoff) {
     const targets = new Set<string>();
     for (const entry of array(handoff.supersedes, "handoff.supersedes")) {
@@ -350,7 +380,11 @@ export async function importHandoffV2(
       existing.handoffSha256,
       "Handoff ID already exists with different immutable content",
     );
-    return { document, status: "duplicate", baseStatus: existing.baseStatus };
+    return {
+      document,
+      status: "duplicate",
+      baseStatus: await handoffBaseStatusV2(document, handoff.handoffId),
+    };
   }
   assertSupersessionTargets(document.handoffs, handoff);
   for (const link of handoff.supersedes ?? []) {
@@ -362,9 +396,10 @@ export async function importHandoffV2(
       throw new Error("A machine revision cannot supersede a human decision.");
     }
   }
-  const baseStatus: "current" | "stale" = sameBase(handoff.base, await baseForTaskV2(document))
-    ? "current"
-    : "stale";
+  const baseStatus: "current" | "stale" =
+    handoff.foundationSha256 === (await hashWorkflowValueV2(document.foundation))
+      ? "current"
+      : "stale";
   const imported = { handoff, handoffSha256, baseStatus, importedAt: timestamp(options) };
   return {
     document: changed(document, { handoffs: [...document.handoffs, imported] }, false, options),
@@ -376,9 +411,17 @@ export async function importHandoffV2(
 export async function sealAuditV2(
   task: TaskPacketV2,
   handoff: HandoffV2,
-  input: Pick<AuditPacketV2, "auditId" | "createdAt" | "agent" | "claims" | "questions">,
+  input: Pick<
+    AuditPacketV2,
+    "auditId" | "createdAt" | "agent" | "claims" | "questions" | "humanEvidenceRefs"
+  >,
 ): Promise<AuditPacketV2> {
-  record(input, ["auditId", "createdAt", "agent", "claims", "questions"], [], "audit submission");
+  record(
+    input,
+    ["auditId", "createdAt", "agent", "claims", "questions"],
+    ["humanEvidenceRefs"],
+    "audit submission",
+  );
   return validateAuditV2(
     {
       ...input,
@@ -427,9 +470,10 @@ export async function validateAuditV2(
       "claims",
       "questions",
     ],
-    [],
+    ["humanEvidenceRefs"],
     "audit",
   );
+  if ("humanEvidenceRefs" in audit) assertHumanEvidenceRefs(audit.humanEvidenceRefs);
   equal(audit.contract, AUDIT_CONTRACT_V2, "audit.contract");
   equal(audit.version, 2, "audit.version");
   nonempty(audit.auditId, "audit.auditId");
@@ -600,40 +644,27 @@ export async function decideClaimV2(
   const imported = document.handoffs.find((entry) => entry.handoff.handoffId === input.handoffId);
   const proposal = imported?.handoff.proposals.find((claim) => claim.id === input.claimId);
   if (!imported || !proposal) throw new Error("Unknown handoff claim.");
-  const previous = document.decisions
-    .filter(
-      (decision) => decision.handoffId === input.handoffId && decision.claimId === input.claimId,
-    )
-    .at(-1);
-  if (previous && previous.disposition !== "deferred")
-    throw new Error(
-      "This claim already has a final human decision; its history cannot be overwritten.",
-    );
   const confirming = input.disposition === "accepted" || input.disposition === "modified";
-  if (confirming && (await handoffBaseStatusV2(document, input.handoffId)) === "stale")
-    throw new Error(
-      "Stale task base: export a fresh task and explicitly review its updated proposal before confirming.",
-    );
-  // Decisions within the same imported handoff are independent: accepting one must not stale its siblings.
+  const foundationSha256 = await hashWorkflowValueV2(document.foundation);
   if (confirming) {
     requireApproved(document.foundation);
-    equal(
-      imported.handoff.foundationSha256,
-      await hashWorkflowValueV2(document.foundation),
-      "Foundation changed: export a fresh task before confirming",
-    );
+    if (input.disposition === "accepted" && imported.handoff.foundationSha256 !== foundationSha256)
+      throw new Error(
+        "Foundation changed: explicitly revise the human claim against the current definitions before confirming.",
+      );
   }
   if (input.disposition === "modified" && !input.modifiedClaim)
     throw new Error("A modified decision requires the complete revised claim.");
   if (input.disposition !== "modified" && input.modifiedClaim)
     throw new Error("Only a modified human decision may supply a revised claim.");
   const claim = input.modifiedClaim ?? proposal;
-  assertClaimV2(
-    claim,
-    createStableNoteRefsV1(inspected.chart),
-    document.foundation,
-    input.disposition !== "modified",
-  );
+  if (confirming)
+    assertClaimV2(
+      claim,
+      createStableNoteRefsV1(inspected.chart),
+      document.foundation,
+      input.disposition !== "modified",
+    );
   if (confirming && ["unresolved", "unreviewed"].includes(claim.assessment.presence))
     throw new Error(
       "Choose present with salience or absent before confirming a proposal, or defer this review. Unresolved and unreviewed do not decide presence.",
@@ -657,7 +688,7 @@ export async function decideClaimV2(
   const observation: HumanObservationV2 = {
     id: observationId,
     claim,
-    foundationSha256: imported.handoff.foundationSha256,
+    foundationSha256,
     humanId: input.humanId,
     confirmedAt: decidedAt,
     origin: {
@@ -688,6 +719,15 @@ export async function addHumanObservationsV2(
   nonempty(input.humanId, "humanId");
   if (!input.claims.length) throw new Error("At least one claim is required.");
   uniqueIds(input.claims, "claims");
+  if (input.supersedesObservationId !== undefined) {
+    if (input.claims.length !== 1)
+      throw new Error("A direct human revision requires exactly one claim.");
+    const prior = effectiveHumanObservationsV2(document).find(
+      (entry) => entry.id === input.supersedesObservationId,
+    );
+    if (prior?.origin.kind !== "direct-human")
+      throw new Error("A direct human revision must target a current direct-human observation.");
+  }
   const refs = createStableNoteRefsV1(inspected.chart);
   for (const claim of input.claims) assertClaimV2(claim, refs, document.foundation);
   const foundationSha256 = await hashWorkflowValueV2(document.foundation);
@@ -701,6 +741,9 @@ export async function addHumanObservationsV2(
       humanId: input.humanId,
       confirmedAt,
       origin: { kind: "direct-human" },
+      ...(input.supersedesObservationId
+        ? { supersedesObservationId: input.supersedesObservationId }
+        : {}),
     }),
   );
   uniqueIds([...document.observations, ...observations], "observations");
@@ -714,7 +757,11 @@ export async function addHumanObservationsV2(
 
 export async function addHumanObservationV2(
   document: ReviewDocumentV2,
-  input: OperationOptionsV2 & { readonly claim: ClaimV2; readonly humanId: string },
+  input: OperationOptionsV2 & {
+    readonly claim: ClaimV2;
+    readonly humanId: string;
+    readonly supersedesObservationId?: string;
+  },
   sourceBytes: Uint8Array,
 ): Promise<ReviewDocumentV2> {
   return addHumanObservationsV2(document, { ...input, claims: [input.claim] }, sourceBytes);
@@ -725,7 +772,11 @@ export async function readAgentReviewsV2(
 ): Promise<readonly AgentReviewV2[]> {
   const rows = await Promise.all(
     document.handoffs.map(async ({ handoff }) => {
-      const baseStatus = await handoffBaseStatusV2(document, handoff.handoffId);
+      const trust = await handoffTrustV2(document, handoff.handoffId);
+      const baseStatus =
+        trust.source === "current" && trust.foundation === "current"
+          ? ("current" as const)
+          : ("stale" as const);
       return handoff.proposals.map((claim): AgentReviewV2 => {
         const audits = (document.audits ?? [])
           .filter((entry) => entry.audit.handoffId === handoff.handoffId)
@@ -744,6 +795,7 @@ export async function readAgentReviewsV2(
           handoffId: handoff.handoffId,
           claimId: claim.id,
           claim,
+          trust,
           baseStatus,
           audits,
         };
@@ -863,11 +915,16 @@ export async function readDispositionsV2(document: ReviewDocumentV2) {
     reviewRevision: document.reviewRevision,
     audits: document.audits ?? [],
     agentReviews: await readAgentReviewsV2(document),
+    effectiveObservations: effectiveHumanObservationsV2(document),
     handoffs: await Promise.all(
       document.handoffs.map(async (entry) => ({
         handoffId: entry.handoff.handoffId,
         handoffSha256: entry.handoffSha256,
         ...(entry.handoff.supersedes ? { supersedes: entry.handoff.supersedes } : {}),
+        ...(entry.handoff.humanEvidenceRefs
+          ? { humanEvidenceRefs: entry.handoff.humanEvidenceRefs }
+          : {}),
+        trust: await handoffTrustV2(document, entry.handoff.handoffId),
         agent: entry.handoff.agent,
         taskId: entry.handoff.taskId,
         taskSha256: entry.handoff.taskSha256,
@@ -897,26 +954,79 @@ export async function readDispositionsV2(document: ReviewDocumentV2) {
   };
 }
 
+/** Effective gold excludes every historical decision and superseded direct observation. */
+export function effectiveHumanObservationsV2(
+  document: ReviewDocumentV2,
+): readonly HumanObservationV2[] {
+  const latest = new Map<string, HumanDecisionV2>();
+  for (const decision of document.decisions)
+    latest.set(JSON.stringify([decision.handoffId, decision.claimId]), decision);
+  const currentIds = new Set(
+    [...latest.values()].flatMap((decision) =>
+      decision.observationId ? [decision.observationId] : [],
+    ),
+  );
+  const superseded = new Set(
+    document.observations.flatMap((observation) =>
+      observation.supersedesObservationId ? [observation.supersedesObservationId] : [],
+    ),
+  );
+  return document.observations.filter((observation) =>
+    observation.origin.kind === "direct-human"
+      ? !superseded.has(observation.id)
+      : currentIds.has(observation.id),
+  );
+}
+
+/** Human context drift is provenance metadata, never a semantic or review lock. */
+export async function handoffTrustV2(
+  document: ReviewDocumentV2,
+  handoffId: string,
+): Promise<ReviewTrustV2> {
+  const imported = document.handoffs.find((entry) => entry.handoff.handoffId === handoffId);
+  if (!imported) throw new Error("Unknown handoff.");
+  const handoff = imported.handoff;
+  const packets = [
+    handoff,
+    ...(document.audits ?? [])
+      .filter((entry) => entry.audit.handoffId === handoffId)
+      .map((entry) => entry.audit),
+  ];
+  let humanContext: ReviewTrustV2["humanContext"] = packets.every(
+    (packet) => packet.humanEvidenceRefs !== undefined,
+  )
+    ? "current"
+    : "untracked";
+  const foundationSha256 = await hashWorkflowValueV2(document.foundation);
+  const observations = new Map(
+    effectiveHumanObservationsV2(document).map((entry) => [entry.id, entry]),
+  );
+  for (const ref of packets.flatMap((packet) => packet.humanEvidenceRefs ?? [])) {
+    if (ref.sourceSha256 !== document.source.sha256) {
+      if (humanContext !== "changed") humanContext = "untracked";
+      continue;
+    }
+    const observation = observations.get(ref.observationId);
+    if (
+      !observation ||
+      observation.foundationSha256 !== foundationSha256 ||
+      (await hashWorkflowValueV2(observation)) !== ref.observationSha256
+    )
+      humanContext = "changed";
+  }
+  return {
+    source: handoff.sourceSha256 === document.source.sha256 ? "current" : "changed",
+    foundation: handoff.foundationSha256 === foundationSha256 ? "current" : "changed",
+    humanContext,
+  };
+}
+
 export async function handoffBaseStatusV2(
   document: ReviewDocumentV2,
   handoffId: string,
 ): Promise<"current" | "stale"> {
-  const imported = document.handoffs.find((entry) => entry.handoff.handoffId === handoffId);
-  if (!imported) throw new Error("Unknown handoff.");
-  if (imported.baseStatus === "stale") return "stale";
-  const ownDecisions = document.decisions.filter((decision) => decision.handoffId === handoffId);
-  const beforeOwnDecisions = {
-    ...document,
-    reviewRevision: document.reviewRevision - ownDecisions.length,
-    decisions: document.decisions.filter((decision) => decision.handoffId !== handoffId),
-    observations: document.observations.filter(
-      (observation) =>
-        observation.origin.kind !== "agent-proposal" || observation.origin.handoffId !== handoffId,
-    ),
-  };
-  return sameBase(imported.handoff.base, await baseForTaskV2(beforeOwnDecisions))
-    ? "current"
-    : "stale";
+  const trust = await handoffTrustV2(document, handoffId);
+  return trust.source === "current" && trust.foundation === "current" ? "current" : "stale";
 }
 
 export async function assertFoundationV2(input: unknown): Promise<FoundationV2> {
@@ -1212,13 +1322,29 @@ export async function validateReviewDocumentV2(
     [await hashWorkflowValueV2(foundation), foundation],
   ]);
   for (const task of document.tasks) pinned.set(task.foundationSha256, task.foundation);
+  const seenObservations = new Map<string, HumanObservationV2>();
+  const supersededObservations = new Set<string>();
   for (const observation of document.observations) {
     record(
       observation,
       ["id", "claim", "foundationSha256", "humanId", "confirmedAt", "origin"],
-      [],
+      ["supersedesObservationId"],
       "observation",
     );
+    if (observation.supersedesObservationId !== undefined) {
+      nonempty(observation.supersedesObservationId, "observation.supersedesObservationId");
+      const previous = seenObservations.get(observation.supersedesObservationId);
+      if (
+        observation.origin.kind !== "direct-human" ||
+        previous?.origin.kind !== "direct-human" ||
+        supersededObservations.has(previous.id)
+      )
+        throw new Error(
+          "Observation revision must reference a preceding current direct-human observation.",
+        );
+      supersededObservations.add(previous.id);
+    }
+    seenObservations.set(observation.id, observation);
     nonempty(observation.humanId, "observation.humanId");
     nonempty(observation.confirmedAt, "observation.confirmedAt");
     const rules = pinned.get(observation.foundationSha256);

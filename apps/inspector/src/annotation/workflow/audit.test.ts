@@ -245,7 +245,7 @@ describe("independent audit exchange", () => {
     expect(decided.audits).toEqual(conflicted.document.audits);
   });
 
-  it("keeps late audits stale, preserves existing human dispositions and makes repeated imports idempotent", async () => {
+  it("keeps late audits usable, preserves existing human dispositions and makes repeated imports idempotent", async () => {
     const f = await workflowFixture();
     const imported = await importHandoffV2(f.registered, f.handoff, f.sourceBytes);
     const decided = await decideClaimV2(
@@ -277,10 +277,10 @@ describe("independent audit exchange", () => {
     );
     const audit = await sealAuditV2(f.task, f.handoff, submission());
     const late = await importAuditV2(unrelated, audit, f.sourceBytes);
-    expect(late.baseStatus).toBe("stale");
+    expect(late.baseStatus).toBe("current");
     expect((await readAgentReviewsV2(late.document)).map((review) => review.status)).toEqual([
       "rejected",
-      "stale",
+      "agent-reviewed",
       "deferred",
     ]);
     expect(await readExpertQueueV2(late.document)).toEqual([]);

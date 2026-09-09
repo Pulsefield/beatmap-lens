@@ -13,9 +13,9 @@ import { IndexedDbSessionStore, type SessionPreferences } from "./annotation/ses
 import { type InspectedOsuSourceV1, inspectOsuSourceV1 } from "./annotation/source-identity";
 import { createStableNoteRefV1, stableNoteRefKey } from "./annotation/stable-note-ref";
 import { fitTimelineViewRange, timelineZoomAnchorMs, zoomTimelineViewRangeAtTime } from "./annotation/timeline-view-range";
-import type { AgentReviewV2, ClaimV2, CommunityAlignmentV2, FoundationTagV2, FoundationV2, ReviewBaseV2, TaskPacketV2 } from "./annotation/workflow/contracts";
+import type { AgentReviewV2, ClaimV2, CommunityAlignmentV2, FoundationTagV2, FoundationV2, HumanObservationV2, ReviewBaseV2, TaskPacketV2 } from "./annotation/workflow/contracts";
 import { type StoredReviewV2, WorkflowDirectoryV2 } from "./annotation/workflow/directory";
-import { assertTaskPacketV2, handoffBaseStatusV2, readAgentReviewsV2, readDispositionsV2, sameBase } from "./annotation/workflow/domain";
+import { assertTaskPacketV2, effectiveHumanObservationsV2, handoffBaseStatusV2, readAgentReviewsV2, readDispositionsV2, sameBase } from "./annotation/workflow/domain";
 import { createExperimentalFoundationV2 } from "./annotation/workflow/experimental-campaign";
 import { createRemoteReviewStore, type RemoteSourceV2, type ReviewStoreV2 } from "./annotation/workflow/remote-workspace";
 import { agentVersionLabel, reviewVersionOptions, skillKey } from "./annotation/workflow/review-provenance";
@@ -53,6 +53,8 @@ const drafts = ref<readonly ClaimV2[]>([]);
 const activeClaimId = ref("");
 const editorOrigin = ref<"direct" | "proposal" | "observation" | "calibration">("direct");
 const activeHandoffId = ref("");
+const activeObservationId = ref("");
+const historicalObservation = shallowRef<HumanObservationV2>();
 const decisionNote = ref("");
 const evidenceMode = ref<"noteRefs" | "contextNoteRefs">("noteRefs");
 const selectionAnchor = ref<number>();
@@ -72,6 +74,7 @@ const activeFoundation = computed(() => document.value?.foundation ?? foundation
 const activeClaim = computed(() => drafts.value.find(claim => claim.id === activeClaimId.value));
 const expertQueue = computed(() => agentReviews.value.filter(review => review.status === "needs-expert"));
 const activeReview = computed(() => agentReviews.value.find(review => review.handoffId === activeHandoffId.value && review.claimId === activeClaimId.value));
+const activeTrust = computed(() => props.remoteSource?.handoffTrust?.[activeHandoffId.value] ?? activeReview.value?.trust);
 const activeHandoff = computed(() => document.value?.handoffs.find(entry => entry.handoff.handoffId === activeHandoffId.value)?.handoff);
 const auditPackets = computed(() => new Map(document.value?.audits?.map(entry => [entry.audit.auditId, entry.audit])));
 const chartHistory = computed(() => agentReviews.value.map(review => {
@@ -98,7 +101,19 @@ const pendingSectionReviews = computed(() => sectionReviews.value.filter(review 
   && !(savingDecision.value?.sourceSha === source.value?.source.sha256 && savingDecision.value?.handoffId === review.handoffId && savingDecision.value?.claimId === review.claimId)
   && !document.value?.decisions.some(decision => decision.handoffId === review.handoffId && decision.claimId === review.claimId)));
 const sectionPosition = computed(() => pendingSectionReviews.value.findIndex(review => review.claimId === activeClaimId.value));
-const finalDecision = computed(() => decisionsForClaim.value.at(-1)?.disposition === "deferred" ? undefined : decisionsForClaim.value.at(-1));
+const finalDecision = computed(() => decisionsForClaim.value.at(-1));
+const currentObservations = computed(() => document.value ? effectiveHumanObservationsV2(document.value) : []);
+const activeObservation = computed(() => document.value?.observations.find(observation => observation.id === activeObservationId.value));
+const observationHistory = computed(() => {
+  const entries: HumanObservationV2[] = [];
+  let entry = activeObservation.value;
+  while (entry) {
+    entries.push(entry);
+    const priorId: string | undefined = entry.supersedesObservationId;
+    entry = document.value?.observations.find(observation => observation.id === priorId);
+  }
+  return entries;
+});
 const finalObservation = computed(() => document.value?.observations.find(observation => observation.id === finalDecision.value?.observationId));
 const uncertainAcceptance = computed(() => Boolean(finalObservation.value && !settled(finalObservation.value.claim)));
 const laterClarification = computed(() => {
@@ -131,7 +146,7 @@ const selectionBand = computed(() => {
   const band = projectSceneRange(frame.value.scene.projection, activeClaim.value.scope);
   return band ? { ...band, x: 0, width: size.value.width } : undefined;
 });
-const canEdit = computed(() => !busy.value && !sourceLoading.value && (editorOrigin.value === "direct" || (editorOrigin.value === "proposal" && !finalDecision.value)));
+const canEdit = computed(() => !busy.value && !sourceLoading.value && editorOrigin.value !== "calibration" && !historicalObservation.value);
 const approved = computed(() => activeFoundation.value.approval.status === "human-approved");
 const decisionsForClaim = computed(() => document.value?.decisions.filter(decision => decision.handoffId === activeHandoffId.value && decision.claimId === activeClaimId.value) ?? []);
 const draftIsStale = computed(() => editorReviewRevision.value === undefined
@@ -316,6 +331,7 @@ function stashDraft(): void {
 }
 
 function restoreSection(): void {
+  historicalObservation.value = undefined;
   stashDraft();
   const text = localStorage.getItem(draftKey("direct"));
   if (!text) { newSection(); return; }
@@ -323,6 +339,7 @@ function restoreSection(): void {
   drafts.value = saved.drafts;
   activeClaimId.value = saved.activeClaimId;
   editorOrigin.value = "direct";
+  activeObservationId.value = "";
   activeHandoffId.value = "";
   decisionNote.value = saved.decisionNote;
   editorBase.value = saved.base;
@@ -535,6 +552,7 @@ function approveFoundation(): void {
 }
 
 function newSection(): void {
+  historicalObservation.value = undefined;
   const sectionId = crypto.randomUUID();
   const startMs = Math.max(0, Math.min(playhead.value, endMs.value - 1));
   const scope = { startMs, endMs: Math.min(endMs.value, startMs + 4000) };
@@ -545,6 +563,7 @@ function newSection(): void {
   }));
   activeClaimId.value = drafts.value[0]?.id ?? "";
   editorOrigin.value = "direct";
+  activeObservationId.value = "";
   activeHandoffId.value = "";
   decisionNote.value = "";
   editorBase.value = stored.value?.version;
@@ -564,30 +583,91 @@ function focus(range: TimeRangeV1): void {
 }
 
 function openProposal(handoffId: string, claim: ClaimV2, keepViewport = false): void {
+  historicalObservation.value = undefined;
   sectionComplete.value = false;
   stashDraft();
   const cached = localStorage.getItem(draftKey(`proposal:${handoffId}:${claim.id}`));
   const saved = cached ? JSON.parse(cached) : undefined;
-  drafts.value = saved?.drafts ?? [JSON.parse(serializeCanonicalJson(claim))];
+  const decision = document.value?.decisions.filter(entry => entry.handoffId === handoffId && entry.claimId === claim.id).at(-1);
+  const observation = document.value?.observations.find(entry => entry.id === decision?.observationId);
+  const currentClaim = observation?.claim ?? claim;
+  const currentDraft = saved?.reviewRevision === document.value?.reviewRevision ? saved : undefined;
+  drafts.value = currentDraft?.drafts ?? [JSON.parse(serializeCanonicalJson(currentClaim))];
   activeClaimId.value = claim.id;
   activeHandoffId.value = handoffId;
   editorOrigin.value = "proposal";
-  proposalEditing.value = saved?.proposalEditing ?? false;
-  decisionNote.value = saved?.decisionNote ?? "";
-  editorBase.value = saved?.base ?? stored.value?.version;
-  editorReviewRevision.value = saved?.reviewRevision ?? document.value?.reviewRevision;
+  activeObservationId.value = "";
+  proposalEditing.value = currentDraft?.proposalEditing ?? false;
+  decisionNote.value = currentDraft?.decisionNote ?? decision?.rationale ?? "";
+  editorBase.value = currentDraft?.base ?? stored.value?.version;
+  editorReviewRevision.value = currentDraft?.reviewRevision ?? document.value?.reviewRevision;
   calibrationId.value = "";
-  if (!keepViewport) focus(claim.reviewContext);
+  if (!keepViewport) focus(activeClaim.value?.reviewContext ?? currentClaim.reviewContext);
 }
 
-function openObservation(claim: ClaimV2): void {
+function beginProposalRevision(): void {
+  if (finalObservation.value) {
+    drafts.value = [JSON.parse(serializeCanonicalJson(finalObservation.value.claim))];
+    decisionNote.value = finalDecision.value?.rationale ?? "";
+    editorBase.value = stored.value?.version;
+    editorReviewRevision.value = document.value?.reviewRevision;
+    focus(finalObservation.value.claim.reviewContext);
+  }
+  proposalEditing.value = true;
+}
+
+function openObservation(observation: HumanObservationV2): void {
+  historicalObservation.value = undefined;
+  if (observation.origin.kind === "agent-proposal") {
+    openQuestion(observation.origin.handoffId, observation.origin.claimId);
+    return;
+  }
+  const current = currentObservations.value.find(entry => {
+    let candidate: HumanObservationV2 | undefined = entry;
+    while (candidate) {
+      if (candidate.id === observation.id) return true;
+      const priorId: string | undefined = candidate.supersedesObservationId;
+      candidate = document.value?.observations.find(item => item.id === priorId);
+    }
+    return false;
+  }) ?? observation;
+  const claim = current.claim;
   stashDraft();
-  drafts.value = [claim];
+  drafts.value = [JSON.parse(serializeCanonicalJson(claim))];
+  activeObservationId.value = current.id;
+  editorBase.value = stored.value?.version;
+  editorReviewRevision.value = document.value?.reviewRevision;
   activeClaimId.value = claim.id;
   editorOrigin.value = "observation";
   activeHandoffId.value = "";
   calibrationId.value = "";
   focus(claim.reviewContext);
+}
+
+function openHistoricalObservation(observation: HumanObservationV2 | undefined): void {
+  if (!observation) return;
+  stashDraft();
+  historicalObservation.value = observation;
+  drafts.value = [JSON.parse(serializeCanonicalJson(observation.claim))];
+  activeClaimId.value = observation.claim.id;
+  activeObservationId.value = observation.id;
+  activeHandoffId.value = "";
+  editorOrigin.value = "observation";
+  calibrationId.value = "";
+  focus(observation.claim.reviewContext);
+}
+
+function reviseFromHistoricalObservation(): void {
+  const prior = historicalObservation.value;
+  if (!prior) return;
+  openObservation(prior);
+  drafts.value = [JSON.parse(serializeCanonicalJson(prior.claim))];
+  proposalEditing.value = true;
+  focus(prior.claim.reviewContext);
+}
+
+function decisionObservation(observationId: string | undefined): HumanObservationV2 | undefined {
+  return document.value?.observations.find(entry => entry.id === observationId);
 }
 
 function toggleNote(noteId: string): void {
@@ -638,15 +718,21 @@ function saveSection(): void {
   void run(async () => {
     if (!directory.value || !sourceBytes.value || !stored.value) return;
     const sourceSha = stored.value.document.source.sha256;
-    const key = draftKey("direct");
+    const key = editorOrigin.value === "direct" ? draftKey("direct") : undefined;
     const claimId = activeClaimId.value;
-    const saved = await directory.value.addObservations(sourceBytes.value, stored.value.version, { claims: drafts.value, humanId: humanId.value });
-    localStorage.removeItem(key);
+    const supersedesObservationId = editorOrigin.value === "observation" ? activeObservationId.value : undefined;
+    const saved = await directory.value.addObservations(sourceBytes.value, stored.value.version, { claims: drafts.value, humanId: humanId.value, ...(supersedesObservationId ? { supersedesObservationId } : {}) });
+    if (key) localStorage.removeItem(key);
     if (source.value?.source.sha256 === sourceSha) {
       if (saved.version.revision >= stored.value.version.revision) stored.value = saved;
       if (activeClaimId.value === claimId) {
         status.value = "Section judgments saved. Unreviewed dimensions remain unreviewed.";
         editorOrigin.value = "observation";
+        const observation = saved.document.observations.filter(entry => entry.claim.id === claimId).at(-1);
+        activeObservationId.value = observation?.id ?? "";
+        if (observation) drafts.value = [JSON.parse(serializeCanonicalJson(observation.claim))];
+        editorBase.value = saved.version;
+        editorReviewRevision.value = saved.document.reviewRevision;
       }
     }
     emit("saved");
@@ -663,7 +749,8 @@ function decide(disposition: "accepted" | "modified"): void {
     note: decisionNote.value, base: editorBase.value, reviewRevision: editorReviewRevision.value };
   const pending = pendingSectionReviews.value;
   const position = pending.findIndex(review => review.claimId === claimId);
-  const next = [...pending.slice(position + 1), ...pending.slice(0, position)][0];
+  const revising = Boolean(finalDecision.value);
+  const next = revising ? undefined : [...pending.slice(position + 1), ...pending.slice(0, position)][0];
   const store = directory.value;
   const bytes = sourceBytes.value;
   const base = stored.value.version;
@@ -674,7 +761,7 @@ function decide(disposition: "accepted" | "modified"): void {
   savingDecision.value = { sourceSha, handoffId, claimId };
   error.value = "";
   if (next) openProposal(next.handoffId, next.claim, true);
-  else { drafts.value = []; activeClaimId.value = ""; sectionComplete.value = true; }
+  else if (!revising) { drafts.value = []; activeClaimId.value = ""; sectionComplete.value = true; }
   // Advance the presentation immediately; only the canonical response confirms a decision.
   void (async () => {
     try {
@@ -682,7 +769,12 @@ function decide(disposition: "accepted" | "modified"): void {
       localStorage.removeItem(key);
       if (source.value?.source.sha256 === sourceSha) {
         if (!stored.value || saved.version.revision >= stored.value.version.revision) stored.value = saved;
-        status.value = next ? `${disposition} · saved. Next tag ready.` : "All section judgments reviewed.";
+        status.value = revising ? "Human judgment revised. Earlier decisions remain in history." : next ? `${disposition} · saved. Next tag ready.` : "All section judgments reviewed.";
+        if (revising && activeHandoffId.value === handoffId && activeClaimId.value === claimId) {
+          proposalEditing.value = false;
+          editorBase.value = saved.version;
+          editorReviewRevision.value = saved.document.reviewRevision;
+        }
       }
       emit("saved");
     } catch (cause) {
@@ -819,7 +911,7 @@ onBeforeUnmount(() => { window.removeEventListener("keydown", workspaceKeydown);
         </div>
         </details>
       </section>
-      <details v-if="document?.observations.length" class="review-section"><summary>Human observations · {{ document.observations.length }}</summary><button v-for="observation in document.observations" :key="observation.id" type="button" class="review-list-row" @click="openObservation(observation.claim)"><span>{{ observation.claim.tagId }}<small>{{ observation.claim.scope.startMs }}–{{ observation.claim.scope.endMs }} ms</small><small>{{ observation.origin.kind === 'direct-human' ? 'Direct human judgment' : 'Proposal decision' }} · {{ observation.confirmedAt }}</small></span><span>{{ assessmentLabel(observation.claim) }}</span></button></details>
+      <details v-if="document?.observations.length" class="review-section"><summary>Human observations · {{ document.observations.length }}</summary><button v-for="observation in document.observations" :key="observation.id" type="button" class="review-list-row" @click="currentObservations.some(entry => entry.id === observation.id) ? openObservation(observation) : openHistoricalObservation(observation)"><span>{{ observation.claim.tagId }}<small>{{ observation.claim.scope.startMs }}–{{ observation.claim.scope.endMs }} ms</small><small>{{ observation.origin.kind === 'direct-human' ? 'Direct human judgment' : 'Proposal decision' }} · {{ observation.confirmedAt }} · {{ currentObservations.some(entry => entry.id === observation.id) ? 'current' : 'history' }}</small></span><span>{{ assessmentLabel(observation.claim) }}</span></button></details>
 
     </aside>
     <div v-if="source && frame && !calibrationExample" class="review-preview" :class="{ 'mobile-active': mobilePanel === 'preview' }">
@@ -881,6 +973,8 @@ onBeforeUnmount(() => { window.removeEventListener("keydown", workspaceKeydown);
         <template v-if="activeClaim">
           <section v-if="editorOrigin === 'proposal' && activeReview" class="review-judgment-status">
             <p class="review-kicker">{{ latestDecision(activeHandoffId, activeClaim.id) }} · <span :title="activeHandoff ? agentVersionLabel(activeHandoff.agent) : ''">version {{ activeHandoff?.agent.skill?.sha256.slice(0, 8) ?? 'unversioned' }}</span></p>
+            <p class="review-copy" v-if="activeTrust">Evidence context · Source {{ activeTrust.source }} · Foundation {{ activeTrust.foundation }} · Human context {{ activeTrust.humanContext }}</p>
+            <p v-if="activeTrust?.foundation === 'changed'" class="review-copy">The definitions changed after this proposal. Save your judgment using the current definitions.</p>
             <p v-if="activeReview.question">{{ activeReview.question }}</p>
             <template v-if="activeReview.supersededBy"><p class="review-copy">This proposal has been replaced.</p><button type="button" @click="openQuestion(activeReview.supersededBy.handoffId, activeReview.supersededBy.claimId)">View replacement judgment</button></template>
           </section>
@@ -903,17 +997,19 @@ onBeforeUnmount(() => { window.removeEventListener("keydown", workspaceKeydown);
             <WorkflowClaimEditor :model-value="activeClaim" :tags="activeFoundation.tags" :disabled="!canEdit" @update:model-value="updateClaim" @focus="focus" />
             <details class="review-section"><summary>Choose source-backed evidence</summary><label>Click notes to toggle<select v-model="evidenceMode"><option value="noteRefs">Witness for this claim</option><option value="contextNoteRefs">Necessary context</option></select></label><button type="button" :disabled="!canEdit" @click="selectScopeNotes">Use arrangement in claim scope</button><p class="review-copy">Notes crossing the start retain their original LN start and end. Select witnesses independently for each concept.</p><div class="review-note-list"><label v-for="note in visibleNotes" :key="note.id"><input type="checkbox" :checked="activeClaim.evidence[evidenceMode].some(ref => ref.sourceLine === note.sourceLine)" :disabled="!canEdit" @change="toggleNote(note.id)"><span>L{{ note.sourceLine }} · C{{ note.column + 1 }} · {{ note.startMs }}{{ note.kind === 'long' ? `–${note.endMs}` : '' }} ms</span></label></div><div class="review-actions"><button type="button" :disabled="notePage === 0" @click="notePage--">Previous notes</button><button type="button" :disabled="(notePage + 1) * 80 >= candidateNotes.length" @click="notePage++">Next notes</button></div></details>
           </template>
-          <button v-if="editorOrigin === 'direct'" class="review-primary" type="button" :disabled="busy || !!savingDecision || sourceLoading || !stored || !approved || !humanId.trim() || draftIsStale" @click="saveSection">Save section judgments</button>
+          <button v-if="!historicalObservation && (editorOrigin === 'direct' || editorOrigin === 'observation')" class="review-primary" type="button" :disabled="busy || !!savingDecision || sourceLoading || !stored || !approved || !humanId.trim() || draftIsStale" @click="saveSection">{{ editorOrigin === 'observation' ? 'Save revised judgment' : 'Save section judgments' }}</button>
+          <section v-if="historicalObservation" class="review-historical-observation"><h2>Historical human judgment</h2><p>{{ historicalObservation.confirmedAt }} · earlier version</p><button type="button" @click="openObservation(historicalObservation)">View current judgment</button><button type="button" @click="reviseFromHistoricalObservation">Revise current judgment using this version</button></section>
+          <details v-if="editorOrigin === 'observation' && observationHistory.length" class="review-observation-history"><summary>Human observation history · {{ observationHistory.length }}</summary><p v-for="entry in observationHistory" :key="entry.id">{{ assessmentLabel(entry.claim) }} · {{ entry.confirmedAt }}<br>{{ entry.claim.scope.startMs }}–{{ entry.claim.scope.endMs }} ms<button type="button" @click="openHistoricalObservation(entry)">View this version</button></p></details>
           <template v-if="editorOrigin === 'proposal'">
-            <section v-if="finalDecision" class="review-human-result"><h2>Human judgment · {{ finalDecision.disposition }}</h2><template v-if="finalObservation"><p>{{ finalObservation.claim.tagId }} · {{ assessmentLabel(finalObservation.claim) }}</p><button type="button" @click="openObservation(finalObservation.claim)">View saved human judgment</button></template><p v-if="finalDecision.rationale">{{ finalDecision.rationale }}</p></section>
+            <section v-if="finalDecision" class="review-human-result"><h2>Human judgment · {{ finalDecision.disposition }}</h2><template v-if="finalObservation"><p>{{ finalObservation.claim.tagId }} · {{ assessmentLabel(finalObservation.claim) }}</p><button type="button" @click="openObservation(finalObservation)">View saved human judgment</button></template><p v-if="finalDecision.rationale">{{ finalDecision.rationale }}</p></section>
             <p v-if="uncertainAcceptance" class="review-copy">This historical acceptance kept {{ finalObservation?.claim.assessment.presence }}. It did not decide whether this pattern is present.</p>
-            <p v-if="laterClarification" class="review-copy">Later direct human judgment: {{ assessmentLabel(laterClarification.claim) }} · {{ laterClarification.confirmedAt }}.<button type="button" @click="openObservation(laterClarification.claim)">View human clarification</button></p>
+            <p v-if="laterClarification" class="review-copy">Later direct human judgment: {{ assessmentLabel(laterClarification.claim) }} · {{ laterClarification.confirmedAt }}.<button type="button" @click="openObservation(laterClarification)">View human clarification</button></p>
             <p v-else-if="!finalDecision && !settled(originalProposal)" class="review-copy">This proposal does not decide presence. Choose present with salience or absent in the judgment editor.</p>
-            <template v-if="!finalDecision">
+            <div class="review-decision-controls">
             <details :key="`${activeHandoffId}:${activeClaim.id}:${proposalEditing}`" class="review-decision-note" :open="proposalEditing"><summary>Decision note (optional)</summary><label>Human decision rationale<textarea v-model="decisionNote" rows="3" placeholder="Optional, including when modifying a judgment."></textarea></label></details>
-            <div class="review-actions"><button v-if="settled(originalProposal)" type="button" :disabled="busy || !!savingDecision || sourceLoading || !approved || !humanId.trim() || handoffStatuses[activeHandoffId] === 'stale'" class="review-primary" @click="decide('accepted')">Accept original</button><button v-if="remoteSource && !proposalEditing" type="button" :disabled="busy || sourceLoading" @click="proposalEditing = true">Modify judgment</button><button v-else type="button" :disabled="busy || !!savingDecision || sourceLoading || !approved || !humanId.trim() || !settled(activeClaim) || handoffStatuses[activeHandoffId] === 'stale'" class="review-primary" @click="decide('modified')">Save modified</button></div>
-            </template>
-            <details v-if="decisionsForClaim.length"><summary>Human decision history · {{ decisionsForClaim.length }}</summary><p v-for="decision in decisionsForClaim" :key="decision.id" class="review-decision">{{ decision.disposition }} · {{ decision.humanId }} · {{ decision.decidedAt }}<br>{{ decision.rationale }}</p></details>
+            <div class="review-actions"><button v-if="!finalDecision && settled(originalProposal) && activeTrust?.foundation !== 'changed'" type="button" :disabled="busy || !!savingDecision || sourceLoading || !approved || !humanId.trim()" class="review-primary" @click="decide('accepted')">Accept original</button><button v-if="remoteSource && !proposalEditing" type="button" :disabled="busy || sourceLoading" @click="beginProposalRevision">{{ finalDecision ? 'Revise human judgment' : 'Modify judgment' }}</button><button v-else type="button" :disabled="busy || !!savingDecision || sourceLoading || !approved || !humanId.trim() || !settled(activeClaim)" class="review-primary" @click="decide('modified')">Save modified</button></div>
+            </div>
+            <details v-if="decisionsForClaim.length"><summary>Human decision history · {{ decisionsForClaim.length }}</summary><p v-for="decision in decisionsForClaim" :key="decision.id" class="review-decision">{{ decision.disposition }} · {{ decision.humanId }} · {{ decision.decidedAt }}<br>{{ decision.rationale }}<button v-if="decisionObservation(decision.observationId)" type="button" @click="openHistoricalObservation(decisionObservation(decision.observationId))">View this judgment</button></p></details>
           </template>
           <section v-if="editorOrigin === 'proposal' && activeReview" class="review-section review-audit-result">
             <details><summary>Agent reasoning &amp; provenance</summary>
@@ -926,7 +1022,7 @@ onBeforeUnmount(() => { window.removeEventListener("keydown", workspaceKeydown);
           </section>
         </template>
         <details class="review-section" :open="!activeClaim"><summary>New section &amp; drafts</summary><div class="review-actions"><button type="button" :disabled="busy || sourceLoading" @click="newSection">New section at playhead</button><button type="button" :disabled="busy || sourceLoading" @click="restoreSection">Restore section draft</button></div></details>
-        <p v-if="draftIsStale && editorOrigin === 'direct'" class="review-copy">This draft was based on an earlier saved human review. Compare it with the saved observations before continuing.<button type="button" @click="editorBase = stored?.version; editorReviewRevision = document?.reviewRevision; stashDraft()">I reviewed this draft against the current revision</button></p>
+        <p v-if="draftIsStale && (editorOrigin === 'direct' || editorOrigin === 'observation')" class="review-copy">This draft was based on an earlier saved human review. Compare it with the saved observations before continuing.<button type="button" @click="editorBase = stored?.version; editorReviewRevision = document?.reviewRevision; stashDraft()">I reviewed this draft against the current revision</button></p>
         <details class="review-section"><summary>Foundation · {{ activeFoundation.tags.length }} concepts · {{ activeFoundation.calibrationExamples.length }} examples</summary>
           <p class="review-copy">Section judgments use local definitions. Community correspondences do not establish training equivalence.</p>
           <div v-for="tag in activeFoundation.tags" :key="tag.id" class="review-definition">

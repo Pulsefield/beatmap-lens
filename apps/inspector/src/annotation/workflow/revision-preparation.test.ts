@@ -21,6 +21,32 @@ import {
 import { workflowFixture } from "./test-fixtures";
 
 const exec = promisify(execFile);
+
+it("bypasses environment proxies only for the local review service", async () => {
+  const program = `
+import importlib.util, json
+from unittest.mock import MagicMock, patch
+spec = importlib.util.spec_from_file_location('revision', 'annotation/pipeline/prepare-annotation-revision.py')
+revision = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(revision)
+response = MagicMock()
+response.__enter__.return_value.read.return_value = b'{"ok":true}'
+with patch.object(revision, 'build_opener') as local, patch.object(revision, 'urlopen', return_value=response) as remote:
+    local.return_value.open.return_value = response
+    for host in ['http://localhost:4176', 'http://127.0.0.1:4176', 'http://[::1]:4176']:
+        assert revision.request(host, 'inbox')[0] == {'ok': True}
+    assert local.call_count == 3
+    assert all(call.args[0].proxies == {} for call in local.call_args_list)
+    assert remote.call_count == 0
+    assert revision.request('https://review.example', 'inbox')[0] == {'ok': True}
+    assert remote.call_count == 1
+    assert local.call_count == 3
+print(json.dumps({'local': local.call_count, 'remote': remote.call_count}))
+`;
+  const result = await exec("python3", ["-c", program], { cwd: resolve(".") });
+  expect(JSON.parse(result.stdout)).toEqual({ local: 3, remote: 1 });
+});
+
 const script = resolve("annotation/pipeline/prepare-annotation-revision.py");
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {

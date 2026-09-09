@@ -13,7 +13,7 @@ LABELS = ('absent', 'supporting', 'prominent')
 MAX_CARDS = 6
 RATIONALE_CHARS = 280
 HUMAN_COMMENT_ORIGINS = ('decision.rationale', 'directObservation.claim.evidence.rationale',
-                         'directObservation.summary.rationale')
+                         'directObservation.summary.rationale', 'effectiveHumanObservation.humanComment')
 
 
 def _label(record):
@@ -43,6 +43,37 @@ def extract_examples(feedbacks, source_groups):
     records = []
     for feedback in feedbacks:
         handoffs = {row['handoffId']: row for row in feedback.get('handoffs', [])}
+        if 'effectiveHumanObservations' in feedback:
+            # The service resolves append-only revisions. Never reintroduce an old
+            # accepted proposal or direct observation from its history collections.
+            decisions = {row['decision']['observationId']: row for row in feedback.get('agentReviews', [])
+                         if row.get('decision', {}).get('observationId')}
+            for observation in feedback['effectiveHumanObservations']:
+                trust = observation.get('trust', {})
+                if any(trust.get(layer, 'current') != 'current' for layer in ('source', 'foundation')):
+                    continue
+                claim = observation.get('claim', observation.get('summary'))
+                if claim['assessment']['presence'] not in ('present', 'absent'):
+                    continue
+                provenance = {key: observation[key] for key in
+                              ('humanId', 'confirmedAt', 'foundationSha256', 'observationSha256')
+                              if key in observation}
+                provenance.update(observationId=observation['id'], claimId=claim['id'])
+                identity = observation['id']
+                review = decisions.get(identity)
+                if review:
+                    decision = review['decision']
+                    identity = decision['id']
+                    handoff = handoffs[review['handoffId']]
+                    provenance.update({key: handoff[key] for key in
+                                       ('handoffId', 'handoffSha256', 'taskId', 'taskSha256') if key in handoff})
+                    provenance.update({key: decision[key] for key in ('disposition', 'decidedAt') if key in decision})
+                    provenance['decisionId'] = decision['id']
+                else:
+                    provenance['disposition'] = 'direct-human'
+                records.append(_record(feedback, source_groups, claim, identity,
+                                       observation['humanComment'], 'effectiveHumanObservation.humanComment', provenance))
+            continue
         for review in feedback.get('agentReviews', []):
             if review['status'] not in ('accepted', 'modified'):
                 continue
@@ -57,6 +88,9 @@ def extract_examples(feedbacks, source_groups):
             provenance.update({key: decision[key] for key in
                                ('observationId', 'humanId', 'disposition', 'decidedAt') if key in decision})
             provenance.update(decisionId=decision['id'], claimId=review['claimId'])
+            observation_sha = decision.get('observationSha256', review.get('observationSha256'))
+            if observation_sha:
+                provenance['observationSha256'] = observation_sha
             records.append(_record(feedback, source_groups, claim, decision['id'],
                                    decision['rationale'], 'decision.rationale', provenance))
         for observation in feedback.get('directObservations', []):
@@ -68,8 +102,23 @@ def extract_examples(feedbacks, source_groups):
                       'directObservation.summary.rationale')
             provenance = {key: observation[key] for key in ('humanId', 'confirmedAt', 'foundationSha256')}
             provenance.update(observationId=observation['id'], claimId=claim['id'], disposition='direct-human')
+            if observation.get('observationSha256'):
+                provenance['observationSha256'] = observation['observationSha256']
             records.append(_record(feedback, source_groups, claim, observation['id'], rationale, origin, provenance))
     return sorted(records, key=lambda record: record['id'])
+
+
+def evidence_ref(record):
+    """Bind a human example to its full canonical observation, when available.
+
+    Legacy compact feedback cannot reproduce the canonical observation hash, so
+    it must remain untracked instead of hashing a lossy summary as if equivalent.
+    """
+    provenance = record['provenance']
+    if not provenance.get('observationId') or not provenance.get('observationSha256'):
+        return None
+    return {'sourceSha256': record['sourceSha256'],
+            **{key: provenance[key] for key in ('observationId', 'observationSha256')}}
 
 
 def _allowed(record, excluded_sources, excluded_groups):

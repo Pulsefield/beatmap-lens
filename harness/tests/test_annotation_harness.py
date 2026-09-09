@@ -99,6 +99,7 @@ class HarnessTest(unittest.TestCase):
             value = claim(identity=f'claim-{index}')
             value.update(scope={'startMs': 1000, 'endMs': 1501}, reviewContext=bounds)
             data['agentReviews'] = [review(value, identity=f'human-{index}', rationale=f'Exact human explanation {index}.')]
+            data['agentReviews'][0]['observationSha256'] = str(index) * 64
             prepare.save(self.feedback_dir / f'{sha}.json', data)
             sections.append({'caseId': f'case-{index}', 'sourceSha256': sha,
                              'scope': value['scope'], 'reviewContext': bounds})
@@ -162,6 +163,47 @@ class HarnessTest(unittest.TestCase):
         self.assertEqual(view['sourceSha256'], example['sourceSha256'])
         self.assertTrue(view['coverage']['allEventsReturned'])
         self.assertNotIn('notes', example)
+
+    def test_trace_tracks_returned_examples_and_context_without_exposing_provenance_to_worker(self):
+        bundle = self.root / 'tracked-annotation'
+        prepare.prepare(self.campaign, self.sections, self.feedback_dir, bundle, 'annotation',
+                        contrast_sets_path=self.contrast_sets)
+        trace = self.root / 'human-trace.jsonl'
+        agent = harness.Harness(bundle, trace)
+        self.assertEqual(trace.read_text(), '')
+        body, _ = agent.call('find_human_examples', {'limit': 1})
+        card, = json.loads(body)['cards']
+        self.assertNotIn('observationSha256', body)
+        agent.call('get_human_example', {'example_id': card['id']})
+        agent.call('inspect_section', {'section_id': 'example:' + card['id']})
+        context, _ = agent.call('chart_context', {'section_id': 'case-0'})
+        self.assertNotIn('observationSha256', context)
+        agent.call('inspect_section', {'section_id': 'case-0'})
+        events = [json.loads(line) for line in trace.read_text().splitlines()]
+        refs = prepare.read(bundle / 'example-refs.json')
+        self.assertTrue(all(event['humanEvidenceTrackingComplete'] for event in events))
+        for event in events[:3]:
+            self.assertEqual(event['humanEvidenceRefs'], [refs[card['id']]])
+        self.assertEqual(events[3]['humanEvidenceRefs'], [refs[self.example_ids[self.source_ids[0]]]])
+        self.assertEqual(events[4]['humanEvidenceRefs'], [])
+        self.assertEqual(len(events[0]['humanEvidenceRefs']), 1)
+        self.assertEqual(len(refs), 3)
+
+    def test_legacy_human_example_without_canonical_hash_is_marked_untracked(self):
+        source = self.source_ids[2]
+        path = self.feedback_dir / (source + '.json')
+        data = prepare.read(path)
+        data['agentReviews'][0].pop('observationSha256')
+        prepare.save(path, data)
+        bundle = self.root / 'legacy-human'
+        prepare.prepare(self.campaign, self.sections, self.feedback_dir, bundle, 'evaluation',
+                        contrast_sets_path=self.contrast_sets)
+        trace = self.root / 'legacy-human-trace.jsonl'
+        agent = harness.Harness(bundle, trace)
+        agent.call('find_human_examples', {})
+        event = json.loads(trace.read_text())
+        self.assertFalse(event['humanEvidenceTrackingComplete'])
+        self.assertEqual(event['humanEvidenceRefs'], [])
 
     def test_search_full_and_context_expose_only_final_human_judgment_and_optional_comment(self):
         bundle = self.root / 'public-human-views'

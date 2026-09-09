@@ -82,6 +82,26 @@ class AccountingTest(unittest.TestCase):
         self.assertEqual(machine_part['agent']['producerId'], 'producer')
         self.assertEqual(current, original)
 
+    def test_effective_agent_gold_has_its_own_revision_identity_and_coverage(self):
+        current = feedback()
+        old = row(claim(TAGS[0], 'old-human', presence='present'), 'accepted')
+        old['decision'] = {'id': 'old-decision', 'observationId': 'old-observation'}
+        current['agentReviews'].append(old)
+        revised = claim(TAGS[0], 'revised-human', start=3000, end=5000)
+        current['effectiveHumanObservations'] = [{
+            'id': 'new-observation', 'summary': revised, 'observationSha256': 'new-observation-sha',
+            'origin': {'kind': 'agent-proposal', 'handoffId': 'handoff', 'decisionId': 'new-decision'},
+            'trust': {'source': 'current', 'foundation': 'current'}}]
+        result = campaign.account_section(section(), current)
+        self.assertEqual(result['status'], 'complete')
+        human, machine = result['dimensions'][TAGS[0]]['claims']
+        self.assertEqual(human['observationId'], 'new-observation')
+        self.assertEqual(human['decisionId'], 'new-decision')
+        self.assertEqual(human['observationSha256'], 'new-observation-sha')
+        self.assertEqual(human['coveredRanges'], [[3000, 5000]])
+        self.assertEqual(machine['coveredRanges'], [[1000, 3000], [5000, 11000]])
+        self.assertEqual(result['humanConflicts'], [])
+
     def test_conflicting_humans_leave_a_gap_even_with_full_machine_coverage(self):
         current = feedback()
         current['agentReviews'].append(row(claim(TAGS[0], 'accepted', start=2000, end=8000), 'accepted', 'stale'))
