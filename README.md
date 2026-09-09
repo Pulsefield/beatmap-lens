@@ -25,11 +25,13 @@ so others can reuse the work and understand why the skill changes. Historical
 campaigns, raw datasets, runs, and working notes can remain local. Running every
 past experiment is not a public maintenance commitment.
 
-Dataset publication is planned for Hugging Face: human annotations, with optional
-agent-reviewed annotations selectable by version. That release is separate from
-publishing the npm package; it does not require a general dataset conversion layer.
+Human annotations are published on Hugging Face as
+[sed-i/mania-pattern-annotations](https://huggingface.co/datasets/sed-i/mania-pattern-annotations).
+The first MIT snapshot, `v0.1.0`, contains 156 human judgments across 117 charts.
+Optional agent-reviewed annotations can be selected separately in later versions.
+Dataset releases are independent of the npm package.
 The [publication pipeline](docs/annotation/dataset-publication.md) builds compact
-Parquet snapshots with immutable references to GitHub artifacts and external charts.
+Parquet snapshots with pinned GitHub artifacts and hash-verified external chart references.
 
 ## Repository map
 

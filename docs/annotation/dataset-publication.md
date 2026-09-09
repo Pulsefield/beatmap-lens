@@ -161,3 +161,23 @@ supervision = human.filter(lambda row: row["presence"] in ("present", "absent"))
 Install `datasets` in the consumer's own environment. The `full` split is an
 annotation resource, not an advertised held-out benchmark. Agent configurations
 are opt-in and must not be silently unioned with human judgments as independent gold.
+
+## Published snapshots
+
+The first human-only release is
+[v0.1.0](https://huggingface.co/datasets/sed-i/mania-pattern-annotations/tree/892845970a21861b51d7f2c6797ae2cf5784e729),
+published on 2026-09-09 under MIT. Its immutable HF commit is
+`892845970a21861b51d7f2c6797ae2cf5784e729`; the `v0.1.0` tag resolves to that commit.
+The exporter and public Foundation are pinned to GitHub commit
+`ee8db26b8a22b7a6ec89ea5b2b3a777b1a722667`.
+
+It contains 156 human judgments (89 present, 67 explicitly absent) across 117
+charts, with 121 source rows including all five required calibration sources.
+Every included source reference was downloaded and verified against its original
+SHA-256 before publication: 120 official osu! downloads and one osu.direct mirror.
+The five published files total 328,104 bytes, including metadata and MIT notice.
+
+Eight judgments on six historical source versions are deferred because none of
+the checked public downloads matched the annotated bytes. Their source hashes and
+reasons are recorded in the manifest, and the original workspace judgments remain
+unchanged. No machine judgment table is included in this release.

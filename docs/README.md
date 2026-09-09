@@ -37,8 +37,9 @@ Research documents should explain the question, finding, and limitation on their
 own. Small source/section/tag finding tables are useful when they clarify a result.
 Raw charts, intermediate runs, campaign status, and working notes may remain local;
 public documentation does not promise to reconstruct every historical experiment.
-Human judgments and versioned agent-reviewed labels are intended for a later
-Hugging Face dataset release.
+The first human snapshot is published as
+[mania-pattern-annotations v0.1.0](https://huggingface.co/datasets/sed-i/mania-pattern-annotations/tree/892845970a21861b51d7f2c6797ae2cf5784e729).
+Optional versioned agent subsets remain separate from human judgments.
 
 ## Decisions
 
