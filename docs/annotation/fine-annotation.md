@@ -47,6 +47,13 @@ Replacing a pending machine claim requires explicit supersession. Selected-secti
 coverage does not establish whole-chart completion. A repair requiring new semantic
 boundaries remains explicit rather than forcing a positive across unrelated rows.
 
+The frozen Foundation input may be a canonical document or a worker projection
+with an embedded `foundationSha256`. For both labelers and auditors, delivery
+checks the task against the campaign pin and compares every supplied Foundation
+field with the task, including all required definitions. An embedded pin must
+also match. Recovery reuses completed responses and their unchanged input hashes;
+do not edit a frozen document to add a missing embedded pin.
+
 `--labels-only` runs prepared labelers without sealing or submitting. Running the
 same root normally afterward uses the completed labeler results for audit and
 delivery, retaining their actual producer identity and frozen evidence.

@@ -71,6 +71,47 @@ class SectionDeliveryTest(unittest.TestCase):
         self.write_job(self.label_job, 'labeler', [self.case], [{'caseId': self.case['caseId'], 'judgments': self.judgments}])
         return delivery.prepare_handoffs(self.batch, self.label_job, self.config)
 
+    def test_raw_foundation_document_delivers_labels_and_independent_audits(self):
+        self.foundation.pop('foundationSha256')
+        self.foundation.update(contract='beatmap-lens-judgment-foundation', version=2)
+        self.task['foundation'] = deepcopy(self.foundation)
+        manifest = self.label()
+        self.auditor(manifest)
+        result = delivery.deliver_audits(self.batch, self.audit_job, self.config)
+        self.assertEqual(result['status'], 'complete')
+        self.assertEqual(delivery.read(self.label_job / 'foundation.json'), self.foundation)
+        self.assertEqual(delivery.read(self.audit_job / 'foundation.json'), self.foundation)
+
+    def test_foundation_binding_preserves_pins_and_all_supplied_definitions(self):
+        for embedded_pin in (False, True):
+            foundation = deepcopy(self.foundation)
+            if not embedded_pin:
+                foundation.pop('foundationSha256')
+            for change in ('config-pin', 'missing-tags', 'changed-tags', 'changed-version'):
+                with self.subTest(embedded_pin=embedded_pin, change=change):
+                    supplied, config = deepcopy(foundation), deepcopy(self.config)
+                    if change == 'config-pin':
+                        config['foundationSha256'] = 'a' * 64
+                    elif change == 'missing-tags':
+                        supplied.pop('tags')
+                    elif change == 'changed-tags':
+                        supplied['tags'][0]['definition'] = 'different meaning'
+                    else:
+                        supplied['version'] = 1
+                    with self.assertRaisesRegex(ValueError, 'Foundation (pin|content) differs'):
+                        delivery.bind_foundation(self.task, supplied, config)
+        self.foundation['foundationSha256'] = 'a' * 64
+        with self.assertRaisesRegex(ValueError, 'Worker Foundation pin differs'):
+            self.label()
+
+    def test_auditor_foundation_content_must_match_even_with_a_correct_embedded_pin(self):
+        manifest = self.label()
+        self.foundation['tags'][0]['definition'] = 'different meaning'
+        self.auditor(manifest)
+        with self.assertRaisesRegex(ValueError, 'Worker Foundation content differs'):
+            delivery.deliver_audits(self.batch, self.audit_job, self.config)
+        self.assertNotIn('submit', self.commands)
+
     def test_rate_judgments_coexist_with_original_rate_human_and_machine_cells(self):
         self.add_review(delivery.TAGS[0], 'accepted')
         self.add_review(delivery.TAGS[1], 'agent-reviewed')

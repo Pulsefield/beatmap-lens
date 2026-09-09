@@ -174,16 +174,29 @@ def validate_judgments(case, judgments):
         require(presence != 'present' or judgment['noteLines'], 'Positive assessment needs witnesses.')
 
 
+def bind_foundation(task, foundation, config):
+    """Bind a raw Foundation document or its worker projection to the task pin.
+
+    The canonical document has no embedded hash. Older worker projections add
+    one; both forms must contain the definitions and match every supplied field.
+    Frozen job hashes separately protect the exact document the worker read.
+    """
+    require(task['foundationSha256'] == config['foundationSha256'], 'Fresh task Foundation pin differs.')
+    if 'foundationSha256' in foundation:
+        require(foundation['foundationSha256'] == task['foundationSha256'], 'Worker Foundation pin differs.')
+    required = {'foundationId', 'revision', 'approval', 'policies', 'tags'}
+    require(required <= foundation.keys()
+            and all(key in task['foundation'] and task['foundation'][key] == value
+                    for key, value in foundation.items() if key != 'foundationSha256'),
+            'Worker Foundation content differs from the fresh task.')
+
+
 def bind_source(case, task, foundation, config):
     source_sha = case['sourceSha256']
     require(task['source']['sha256'] == source_sha
             and hashlib.sha256(bytes(task['sourceBytes'])).hexdigest() == source_sha,
             'Fresh task source bytes differ from the worker source.')
-    require(task['foundationSha256'] == config['foundationSha256'] == foundation['foundationSha256'],
-            'Fresh task Foundation pin differs.')
-    require(all(task['foundation'][key] == foundation[key]
-                for key in ('foundationId', 'revision', 'approval', 'policies', 'tags')),
-            'Worker Foundation content differs from the fresh task.')
+    bind_foundation(task, foundation, config)
     require(case.get('sectionId', case['caseId']) == case['caseId'], 'Section identity differs from caseId.')
     expected = {note['sourceLine']: note for note in task['structure']['notes']
                 if intersects(note, case['reviewContext'])}
@@ -591,8 +604,7 @@ def deliver_audits(batch_root, audit_job, campaign):
         require(entry['taskFileSha256'] in run['inputHashes'].values()
                 and entry['handoffFileSha256'] in run['inputHashes'].values(),
                 'Auditor inputs do not pin the exact task and handoff files.')
-        require(read(audit_job / 'foundation.json')['foundationSha256'] == task['foundationSha256'],
-                'Auditor Foundation differs from the sealed task.')
+        bind_foundation(task, read(audit_job / 'foundation.json'), config)
         proposal = audit_proposal(entry, handoff, verdicts[case_id], run, agent)
         if human_refs is not None:
             proposal['humanEvidenceRefs'] = human_refs
