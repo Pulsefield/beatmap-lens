@@ -36,6 +36,8 @@ lives in the [judgment skill](../.agents/skills/mania-pattern-judgment/SKILL.md)
   behavior and its limits.
 - [Annotation balance](research/annotation-balance.md): human-supervision gaps,
   difficulty coverage, and section-boundary selection biases.
+- [Style across playback rates](research/rate-style-response.md): fixed-section
+  experiment results and the distinction between intended and constrained execution.
 
 Research documents should explain the question, finding, and limitation on their
 own. Small source/section/tag finding tables are useful when they clarify a result.
