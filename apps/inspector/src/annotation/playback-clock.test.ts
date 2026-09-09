@@ -6,6 +6,36 @@ import {
 } from "./playback-clock";
 
 describe("SyntheticPlaybackClock", () => {
+  it.each([0.5, 0.75, 1, 1.25, 1.5])(
+    "advances source time at %sx and retains exact selection boundaries",
+    async (rate) => {
+      const scheduler = new TestFrameScheduler();
+      const clock = new SyntheticPlaybackClock(scheduler);
+      clock.setPlaybackRate(rate);
+      await clock.playSelection({ startMs: 1000, endMs: 3000 });
+      scheduler.advance(400);
+      expect(clock.currentTimeMs).toBe(1000 + 400 * rate);
+      scheduler.advance(4000);
+      expect(clock.currentTimeMs).toBe(3000);
+      expect(clock.playing).toBe(false);
+      await clock.loopSelection({ startMs: 1000, endMs: 2000 });
+      scheduler.advance(2500);
+      expect(clock.currentTimeMs).toBe(1000 + ((2500 * rate) % 1000));
+    },
+  );
+
+  it("accounts for the old rate before changing rate between frames", async () => {
+    const scheduler = new TestFrameScheduler();
+    const clock = new SyntheticPlaybackClock(scheduler);
+    clock.setPlaybackRate(0.5);
+    await clock.play();
+    scheduler.elapseWithoutFrame(200);
+    clock.setPlaybackRate(1.5);
+    expect(clock.currentTimeMs).toBe(100);
+    scheduler.advance(200);
+    expect(clock.currentTimeMs).toBe(400);
+  });
+
   it("plays, pauses, and seeks on a deterministic frame scheduler", async () => {
     const scheduler = new TestFrameScheduler();
     const clock = new SyntheticPlaybackClock(scheduler);

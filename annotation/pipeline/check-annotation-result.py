@@ -14,6 +14,8 @@ import sys
 
 import pyarrow.parquet as pq
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from playback_rate import normalize_playback_rate
 
 TAGS = {"jack-organization", "stream-organization", "trill-organization", "tech", "ln-coordination"}
 NOTE_COLUMNS = ["source_line", "column", "kind", "start_ms", "end_ms"]
@@ -102,6 +104,10 @@ def check_claim(claim, by_line, fail, inspected_ranges=None):
     if not isinstance(claim, dict):
         fail("expected-object", "claim")
         return
+    try:
+        normalize_playback_rate(claim.get("playbackRate"))
+    except ValueError:
+        fail("unsupported-playback-rate", "playbackRate", value=claim.get("playbackRate"))
     for field in ("id", "sectionId"):
         # The corpus exchange always forwards sectionId into the domain claim.
         if not nonempty(claim.get(field)):
@@ -214,6 +220,15 @@ def check(job, result_path=None):
     if not isinstance(charts, list):
         failure("expected-array", "charts")
         charts = []
+    for index, assigned in enumerate(assignment["charts"]):
+        try:
+            original_speed = normalize_playback_rate(assigned.get("playbackRate")) == 1
+        except ValueError:
+            original_speed = False
+        if not original_speed:
+            failure("unsupported-assignment-playback-rate", f"assignment.charts[{index}].playbackRate",
+                    value=assigned.get("playbackRate"),
+                    message="Whole-chart jobs support 1x assignments only. Use selected-section fine annotation for rate-specific assignments.")
     expected = {chart["sourceSha256"]: chart for chart in assignment["charts"]}
     source_counts = Counter(c.get("sourceSha256") for c in charts
                             if isinstance(c, dict) and isinstance(c.get("sourceSha256"), str))

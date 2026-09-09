@@ -16,6 +16,7 @@ import os
 from pathlib import Path, PurePosixPath
 import re
 import shutil
+import sys
 import tempfile
 from typing import Any
 from urllib.parse import quote as quote_uri, urlparse
@@ -24,9 +25,11 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import yaml
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from playback_rate import normalize_playback_rate
 
 CONTRACT = "beatmap-lens-annotations"
-VERSION = 1
+VERSION = 2
 HEX256 = re.compile(r"^[0-9a-f]{64}$")
 COMMIT = re.compile(r"^[0-9a-f]{40}$")
 REPO_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$")
@@ -105,7 +108,7 @@ SOURCE_SCHEMA = pa.schema([
     _required("note_count", pa.int64()), _required("normalizer_id", pa.string()),
     _required("source_ref", SOURCE_REF),
 ])
-JUDGMENT_SCHEMA = pa.schema([
+JUDGMENT_SCHEMA_V1 = pa.schema([
     _required("record_id", pa.string()), _required("source_sha256", pa.string()),
     _required("start_ms", pa.float64()), _required("end_ms", pa.float64()),
     _required("tag_id", pa.string()), _required("presence", pa.string()),
@@ -116,6 +119,7 @@ JUDGMENT_SCHEMA = pa.schema([
     _required("supersedes_record_ids", _list(pa.string())),
     _required("auxiliary_evidence_status", pa.string()), _required("details", DETAILS),
 ])
+JUDGMENT_SCHEMA = JUDGMENT_SCHEMA_V1.append(_required("playback_rate", pa.float64()))
 
 
 def canonical_json(value: Any) -> bytes:
@@ -277,6 +281,7 @@ def _foundation(projection: dict, frozen_sha: str, config: dict) -> tuple[str, d
 def _public_row(row: dict, foundation_id: str) -> dict:
     public = {name: deepcopy(row.get(name)) for name in JUDGMENT_SCHEMA.names}
     public["foundation_id"] = foundation_id
+    public["playback_rate"] = normalize_playback_rate(row.get("playback_rate"))
     public["details"] = _snake(row["details"])
     _fail(not set(public["details"]) - set(DETAILS.names), "Unknown details fields would be lost in publication")
     public["supersedes_record_ids"] = sorted(row.get("supersedes_record_ids", []))
@@ -289,7 +294,7 @@ def _exporter_files(projection: dict) -> dict[str, str]:
     collector_files = projection.get("collector_files")
     _fail(isinstance(collector_files, dict) and bool(collector_files), "Collector must record its implementation file hashes")
     result = deepcopy(collector_files)
-    files = list((REPO / "annotation/release").glob("*.py")) + [REPO / "pyproject.toml", REPO / "uv.lock"]
+    files = list((REPO / "annotation/release").glob("*.py")) + [REPO / "annotation/playback_rate.py", REPO / "pyproject.toml", REPO / "uv.lock"]
     if (REPO / "LICENSE").is_file():
         files.append(REPO / "LICENSE")
     for path in files:
@@ -318,7 +323,7 @@ def _normalize_provenance(value: dict, human_rows: list[dict], observation_hashe
 def _read_all_judgments(path: Path, manifest: dict) -> dict[str, dict]:
     result = {}
     for name, entry in manifest["files"].items():
-        if entry.get("schema") == "judgment-v1":
+        if entry.get("schema") in {"judgment-v1", "judgment-v2"}:
             for row in pq.read_table(path / name).to_pylist():
                 result[row["record_id"]] = row
     return result
@@ -326,6 +331,7 @@ def _read_all_judgments(path: Path, manifest: dict) -> dict[str, dict]:
 
 def _record_content(row: dict, manifest: dict) -> dict:
     value = deepcopy(row)
+    value["playback_rate"] = normalize_playback_rate(value.get("playback_rate"))
     value["foundation_id"] = manifest["foundations"][row["foundation_id"]]["frozen_sha256"]
     # Review/provenance can progress without changing the immutable underlying claim.
     value.pop("auxiliary_evidence_status")
@@ -380,6 +386,11 @@ def _dataset_card(manifest: dict) -> str:
     if not manifest["foundations"]:
         lines.append("No Foundation is referenced by this empty local snapshot.")
     lines += ["", "The default `human` configuration contains effective human judgments. Agent configurations are explicit opt-ins and must not be silently combined with human gold. Machine ancestors can overlap human-confirmed rows; preserve ancestry when selecting examples.", "", "This is a positive-first, partially exhaustive annotation resource. A row is one tag assessment over one exact source interval, in original source milliseconds, with half-open `[start_ms, end_ms)` boundaries. Tags are independent and multiple tags may be prominent. `presence` is `present`, `absent`, `unresolved`, or `unreviewed`. Only `present` has `salience` (`supporting` or `prominent`); other rows have null salience. Missing rows are unreviewed, never negatives. Rejected proposals do not manufacture absence labels.", "", "```python", "from datasets import load_dataset", f"human = load_dataset({quote(manifest['repo_id'])}, 'human',", "                     revision='<full-HF-commit>', split='full')", "supervised = human.filter(lambda row: row['presence'] in ('present', 'absent'))", "```", "", "The split is named `full`; this release makes no held-out benchmark or measured accuracy claim. `agent-reviewed` describes independent audit, not human authority or calibrated confidence.", "", "`sources` contains metadata, exact source hashes, and retrieval references, not beatmap bytes, notes, audio, or images. For `source_ref.kind == 'hf'`, retrieve `path` from the declared corpus `repository` at the full `commit`; `record_key`, when present, identifies the record in that file. For `content-addressed`, retrieve `uri`. For `osu`, retrieve the official `https://osu.ppy.sh/osu/{beatmap_id}` URI. For `url`, retrieve the declared HTTPS `uri`, such as a public mirror holding the original revision. The official locator is mutable, as are general URL locators, and neither promises archival availability; the original `source_sha256` remains the identity. Verify the retrieved original `.osu` bytes against that hash before using time ranges or source-line note references. A mismatch must fail instead of substituting a newer chart. Corpus access and format are owned by its publisher.", "", "The manifest references immutable public Foundation and method artifacts on GitHub. Frozen Foundation hashes and public artifact hashes are deliberately distinct when calibration bytes have been replaced by references. Definitions, skill text, raw agent packets, and workspace journals are not embedded here. `details` retains typed context, evidence, boundary uncertainty, transition, exemplar role, section ID, and original human rationale. Public annotator identities are omitted from annotation tables.", "", "Judgment authority, source/Foundation compatibility, and auxiliary evidence freshness are separate. Included rows have compatible source/Foundation binding. `auxiliary_evidence_status` is snapshot-relative: `current`, `changed`, `untracked`, or `not-applicable`. Changed or untracked machine ancestry does not revoke a human judgment. Human confirmation does not certify an ancestor's rationale. Historic snapshots remain fixed as workspace judgments evolve.", "", f"Machine release policy: auxiliary evidence admitted = `{json.dumps(manifest['policy']['auxiliary_evidence'])}`; partial method provenance admitted = `{str(manifest['policy']['allow_partial_method_provenance']).lower()}`. Selected agent rows require independent supporting audit and an effective `agent-reviewed` or `accepted` state. See `manifest.json` for selected methods, omissions, lineage, file hashes, and public evaluation references, when supplied.", "", "Checks of schema, identity, and provenance do not measure labeling accuracy. No numeric quality certification is implied.", ""]
+    lines += ["`playback_rate` is the judgment's execution rate: 0.5, 0.75, 1, 1.25, or 1.5. "
+              "All stored ranges and note references remain in original source milliseconds. "
+              "Performance durations and intervals divide by this rate; BPM multiplies by it. "
+              "The same source, scope, and tag at different rates are distinct judgments, not contradictory labels. "
+              "Historical schema-v1 rows implicitly use 1x. Split related rates of the same source together during evaluation.", ""]
     if manifest["license"] == "mit":
         lines += ["The exported annotations and accompanying dataset documentation use the MIT license in `LICENSE`. Externally referenced beatmaps remain subject to their own terms; this snapshot does not distribute or relicense their contents.", ""]
     if manifest["policy"].get("excluded_sources"):
@@ -496,9 +507,9 @@ def build_snapshot(projection: dict, config: dict, output: Path, previous: Path 
                 entry["method_id"] = method_id
             manifest["files"][name] = entry
         table_file("data/sources.parquet", source_rows, SOURCE_SCHEMA, "source-v1", "sources")
-        table_file("data/human.parquet", public["human"], JUDGMENT_SCHEMA, "judgment-v1", "human")
+        table_file("data/human.parquet", public["human"], JUDGMENT_SCHEMA, "judgment-v2", "human")
         for method_id in policy["agent_methods"]:
-            table_file(f"data/agent/{method_id}.parquet", public[method_id], JUDGMENT_SCHEMA, "judgment-v1", "agent-" + method_id, method_id)
+            table_file(f"data/agent/{method_id}.parquet", public[method_id], JUDGMENT_SCHEMA, "judgment-v2", "agent-" + method_id, method_id)
         card = _dataset_card(manifest).encode("utf-8")
         (staging / "README.md").write_bytes(card)
         manifest["files"]["README.md"] = {"sha256": sha256_bytes(card)}
@@ -563,6 +574,7 @@ def _validate_judgment(row: dict, subset: str, sources: dict, manifest: dict) ->
     _fail(row["source_sha256"] not in manifest["policy"].get("excluded_sources", {}), "Snapshot retains a judgment from an explicitly excluded source")
     source = sources[row["source_sha256"]]
     _range(row, "Judgment scope")
+    normalize_playback_rate(row["playback_rate"])
     _fail(row["foundation_id"] in manifest["foundations"], "Judgment has unknown Foundation")
     _fail(row["tag_id"] in manifest["foundations"][row["foundation_id"]]["tag_ids"], "Judgment has unknown Foundation tag")
     _fail(row["presence"] in {"present", "absent", "unresolved", "unreviewed"}, "Unknown presence")
@@ -638,7 +650,8 @@ def validate_snapshot(path: Path) -> dict:
             _fail(entry.is_dir(), "Snapshot contains a non-regular file")
     _fail("manifest.json" in actual_files, "Snapshot has no manifest")
     manifest = json.loads((path / "manifest.json").read_text(encoding="utf-8"))
-    _fail(manifest.get("contract") == CONTRACT and manifest.get("version") == VERSION, "Unsupported publication schema")
+    _fail(manifest.get("contract") == CONTRACT and manifest.get("version") in {1, VERSION}, "Unsupported publication schema")
+    version = manifest["version"]
     _fail(set(manifest) == {"contract", "version", "release_id", "created_at", "repo_id", "title", "license", "exporter", "exporter_files", "previous_snapshot", "previous_manifest_sha256", "scope", "policy", "files", "counts", "exclusions", "foundations", "methods", "provenance", "removed_records"}, "Manifest has missing or unexpected fields")
     for key in ("release_id", "created_at", "title", "license"):
         _text(manifest[key], key)
@@ -647,7 +660,7 @@ def validate_snapshot(path: Path) -> dict:
     _fail(isinstance(manifest["exporter_files"], dict) and bool(manifest["exporter_files"]), "Manifest must bind exporter implementation files")
     for name, digest in manifest["exporter_files"].items():
         _relative_path(name, "Exporter implementation file")
-        _fail(name in {"LICENSE", "pyproject.toml", "uv.lock", "package.json", "pnpm-lock.yaml"} or name.startswith(("annotation/release/", "apps/inspector/", "packages/beatmap-lens/")), "Unexpected exporter implementation path")
+        _fail(name in {"LICENSE", "pyproject.toml", "uv.lock", "package.json", "pnpm-lock.yaml", "annotation/playback_rate.py"} or name.startswith(("annotation/release/", "apps/inspector/", "packages/beatmap-lens/")), "Unexpected exporter implementation path")
         _digest(digest, "Exporter implementation hash")
     policy = _policy(manifest)
     _snapshot_ref(manifest["previous_snapshot"])
@@ -679,10 +692,10 @@ def validate_snapshot(path: Path) -> dict:
     tables = {}
     for name in sorted(expected_files - {"README.md", "LICENSE"}):
         is_source = name == "data/sources.parquet"
-        schema = SOURCE_SCHEMA if is_source else JUDGMENT_SCHEMA
+        schema = SOURCE_SCHEMA if is_source else JUDGMENT_SCHEMA if version == 2 else JUDGMENT_SCHEMA_V1
         info = manifest["files"][name]
         expected_config = "sources" if is_source else "human" if name == "data/human.parquet" else "agent-" + Path(name).stem
-        _fail(info.get("schema") == ("source-v1" if is_source else "judgment-v1") and info.get("config") == expected_config, f"Incorrect table declaration: {name}")
+        _fail(info.get("schema") == ("source-v1" if is_source else f"judgment-v{version}") and info.get("config") == expected_config, f"Incorrect table declaration: {name}")
         if expected_config.startswith("agent-"):
             _fail(info.get("method_id") == Path(name).stem, "Agent file method identity mismatch")
         parquet = pq.ParquetFile(path / name)
@@ -692,6 +705,9 @@ def validate_snapshot(path: Path) -> dict:
             for column in range(parquet.metadata.num_columns):
                 _fail(parquet.metadata.row_group(group).column(column).compression == "ZSTD", "Snapshot tables must use Zstandard compression")
         tables[expected_config] = parquet.read().to_pylist()
+        if not is_source and version == 1:
+            for row in tables[expected_config]:
+                row["playback_rate"] = 1.0
     sources = {}
     for source in tables["sources"]:
         for field in SOURCE_SCHEMA:
@@ -770,12 +786,12 @@ def validate_snapshot(path: Path) -> dict:
         _fail(observation_key not in human_observation_ids, "Duplicate human observation identity")
         human_observation_ids.add(observation_key)
         if row["presence"] in {"present", "absent"}:
-            scope = (row["source_sha256"], row["start_ms"], row["end_ms"], row["tag_id"])
+            scope = (row["source_sha256"], row["start_ms"], row["end_ms"], row["tag_id"], row["playback_rate"])
             assessment = (row["presence"], row["salience"])
             _fail(scope not in supervised_scopes or supervised_scopes[scope] == assessment, "Same-scope contradictory human gold requires resolution before publication")
             supervised_scopes[scope] = assessment
-        key = (row["source_sha256"], row["tag_id"])
+        key = (row["source_sha256"], row["tag_id"], row["playback_rate"])
         group = groups.setdefault(key, [])
         overlaps += sum(other["start_ms"] < row["end_ms"] and other["end_ms"] > row["start_ms"] for other in group)
         group.append(row)
-    return {"valid": True, "contract": CONTRACT, "version": VERSION, "release_id": manifest["release_id"], "counts": expected_counts, "files_verified": len(expected_files), "human_overlap_pairs": overlaps, "remote_references_checked": False, "source_bytes_retrieved": False, "annotation_quality_evaluated": False}
+    return {"valid": True, "contract": CONTRACT, "version": version, "release_id": manifest["release_id"], "counts": expected_counts, "files_verified": len(expected_files), "human_overlap_pairs": overlaps, "remote_references_checked": False, "source_bytes_retrieved": False, "annotation_quality_evaluated": False}

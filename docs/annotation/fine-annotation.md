@@ -5,6 +5,8 @@ The two stages use separate dispatchers and coverage checks.
 `run-fine-annotation.py` prepares new source-bound selected-section jobs from a priority queue and its matching annotation-mode harness bundle.
 It freezes the current skill and approved Foundation definitions for the new jobs
 while preserving current human decisions.
+Targets can specify `playbackRate` for [rate-specific annotation](playback-rate.md).
+Queue and frozen bundle rates must agree; scopes remain original source ms.
 
 ```sh
 uv run --locked python annotation/pipeline/run-fine-annotation.py prepare \

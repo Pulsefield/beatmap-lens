@@ -13,6 +13,22 @@ spec.loader.exec_module(fine)
 
 
 class FineAnnotationTest(unittest.TestCase):
+    def test_rate_brief_preserves_source_refs_and_explains_effective_timing(self):
+        case = {'caseId': 'slow', 'sectionId': 'slow', 'sourceSha256': 'source',
+                'sourceMetadata': {'title': 'Example'}, 'playbackRate': 0.5,
+                'scope': {'startMs': 1000, 'endMs': 2000},
+                'reviewContext': {'startMs': 900, 'endMs': 2100}, 'boundaryReleases': [],
+                'timingPoints': [{'sourceLine': 5, 'fields': ['0', '500', '4', '2', '1', '100', '1', '0']}],
+                'notes': [{'source_line': 10, 'column': 0, 'kind': 'long', 'start_ms': 1000, 'end_ms': 1500},
+                          {'source_line': 11, 'column': 1, 'kind': 'normal', 'start_ms': 1250, 'end_ms': 1250}]}
+        brief = fine.preparer.brief([case])
+        self.assertIn('Playback rate: 0.5x', brief)
+        self.assertIn('Performance duration: 2000 ms', brief)
+        self.assertIn('performance BPM]: [[5,60.0]]', brief)
+        self.assertIn('1000 [[10,0,"L",1500]]', brief)
+        self.assertIn('[1250,500.0,500.0,[]]', brief)
+        self.assertIn('[10,1000.0]', brief)
+
     def test_golden_brief_keeps_only_human_judgment_and_optional_comment(self):
         record = {'id': 'human-final', 'sourceSha256': 'source', 'tagId': 'ln-coordination',
                   'assessment': {'presence': 'absent'},

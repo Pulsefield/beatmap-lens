@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { TimeRangeV1 } from "./annotation/contracts";
+import { resolvePlaybackRate } from "./annotation/playback-rate";
 import type { AssessmentV2, ClaimV2, FoundationTagV2 } from "./annotation/workflow/contracts";
 
 const props = defineProps<{
@@ -88,6 +89,7 @@ function copyTransitionNotes(): void {
 <template>
   <fieldset class="claim-fields">
     <legend>{{ tags.find(tag => tag.id === modelValue.tagId)?.displayName ?? modelValue.tagId }}</legend>
+    <p class="claim-definition">Judgment rate · {{ resolvePlaybackRate(modelValue.playbackRate) }}×</p>
     <p class="claim-definition">{{ tags.find(tag => tag.id === modelValue.tagId)?.definition }}</p>
     <label>Assessment
       <select :disabled="disabled" :value="modelValue.assessment.presence" @change="assessment(($event.target as HTMLSelectElement).value as AssessmentV2['presence'])">

@@ -1,4 +1,5 @@
 import type { SourceIdentityV1, StableNoteRefV1, TimeRangeV1 } from "../contracts";
+import type { PlaybackRate } from "../playback-rate";
 
 export const WORKFLOW_CONTRACT_V2 = "beatmap-lens-agent-human-workflow" as const;
 export const TASK_CONTRACT_V2 = "beatmap-lens-agent-task" as const;
@@ -18,6 +19,8 @@ export interface EvidenceV2 {
 
 export interface ClaimV2 {
   readonly id: string;
+  /** Missing means historical 1x. The rate is part of judgment identity, not source identity. */
+  readonly playbackRate?: PlaybackRate;
   readonly sectionId?: string;
   readonly tagId: string;
   readonly scope: TimeRangeV1;

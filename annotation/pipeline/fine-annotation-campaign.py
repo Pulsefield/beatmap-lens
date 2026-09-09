@@ -14,6 +14,8 @@ import sys
 from urllib.request import urlopen
 
 REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO / 'annotation'))
+from playback_rate import normalize_playback_rate, playback_rate_fields, same_playback_rate
 
 
 def module(name):
@@ -75,7 +77,7 @@ def batch_state(batch):
     if (path / 'preparation.json').exists():
         def key(case):
             return (case.get('caseId', case.get('benchmarkCaseId', case.get('sectionId'))),
-                    case['sourceSha256'], *priorities.bounds(case))
+                    case['sourceSha256'], *priorities.bounds(case), normalize_playback_rate(case.get('playbackRate')))
         expected = Counter(key(case) for case in read(path / 'sections.json')['sections'])
         actual = Counter(key(case) for job in labelers if (job / 'run.json').exists()
                          for case in read(job / 'cases.json')['cases'])
@@ -108,6 +110,7 @@ def completed_judgments(path, batch_id):
             raise ValueError('Completed labeler response changed: ' + str(response))
         manifest = path / 'delivery' / job.name / 'packets/manifest.json'
         skipped = {(cell['caseId'], cell['tagId']): cell for cell in read(manifest)['skippedCells']} if manifest.exists() else {}
+        inputs = {case['caseId']: case for case in read(job / 'cases.json')['cases']}
         for case in read(response)['cases']:
             judgments = []
             for judgment in case['judgments']:
@@ -118,6 +121,7 @@ def completed_judgments(path, batch_id):
                 judgments.append({'tagId': judgment['tagId'], 'assessment': assessment,
                                   'skippedReason': cell.get('reason'), 'skippedConflict': cell.get('conflict', False)})
             result[case['caseId']] = {'batchId': batch_id, 'caseId': case['caseId'],
+                **playback_rate_fields(inputs[case['caseId']]),
                 'producerId': run['producerId'], 'responsePath': str(response),
                 'responseSha256': run['responseSha256'], 'skill': run['skill'], 'judgments': judgments}
     return result
@@ -139,19 +143,22 @@ def registered_sections(config):
             if sha not in snapshot:
                 snapshot[sha] = read(Path(batch['snapshot']) / 'feedback' / (sha + '.json'))
             case_id = section.get('benchmarkCaseId', section.get('sectionId', f'section-{index:03d}'))
-            key = (sha, *priorities.bounds(section))
-            record = sections.setdefault(key, {'sourceSha256': sha, 'scope': section['scope'], 'registrations': []})
+            key = (sha, *priorities.bounds(section), normalize_playback_rate(section.get('playbackRate')))
+            record = sections.setdefault(key, {'sourceSha256': sha, 'scope': section['scope'],
+                                                **playback_rate_fields(section), 'registrations': []})
             record['registrations'].append({'batchId': batch['id'], 'caseId': case_id,
                 'skill': preparation.get('skill'),
                 'sourceFeedback': {k: snapshot[sha].get(k) for k in ('documentVersion', 'reviewBase')}})
             if case_id in judgments:
+                if not same_playback_rate(section, judgments[case_id]):
+                    raise ValueError('Completed labeler judgment differs from the registered playback rate.')
                 record['latestLabeler'] = judgments[case_id]
     return list(sections.values())
 
 
 def account_section(section, feedback):
     """Keep the original requested unit; clipped claims supply coverage, never new counted units."""
-    human, machine, signals = priorities.feedback_labels(feedback)
+    human, machine, signals = priorities.feedback_labels(feedback, section.get('playbackRate'))
     conflicts = priorities.human_conflicts(human)
     target = [priorities.bounds(section)]
     origins = {}
@@ -171,6 +178,7 @@ def account_section(section, feedback):
                              **{key: observation[key] for key in ('observationSha256', 'trust') if key in observation}}
     issues = [{'issueId': '/'.join((section['sourceSha256'], s['handoffId'], s['claimId'])),
                'tagId': s['claim']['tagId'], 'scope': s['claim']['scope'],
+               **playback_rate_fields(s['claim']),
                **{k: s[k] for k in ('status', 'question', 'expertReason') if k in s}}
               for s in signals if s['kind'] == 'openReview'
               and priorities.intersect(target, [priorities.bounds(s['claim'])])]
@@ -188,6 +196,7 @@ def account_section(section, feedback):
                 ranges = priorities.intersect(target, priorities.subtract([priorities.bounds(claim)], removed))
                 if ranges:
                     contributions.append({**origins[id(claim)], 'tier': tier, 'scope': claim['scope'],
+                                          **playback_rate_fields(claim),
                                           'assessment': claim['assessment'], 'coveredRanges': ranges})
         ranges = [r for claim in contributions for r in claim['coveredRanges']]
         dimensions[tag] = {'missingRanges': priorities.subtract(target, ranges), 'claims': contributions}
@@ -245,7 +254,7 @@ def report(root, config, result):
     lines = ['# Fine annotation campaign', '',
              f"{result.get('completeCount', 0)} / {config['target']} complete selected sections; baseline 0.",
              f"Controller: {result['controllerStatus']}. Canonical feedback fresh: {result.get('canonicalFresh', False)}.",
-             'Only registered source/scope units count, once, after full five-dimension settled coverage.',
+             'Only registered source/scope/playback-rate units count, once, after full five-dimension settled coverage.',
              'Old whole-chart acceptance, unresolved labels, stale machine labels and conflicting human coverage do not count.',
              '', 'The ledger preserves every attempted scope, exact contributing claims and current review bases.',
              'Open issues remain pending and attempted scopes are excluded from future selection.',

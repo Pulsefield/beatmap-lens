@@ -17,6 +17,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import annotation_runtime as base
 import section_evidence as preparer
+from playback_rate import same_playback_rate
 
 public_example = base.load_module(base.REPO / 'harness/harness_examples.py').public_example
 
@@ -177,7 +178,8 @@ def prepare(root, queue_path, bundle, campaign, python, max_sections=5, max_brie
         raise ValueError('Queue and harness section counts differ.')
     sections = []
     for queued, section in zip(queue['sections'], manifest['sections']):
-        if any(queued[k] != section[k] for k in ('sourceSha256', 'scope', 'reviewContext')):
+        if (any(queued[k] != section[k] for k in ('sourceSha256', 'scope', 'reviewContext'))
+                or not same_playback_rate(queued, section)):
             raise ValueError('Queue and frozen harness target differ.')
         sections.append({**section, 'benchmarkCaseId': section['sectionId']})
     root.mkdir(parents=True, exist_ok=False)
@@ -192,7 +194,8 @@ def prepare(root, queue_path, bundle, campaign, python, max_sections=5, max_brie
     for case, queued in zip(cases, queue['sections']):
         case['originalReferences'] = [{k: v for k, v in issues[key].items() if k != 'audits'} for key in queued.get('issueIds', [])]
         case['existingHumanJudgments'] = [public_example(e) for e in examples
-                                          if e['sourceSha256'] == case['sourceSha256'] and overlap(e['scope'], case['scope'])]
+                                          if e['sourceSha256'] == case['sourceSha256']
+                                          and same_playback_rate(e, case) and overlap(e['scope'], case['scope'])]
     skill = freeze_skill(root)
     original = read(campaign / config['workerCommonPath'] / 'foundation.json')
     save(root / 'common/foundation.json', {k: v for k, v in original.items() if k != 'calibrationExamples'})

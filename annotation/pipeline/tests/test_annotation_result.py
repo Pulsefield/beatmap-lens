@@ -68,6 +68,15 @@ class ResultPreflightTest(unittest.TestCase):
         write(self.job / "result.json", self.result)
         return checker.check(self.job)
 
+    def test_rate_specific_chart_assignments_are_redirected_before_source_deduplication(self):
+        write(self.job / 'assignment.json', {'charts': [self.assigned,
+            {**self.assigned, 'playbackRate': .75}]})
+        report = self.check()
+        self.assertFalse(report['ok'])
+        issue = next(item for item in report['errors'] if item['code'] == 'unsupported-assignment-playback-rate')
+        self.assertEqual(issue['value'], .75)
+        self.assertIn('Use selected-section fine annotation', issue['message'])
+
     def test_valid_entering_hold_empty_negative_and_cross_list_reuse(self):
         self.chart["claims"].extend([
             {**self.claim, "id": "empty-negative", "assessment": {"presence": "absent"},

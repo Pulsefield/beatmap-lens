@@ -8,8 +8,11 @@ import hashlib
 import json
 from pathlib import Path
 import subprocess
+import sys
 import urllib.request
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from playback_rate import normalize_playback_rate, playback_rate_fields, same_playback_rate
 
 REPO = Path(__file__).resolve().parents[2]
 TAGS = ('jack-organization', 'stream-organization', 'trill-organization', 'tech', 'ln-coordination')
@@ -151,6 +154,7 @@ def assessment(judgment):
 
 
 def validate_judgments(case, judgments):
+    normalize_playback_rate(case.get('playbackRate'))
     keyed(judgments, 'tagId', TAGS)
     notes = keyed([note_ref(note) for note in case['notes']], 'sourceLine')
     scope, context = case['scope'], case['reviewContext']
@@ -225,6 +229,7 @@ def terminal_lineage(case, current, foundation_sha, include_exact_stale=False):
         eligible = len(chain) > 1 and rows[chain[-1]]['status'] == 'stale'
         eligible = eligible and all(
             not rows[key].get('decision') and rows[key]['summary']['scope'] == case['scope']
+            and same_playback_rate(rows[key]['summary'], case)
             and rows[key]['summary']['tagId'] == ref.get('tagId', anchor['summary']['tagId'])
             and handoffs[key[0]]['foundationSha256'] == foundation_sha for key in chain)
         if not eligible:
@@ -232,11 +237,13 @@ def terminal_lineage(case, current, foundation_sha, include_exact_stale=False):
             continue
         records = [{**{key: rows[identity][key] for key in ('handoffId', 'claimId', 'status', 'baseStatus')},
                     'handoffSha256': handoffs[identity[0]]['handoffSha256'],
+                    **playback_rate_fields(rows[identity]['summary']),
                     'tagId': rows[identity]['summary']['tagId'], 'scope': rows[identity]['summary']['scope']}
                    for identity in chain]
         # The anchor's frozen identity must still agree, including a hash when supplied.
         require(ref.get('handoffSha256', records[0]['handoffSha256']) == records[0]['handoffSha256']
                 and ref.get('sourceSha256', case['sourceSha256']) == case['sourceSha256']
+                and same_playback_rate(ref, case)
                 and ref.get('scope', case['scope']) == case['scope'], 'Lineage anchor binding changed.')
         for left, right in zip(records, records[1:]):
             edge = next(link for link in handoffs[right['handoffId']]['supersedes']
@@ -252,10 +259,12 @@ def terminal_lineage(case, current, foundation_sha, include_exact_stale=False):
             if (identity in stale_targets or identity in successors or row.get('decision')
                     or row['status'] != 'stale' or row['baseStatus'] != 'stale'
                     or row['summary']['tagId'] not in repaired_tags or row['summary']['scope'] != case['scope']
+                    or not same_playback_rate(row['summary'], case)
                     or handoffs[identity[0]]['foundationSha256'] != foundation_sha):
                 continue
             record = {**{key: row[key] for key in ('handoffId', 'claimId', 'status', 'baseStatus')},
                       'handoffSha256': handoffs[identity[0]]['handoffSha256'],
+                      **playback_rate_fields(row['summary']),
                       'tagId': row['summary']['tagId'], 'scope': row['summary']['scope']}
             ref = {**record, 'sourceSha256': case['sourceSha256']}
             references.append(ref)
@@ -282,13 +291,15 @@ def select_cells(case, judgments, current, foundation_sha):
     for judgment in judgments:
         tag = judgment['tagId']
         cell = {'caseId': case['caseId'], 'sourceSha256': case['sourceSha256'],
-                'scope': case['scope'], 'tagId': tag}
-        human = [claim for claim in humans if claim['tagId'] == tag and overlap(claim['scope'], case['scope'])]
+                'scope': case['scope'], 'tagId': tag, **playback_rate_fields(case)}
+        human = [claim for claim in humans if claim['tagId'] == tag
+                 and same_playback_rate(claim, case) and overlap(claim['scope'], case['scope'])]
         if human:
             skipped.append({**cell, 'reason': 'human-exact' if any(c['scope'] == case['scope'] for c in human)
                             else 'human-overlap', 'conflict': False})
             continue
         exact = [row for row in rows if row['summary']['tagId'] == tag
+                 and same_playback_rate(row['summary'], case)
                  and row['summary']['scope'] == case['scope'] and row['status'] != 'superseded'
                  and not row.get('decision')]
         reason, conflict, replacements = None, False, []
@@ -297,6 +308,7 @@ def select_cells(case, judgments, current, foundation_sha):
             if ref.get('tagId', row['summary']['tagId'] if row else None) != tag:
                 continue
             if (row not in exact or ref.get('sourceSha256', case['sourceSha256']) != case['sourceSha256']
+                    or not same_playback_rate(ref, case)
                     or ref.get('scope', case['scope']) != case['scope']):
                 reason, conflict = 'original-reference-changed', True
                 break
@@ -348,6 +360,8 @@ def verify_entry(entry):
     require(handoff['handoffId'] == entry['handoffId'] and handoff['sourceSha256'] == entry['sourceSha256'],
             'Sealed handoff identity differs.')
     require([claim['id'] for claim in handoff['proposals']] == entry['claimIds'], 'Sealed claim identities differ.')
+    require(all(same_playback_rate(claim, entry) for claim in handoff['proposals']),
+            'Sealed claim playback rate differs from the frozen section.')
     return task, handoff
 
 
@@ -407,6 +421,7 @@ def prepare_handoffs(batch_root, label_job, campaign, *, follow_terminal_lineage
         for judgment in selected:
             witnesses = set(judgment['noteLines'])
             proposals.append({'id': case_id + '-' + judgment['tagId'], 'sectionId': case_id,
+                              **playback_rate_fields(case),
                               'tagId': judgment['tagId'], 'scope': case['scope'], 'reviewContext': case['reviewContext'],
                               'assessment': assessment(judgment), 'evidence': {
                                   'noteRefs': [byline[line] for line in judgment['noteLines']],
@@ -428,6 +443,7 @@ def prepare_handoffs(batch_root, label_job, campaign, *, follow_terminal_lineage
         require(all(handoff[key] == value for key, value in proposal.items()),
                 'Sealed handoff differs from the actual labeler proposal.')
         manifest['entries'].append({'caseId': case_id, 'sourceSha256': case['sourceSha256'],
+            **playback_rate_fields(case),
             'scope': case['scope'], 'reviewContext': case['reviewContext'],
             'taskPath': str(task_path), 'taskFileSha256': sha(task_path), 'taskId': task['taskId'],
             'taskSha256': task['taskSha256'], 'foundationSha256': task['foundationSha256'], 'base': task['base'],
@@ -504,6 +520,7 @@ def verify_applied(current, entry, handoff, audit, audit_sha):
         require(machine_binding_current(row) and row['status'] == expected, 'Delivered claim has a conflicting current status.')
         require(all(row['summary'][key] == claim[key] for key in ('scope', 'reviewContext', 'tagId', 'assessment')),
                 'Delivered claim content differs.')
+        require(same_playback_rate(row['summary'], claim), 'Delivered claim playback rate differs.')
         require(any(item['auditId'] == audit['auditId'] and item['result'] == result for item in row['audits']),
                 'Exact independent audit result is missing from feedback.')
         statuses[claim['id']] = row['status']
@@ -548,7 +565,9 @@ def deliver_audits(batch_root, audit_job, campaign):
     human_refs, evidence_trace_sha = human_evidence(audit_job, run)
     require(agent['producerId'].strip() != manifest['labelerRun']['producerId'].strip(), 'Auditor must be independent.')
     entries = keyed(manifest['entries'], 'caseId')
-    keyed(read(audit_job / 'cases.json')['cases'], 'caseId', entries)
+    audit_cases = keyed(read(audit_job / 'cases.json')['cases'], 'caseId', entries)
+    require(all(same_playback_rate(case, entries[case_id]) for case_id, case in audit_cases.items()),
+            'Auditor case playback rate differs from the sealed section.')
     verdicts = keyed(read(audit_job / 'response.json')['cases'], 'caseId', entries)
     audit_manifest = {'kind': 'section-annotation-audits-v1', 'createdAt': now(),
                       'handoffManifestSha256': sha(manifest_path), 'auditorRunPath': str(audit_job / 'run.json'),

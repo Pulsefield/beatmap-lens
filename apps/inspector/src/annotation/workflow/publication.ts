@@ -1,5 +1,6 @@
 import { serializeCanonicalJson, sha256Hex } from "../canonical-json";
 import type { SourceIdentityV1 } from "../contracts";
+import { type PlaybackRate, resolvePlaybackRate } from "../playback-rate";
 import type {
   AgentProvenanceV2,
   AgentReviewV2,
@@ -31,6 +32,7 @@ export interface PublicationRowV1 {
   source_sha256: string;
   start_ms: number;
   end_ms: number;
+  playback_rate: PlaybackRate;
   tag_id: string;
   presence: ClaimV2["assessment"]["presence"];
   salience: "supporting" | "prominent" | null;
@@ -119,6 +121,7 @@ function rowForClaim(source: SourceIdentityV1, claim: ClaimV2): PublicationRowV1
     source_sha256: source.sha256,
     start_ms: claim.scope.startMs,
     end_ms: claim.scope.endMs,
+    playback_rate: resolvePlaybackRate(claim.playbackRate),
     tag_id: claim.tagId,
     presence: claim.assessment.presence,
     salience: claim.assessment.presence === "present" ? claim.assessment.salience : null,

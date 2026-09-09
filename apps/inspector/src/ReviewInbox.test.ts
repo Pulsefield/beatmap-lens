@@ -104,6 +104,45 @@ async function change(control: HTMLInputElement | HTMLSelectElement, value: stri
 }
 
 describe("machine review sampling", () => {
+  it("shows judgment rates in requests, samples and history", async () => {
+    const f = await fixture();
+    const slow = f.claim("slow", { playbackRate: 0.5 });
+    const fast = f.claim("fast", { playbackRate: 1.5 });
+    Object.assign(f.source, {
+      reviews: [
+        slow,
+        fast,
+        f.claim("historical"),
+        { ...slow, claimId: "slow-request" },
+        { ...fast, claimId: "fast-request" },
+      ],
+      requests: [
+        {
+          requestId: "rate-review",
+          handoffId: "handoff",
+          claimIds: ["slow-request", "fast-request"],
+          pendingClaimIds: ["slow-request", "fast-request"],
+          reason: "Review rates",
+          question: "Compare these rates.",
+        },
+      ],
+    });
+    vi.stubGlobal("fetch", f.fetcher);
+    const { container } = mount();
+    await vi.waitFor(() =>
+      expect(container.querySelector(".inbox-claims")?.textContent).toContain("0.5×"),
+    );
+    expect(container.querySelector(".inbox-claims")?.textContent).toContain("1.5×");
+    await click(container, "Browse review history");
+    expect(container.querySelector(".inbox-history-list")?.textContent).toContain("0.5×");
+    expect(container.querySelector(".inbox-history-list")?.textContent).toContain("1.5×");
+    expect(container.querySelector(".inbox-history-list")?.textContent).toContain("1×");
+    await click(container, "Sample machine-reviewed sections");
+    await click(container, "Draw sample");
+    expect(container.querySelector(".inbox-sample-list")?.textContent).toContain("0.5×");
+    expect(container.querySelector(".inbox-sample-list")?.textContent).toContain("1.5×");
+  });
+
   it("refreshes active and cached evidence context without reloading unchanged chart bytes", async () => {
     const { source, inbox } = await fixture();
     const trust = { source: "current", foundation: "current", humanContext: "current" } as const;

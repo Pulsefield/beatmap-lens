@@ -6,6 +6,9 @@ from math import ceil
 
 from PIL import Image, ImageDraw, ImageFont
 
+from harness_playback import timing_context
+from playback_rate import normalize_playback_rate
+
 
 WIDTH, HEIGHT = 1100, 900
 TOP, BOTTOM = 150, 804
@@ -14,11 +17,13 @@ TIME_PAGE_MS = 2500
 ROW_PAGE_INTERVALS = 28
 
 
-def _layout(chart, start_ms, end_ms, view, page):
+def _layout(chart, start_ms, end_ms, view, page, playback_rate=1):
     if view not in ("time", "rows"):
         raise ValueError("view must be 'time' or 'rows'")
     if start_ms >= end_ms:
         raise ValueError("start_ms must be less than end_ms")
+    rate = normalize_playback_rate(playback_rate)
+    page_source_ms = TIME_PAGE_MS * rate
     notes = chart["notes"]
     events = sorted({start_ms, end_ms} | {
         time for note in notes
@@ -26,13 +31,13 @@ def _layout(chart, start_ms, end_ms, view, page):
                      if note["kind"] == "long" else [note["startMs"]])
         if start_ms < time < end_ms
     })
-    page_count = (ceil((end_ms - start_ms) / TIME_PAGE_MS) if view == "time"
+    page_count = (ceil((end_ms - start_ms) / page_source_ms) if view == "time"
                   else ceil((len(events) - 1) / ROW_PAGE_INTERVALS))
     if not 0 <= page < page_count:
         raise ValueError(f"page must be between 0 and {page_count - 1}")
     if view == "time":
-        start = start_ms + page * TIME_PAGE_MS
-        end = min(end_ms, start + TIME_PAGE_MS)
+        start = start_ms + page * page_source_ms
+        end = min(end_ms, start + page_source_ms)
         anchors = [start, end]
     else:
         anchors = events[page * ROW_PAGE_INTERVALS:(page + 1) * ROW_PAGE_INTERVALS + 1]
@@ -50,14 +55,15 @@ def _layout(chart, start_ms, end_ms, view, page):
             "anchors": anchors, "notes": visible, "y": y}
 
 
-def render_section(chart, start_ms, end_ms, view="time", page=0):
+def render_section(chart, start_ms, end_ms, view="time", page=0, playback_rate=1):
     """Render one bounded page. ``rows`` aligns attack AND release events.
 
     The requested range and attack inclusion are half-open. A release exactly at
     a page boundary remains visible as an endpoint, including at the top edge.
     Time progresses downward; source columns are always zero-based.
     """
-    layout = _layout(chart, start_ms, end_ms, view, page)
+    rate = normalize_playback_rate(playback_rate)
+    layout = _layout(chart, start_ms, end_ms, view, page, rate)
     start, end, y = layout["start"], layout["end"], layout["y"]
     source = chart["source"]
     keys = source["keyCount"]
@@ -71,11 +77,12 @@ def render_section(chart, start_ms, end_ms, view="time", page=0):
     muted = "#a5b4c0"
     tap, hold, endpoint, continuation = "#f2c14e", "#4ecdc4", "#f8fbff", "#f49d56"
     mode = "TIME PROPORTIONAL" if view == "time" else "EVENT ROWS - TIMING DISTORTED"
-    draw.text((28, 22), mode, font=large, fill=text)
+    draw.text((28, 22), f"{mode}  |  {rate:g}x", font=large, fill=text)
     draw.text((28, 57), f"{source['sha256'][:16]}  |  {keys}K  |  page {page + 1}/{layout['pageCount']}",
               font=font, fill=muted)
-    draw.text((28, 84), f"Page [{start:g}, {end:g}) ms  |  requested [{start_ms:g}, {end_ms:g}) ms  |  time moves down",
+    draw.text((28, 84), f"Source page [{start:g}, {end:g}) ms  |  requested [{start_ms:g}, {end_ms:g}) ms  |  time moves down",
               font=font, fill=text)
+    draw.text((12, 116), "Elapsed ms" if rate != 1 else "Source ms", font=small, fill=muted)
     draw.text((LEFT, 110), "Source columns (zero-based)", font=small, fill=muted)
     draw.text((RIGHT + 16, 120), "Source lines: attack / release", font=small, fill=muted)
     for column in range(keys):
@@ -99,7 +106,8 @@ def render_section(chart, start_ms, end_ms, view="time", page=0):
     for time in ticks:
         position = y(time)
         draw.line((LEFT, position, RIGHT, position), fill="#3b4b59", width=1)
-        draw.text((LEFT - 12, position), f"{time:g}", font=small, fill=muted, anchor="rm")
+        label_time = (time - start_ms) / rate if rate != 1 else time
+        draw.text((LEFT - 12, position), f"{label_time:g}", font=small, fill=muted, anchor="rm")
 
     line_labels = defaultdict(lambda: {"attack": [], "release": []})
     entering = continuing = attacks = releases = 0
@@ -163,14 +171,23 @@ def render_section(chart, start_ms, end_ms, view="time", page=0):
     draw.text((28, 835), "Gold: tap  |  teal: LN head/body  |  white ring: true release  |  orange chevron: clipped continuation",
               font=small, fill=text)
     footer = ("Attack and release rows have equal spacing. Compare millisecond labels to judge rhythm."
-              if view == "rows" else "Vertical distance preserves elapsed time. Narrow the requested range to zoom in.")
+              if view == "rows" else "Vertical distance preserves performance time; each full page spans 2500 elapsed ms.")
+    if rate != 1:
+        footer += f" Elapsed zero = source {start_ms:g} ms."
     draw.text((28, 861), footer, font=small, fill=muted)
     buffer = BytesIO()
     canvas.save(buffer, format="PNG", optimize=True)
-    return {"png": buffer.getvalue(), "view": view, "page": page, "pageCount": layout["pageCount"],
+    result = {"png": buffer.getvalue(), "view": view, "page": page, "pageCount": layout["pageCount"],
             "source": source["sha256"], "range": {"startMs": start, "endMs": end},
             "requestedRange": {"startMs": start_ms, "endMs": end_ms}, "columnBase": 0,
             "width": WIDTH, "height": HEIGHT,
             "events": {"attacks": attacks, "visibleReleasesIncludingBoundaries": releases,
                        "enteringHolds": entering, "continuingHolds": continuing},
             "warnings": warnings}
+    if rate != 1:
+        result.update(playbackRate=rate, performanceTiming=timing_context(start_ms, end_ms, rate) | {
+            'pageElapsedRangeMs': {'startMs': (start - start_ms) / rate, 'endMs': (end - start_ms) / rate},
+            'axis': 'elapsed performance ms from requested source start',
+            'fullPageDurationMs': TIME_PAGE_MS if view == 'time' else None,
+        })
+    return result

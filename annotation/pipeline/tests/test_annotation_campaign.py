@@ -497,6 +497,26 @@ class QueryFirstJobTest(unittest.TestCase):
         with patch.object(campaign.subprocess, "check_output", return_value="codex-test\n"):
             return campaign.setup_job(self.root, self.assignment, role)
 
+    def test_historical_location_hints_retain_each_playback_rate(self):
+        original = self.prior_feedback['agentReviews'][0]
+        for identity, rate in [('explicit-original', 1), ('slower', .75), ('faster', 1.5)]:
+            self.prior_feedback['agentReviews'].append({**original, 'claimId': identity,
+                'summary': {**original['summary'], 'playbackRate': rate}})
+        path = self.root / 'controller/prior-feedback' / f'{self.sha}.json.gz'
+        path.write_bytes(gzip.compress(json.dumps(self.prior_feedback).encode(), mtime=0))
+        job = self.root / 'rate-hints'
+        campaign.prior_feedback(self.root, job, self.assignment)
+        hints = campaign.read(job / 'prior-machine-candidates.json')['candidates']
+        self.assertEqual({item['playbackRate']: item['originalClaimId'] for item in hints},
+                         {1: 'explicit-original', .75: 'slower', 1.5: 'faster'})
+        self.assertTrue(all(item['scope'] == original['summary']['scope'] for item in hints))
+        self.assertTrue(all(item['reviewContext'] == original['summary']['reviewContext'] for item in hints))
+
+    def test_rate_specific_assignments_require_selected_section_fine_annotation(self):
+        assignment = {**self.assignment, 'charts': [{**self.assignment['charts'][0], 'playbackRate': .75}]}
+        with self.assertRaisesRegex(ValueError, 'Use selected-section fine annotation'):
+            campaign.setup_job(self.root, assignment, 'labeler')
+
     def test_frozen_queries_and_separate_historical_inputs_are_reproducible(self):
         original_assignment = json.dumps(self.assignment, sort_keys=True)
         job = self.setup()
@@ -848,6 +868,8 @@ class QueryFirstJobTest(unittest.TestCase):
         shutil.copytree(self.common, snapshot)
         (snapshot / "check-annotation-result.py").write_bytes(
             (campaign.REPO / "annotation/pipeline/check-annotation-result.py").read_bytes())
+        (snapshot / "playback_rate.py").write_bytes(
+            (campaign.REPO / "annotation/playback_rate.py").read_bytes())
         campaign.write(snapshot / "foundation.json", {"tags": [{"id": tag} for tag in
             ("jack-organization", "stream-organization", "trill-organization", "tech", "ln-coordination")]})
         self.config["workerCommonPath"] = snapshot.name

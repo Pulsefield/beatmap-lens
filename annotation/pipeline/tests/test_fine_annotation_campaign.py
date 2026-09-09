@@ -43,6 +43,22 @@ def section():
 
 
 class AccountingTest(unittest.TestCase):
+    def test_other_speeds_do_not_fill_gaps_override_humans_or_open_issues(self):
+        current = feedback()
+        for review in current['agentReviews']:
+            review['summary']['playbackRate'] = .75
+        self.assertEqual(campaign.account_section(section(), current)['status'], 'pending')
+        target = {**section(), 'playbackRate': .75}
+        self.assertEqual(campaign.account_section(target, current)['status'], 'complete')
+        current['directObservations'] = [{'id': 'original-speed-human', 'summary':
+            claim(TAGS[0], 'original-speed', presence='present')}]
+        current['agentReviews'].append(row(claim(TAGS[0], 'original-speed-issue'), 'needs-expert'))
+        result = campaign.account_section(target, current)
+        self.assertEqual(result['status'], 'complete')
+        self.assertEqual(result['humanConflicts'], [])
+        self.assertEqual(result['openIssues'], [])
+        self.assertEqual(result['dimensions'][TAGS[0]]['claims'][0]['playbackRate'], .75)
+
     def test_complete_requires_full_original_scope_in_all_five_dimensions(self):
         current = feedback()
         current['agentReviews'][0] = row(claim(TAGS[0], end=6000))
@@ -169,6 +185,23 @@ class ControllerTest(unittest.TestCase):
         self.assertEqual(ledger[0]['registrations'][0]['caseId'], 'section-001')
         self.live['agentReviews'][0]['status'] = 'needs-revision'
         self.assertEqual(campaign.status(self.root, self.config)['completeCount'], 0)
+
+    def test_registration_counts_each_speed_once_and_detects_lost_worker_speed(self):
+        self.batch()
+        batch = self.batch('slower')
+        path = Path(batch['path'])
+        for name, key in [('sections.json', 'sections'), ('runs/labeler-001/cases.json', 'cases')]:
+            value = campaign.read(path / name)
+            value[key][0]['playbackRate'] = .75
+            campaign.save(path / name, value)
+        result = campaign.status(self.root, self.config)
+        self.assertEqual((result['attemptedCount'], result['completeCount']), (2, 1))
+        ledger = campaign.read(self.root / 'ledger.json')['sections']
+        self.assertEqual(next(s for s in ledger if s.get('playbackRate') == .75)['status'], 'pending')
+        job_cases = campaign.read(path / 'runs/labeler-001/cases.json')
+        del job_cases['cases'][0]['playbackRate']
+        campaign.save(path / 'runs/labeler-001/cases.json', job_cases)
+        self.assertEqual(campaign.batch_state(batch)['status'], 'needs-controller')
 
     def completed_response(self, batch, reason='supported-machine-conflict', presence='present'):
         path = Path(batch['path'])

@@ -11,6 +11,7 @@ import regression_gate as gate
 REPO = gate.REPO
 sys.path.insert(0, str(REPO / 'annotation'))
 import annotation_runtime as runtime
+from playback_rate import playback_rate_fields
 
 
 def prepare(root, campaign, feedback_dir, python, repeats=gate.REPEATS):
@@ -25,7 +26,8 @@ def prepare(root, campaign, feedback_dir, python, repeats=gate.REPEATS):
     source_map = {c['source']['sha256']: c for c in gate.read(campaign / 'admin/source-map.json')}
     sources = gate.source_snapshot()
     root.mkdir(parents=True, exist_ok=False)
-    sections = [{k: c[k] for k in ('caseId', 'sourceSha256', 'scope', 'reviewContext')} for c in suite['cases']]
+    sections = [{**{k: c[k] for k in ('caseId', 'sourceSha256', 'scope', 'reviewContext')},
+                 **playback_rate_fields(c)} for c in suite['cases']]
     gate.save(root / 'sections.json', {'sections': sections})
     groups = benchmark.song_groups(source_map)
     bundle = root / 'harness'

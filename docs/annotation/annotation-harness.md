@@ -22,6 +22,8 @@ remain separate from inspection.
 All section tools accept `section_id`. Source ranges are half-open milliseconds;
 columns are zero-based. Optional `start_ms` and `end_ms` expand or narrow inspection
 inside the chart, without silently changing the assigned claim scope.
+Targets may also freeze a `playbackRate`; see [playback-rate annotation](playback-rate.md)
+for performance-time fields, example-rate filters, and source-coordinate rules.
 
 | Tool | Use when needed | Bounded result |
 | --- | --- | --- |
@@ -112,7 +114,8 @@ clarify its expression. These are investigation prompts. No count, threshold,
 highlighted change, or LN overlap supplies a Tech verdict. Summary examples omit
 interior events; inspect them if they become decisive evidence.
 
-Time-proportional images preserve source-time distances. Row images align attack
+Time-proportional images preserve performance-time distances at the assigned rate
+(source-time distances at 1×). Row images align attack
 and release events with compressed spacing, so they expose arrangement while
 distorting rhythm. Both preserve LN identity, visible release endpoints, and
 continuations across page boundaries. Neither rendering substitutes for unseen
@@ -132,7 +135,7 @@ Keep descriptions short and about the comparison, without source or example IDs.
 Source/song exclusions apply before memberships, counts, or descriptors reach the
 worker bundle or tools. Keep the inputs of an active job fixed.
 The section input accepts either a `sections` or `cases` array, with
-`sourceSha256`, `scope`, and optional `reviewContext`; supply stable `sectionId` or
+`sourceSha256`, `scope`, and optional `reviewContext` and `playbackRate`; supply stable `sectionId` or
 `caseId` values. The job launcher supplies the frozen skill/Foundation, role,
 compact section brief, and output schema alongside the bundle.
 

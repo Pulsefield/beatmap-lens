@@ -8,11 +8,16 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path
+import sys
 import time
 from typing import Literal
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'annotation'))
+
+from playback_rate import normalize_playback_rate, same_playback_rate
 from harness_examples import get_example, public_example, search_examples
 from harness_inspection import chart_context, inspect, perspective
+from harness_playback import timing_context
 from harness_render import render_section
 
 
@@ -34,12 +39,16 @@ class Harness:
         self.manifest = read(self.bundle / 'manifest.json')
         self.trace = Path(trace) if trace else None
         self.sections = {s['sectionId']: s for s in self.manifest['sections']}
+        for section in self.sections.values():
+            normalize_playback_rate(section.get('playbackRate'))
         for name in self.manifest['files']:
             if name.startswith('tools/') and digest(self.bundle / name) != self.manifest['files'][name]:
                 raise ValueError(f'Frozen harness tool changed: {name}')
         self.examples = self.load('examples.json')
         self.example_refs = self.load('example-refs.json') if 'example-refs.json' in self.manifest['files'] else {}
         self.contrast_sets = self.load('contrast-sets.json')['sets']
+        if 'sections.json' in self.manifest['files'] and self.load('sections.json') != self.manifest['sections']:
+            raise ValueError('Frozen harness section targets changed.')
         self.exclusions = {'excluded_sources': self.manifest['excludedSources'],
                            'excluded_groups': self.manifest['excludedGroups']}
         self.calls = Counter()
@@ -80,27 +89,29 @@ class Harness:
 
     def context(self, section_id, start_ms=None, end_ms=None, timing_offset=0, timing_limit=12):
         section, chart, start, end = self.bounds(section_id, start_ms, end_ms)
-        result = chart_context(chart, start, end, timing_offset, timing_limit)
+        result = chart_context(chart, start, end, timing_offset, timing_limit, section.get('playbackRate', 1))
         result['reviewContext'] = {key: section['reviewContext'][key] for key in ('startMs', 'endMs')}
         result['sectionId'] = section_id
         if self.manifest['mode'] == 'annotation':
             result['existingHumanJudgments'] = [
                 public_example(e)
                 for e in self.examples if e['sourceSha256'] == section['sourceSha256']
+                and same_playback_rate(e, section)
                 and max(start, e['scope']['startMs']) < min(end, e['scope']['endMs'])]
         return result
 
     def rows(self, section_id, start_ms=None, end_ms=None, view='rows', offset=0, limit=32):
-        _, chart, start, end = self.bounds(section_id, start_ms, end_ms)
-        return inspect(chart, start, end, view, offset, limit)
+        section, chart, start, end = self.bounds(section_id, start_ms, end_ms)
+        return inspect(chart, start, end, view, offset, limit, section.get('playbackRate', 1))
 
     def perspective(self, section_id, start_ms=None, end_ms=None):
-        _, chart, start, end = self.bounds(section_id, start_ms, end_ms)
-        return perspective(chart, start, end)
+        section, chart, start, end = self.bounds(section_id, start_ms, end_ms)
+        return perspective(chart, start, end, section.get('playbackRate', 1))
 
-    def search(self, tag_id='tech', assessment=None, text='', offset=0, limit=3, contrast_set=None):
+    def search(self, tag_id='tech', assessment=None, text='', offset=0, limit=3, contrast_set=None, playback_rate=None):
         result = search_examples(self.examples, tag_id, assessment, text, offset, limit,
-                                 contrast_sets=self.contrast_sets, contrast_set=contrast_set, **self.exclusions)
+                                 contrast_sets=self.contrast_sets, contrast_set=contrast_set,
+                                 playback_rate=playback_rate, **self.exclusions)
         # Keep long source IDs behind the stable example handle.
         for card in result['cards']:
             source = self.manifest['charts'][card.pop('sourceSha256')]['source']
@@ -119,7 +130,8 @@ class Harness:
                                                     'keyCount', 'beatmapId', 'beatmapSetId') if key in source}}
 
     def query(self, section_id, query, start_ms=None, end_ms=None, columns=None, offset=0, limit=3):
-        _, chart, start, end = self.bounds(section_id, start_ms, end_ms)
+        section, chart, start, end = self.bounds(section_id, start_ms, end_ms)
+        rate = normalize_playback_rate(section.get('playbackRate'))
         path = Path(__file__).with_name('annotation-queries.py')
         spec = importlib.util.spec_from_file_location('annotation_queries', path)
         module = importlib.util.module_from_spec(spec)
@@ -142,14 +154,23 @@ class Harness:
                 card.update({key: [[n['sourceLine'], n['column'], n['startMs'], n['endMs']] for n in match[key]]
                              for key in ('attacks', 'releases', 'continuingHolds', 'heldAfter')})
             cards.append(card)
-        return {'sourceSha256': chart['source']['sha256'], 'query': query, 'scope': {'startMs': start, 'endMs': end},
+        result = {'sourceSha256': chart['source']['sha256'], 'query': query, 'scope': {'startMs': start, 'endMs': end},
                 'matches': cards, 'total': len(matches),
                 'nextOffset': offset + limit if offset + limit < len(matches) else None,
                 'interpretation': 'Structural candidates only. Inspect complete rows/context before assigning style or absence.'}
+        if rate != 1:
+            result.update(playbackRate=rate, performanceTiming=timing_context(start, end, rate) | {
+                'matches': [{
+                    'elapsedBoundsMs': {key: (value - start) / rate for key, value in card['bounds'].items()},
+                    **({'gapCounts': [(gap / rate, count) for gap, count in card['gapCounts']]}
+                       if 'gapCounts' in card else {}),
+                } for card in cards],
+            })
+        return result
 
     def render(self, section_id, start_ms=None, end_ms=None, view='time', page=0):
-        _, chart, start, end = self.bounds(section_id, start_ms, end_ms)
-        return render_section(chart, start, end, view, page)
+        section, chart, start, end = self.bounds(section_id, start_ms, end_ms)
+        return render_section(chart, start, end, view, page, section.get('playbackRate', 1))
 
     def call(self, name, arguments):
         methods = {'chart_context': self.context, 'inspect_section': self.rows,
@@ -196,6 +217,8 @@ def create_server(harness):
 
     server = FastMCP('beatmap-lens', instructions=(
         'Read-only evidence tools. Source milliseconds and columns are zero-based; scopes are half-open. '
+        'A section or human example owns its playbackRate (omitted means 1x); performanceTiming contains effective timing. '
+        'Never transfer a human judgment to another playback rate. Query bounds always use source milliseconds. '
         'Use tools only to answer an inspection question; reuse evidence already visible. '
         'Search returns small human-example cards; expand only useful comparisons. '
         'The player-action perspective supplies facts and questions, never a Tech verdict.'))
@@ -229,10 +252,12 @@ def create_server(harness):
 
     @server.tool(annotations=annotations, structured_output=False)
     def find_human_examples(tag_id: str = 'tech', assessment: Literal['absent', 'supporting', 'prominent', 'present'] | None = None,
-                            text: str = '', offset: int = 0, limit: int = 3, contrast_set: str | None = None) -> CallToolResult:
+                            text: str = '', offset: int = 0, limit: int = 3, contrast_set: str | None = None,
+                            playback_rate: float | None = None) -> CallToolResult:
         """Find final human judgments with optional humanComment by tag, assessment, literal human-comment/title/difficulty words or a contrast_set ID. No agent reasoning/evidence. Check matchedAssessmentCounts/missingContrastLabels: filters can be one-sided. availableContrastSets lists IDs/counts, never relevance rankings."""
         return result('find_human_examples', {'tag_id': tag_id, 'assessment': assessment, 'text': text,
-                                            'offset': offset, 'limit': limit, 'contrast_set': contrast_set})
+                                            'offset': offset, 'limit': limit, 'contrast_set': contrast_set,
+                                            'playback_rate': playback_rate})
 
     @server.tool(annotations=annotations, structured_output=False)
     def get_human_example(example_id: str) -> CallToolResult:

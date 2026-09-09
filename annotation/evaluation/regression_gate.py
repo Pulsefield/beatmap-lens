@@ -11,6 +11,8 @@ import sys
 
 
 REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO / 'annotation'))
+from playback_rate import same_playback_rate
 DIRECTORY = Path(__file__).resolve().parent
 SUITE = 'annotation/evaluation/cases.json'
 BASELINE = 'annotation/evaluation/source-baseline.json'
@@ -22,7 +24,7 @@ SOURCES = {
         '.agents/skills/mania-pattern-judgment/*',
         'annotation/roles/harness-labeler.md', 'annotation/roles/labeler.md',
         'harness/*.py', 'pyproject.toml', 'uv.lock', '.python-version',
-        'annotation/annotation_runtime.py', 'annotation/section_evidence.py',
+        'annotation/annotation_runtime.py', 'annotation/section_evidence.py', 'annotation/playback_rate.py',
         'annotation/evaluation/run_regression.py', 'annotation/evaluation/run-section-benchmark.py',
         'annotation/evaluation/prepare-harness-benchmark.py',
     ),
@@ -253,8 +255,9 @@ def capture(root, suite):
         if Counter(c['caseId'] for c in cases) != Counter(expected_cases.keys()):
             raise ValueError('Worker section coverage differs from regression corpus.')
         for case in cases:
-            if any(case[k] != expected_cases[case['caseId']][k] for k in ('sourceSha256', 'scope', 'reviewContext')):
-                raise ValueError('Worker source or scope differs: ' + case['caseId'])
+            if (any(case[k] != expected_cases[case['caseId']][k] for k in ('sourceSha256', 'scope', 'reviewContext'))
+                    or not same_playback_rate(case, expected_cases[case['caseId']])):
+                raise ValueError('Worker source, scope, or playback rate differs: ' + case['caseId'])
             if case.get('existingHumanJudgments') or case.get('originalReferences'):
                 raise ValueError('Target review answers leaked into worker cases.')
         if len(models) != 1 or len(efforts) != 1:

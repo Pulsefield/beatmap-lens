@@ -35,19 +35,30 @@ describe("MediaPlaybackClock", () => {
     expect(clock.currentTimeMs).toBe(3_400);
   });
 
-  it("does not couple playback to visual speed or media playbackRate", async () => {
-    const media = new FakeAudio();
-    const scheduler = new TestFrameScheduler();
-    const clock = new MediaPlaybackClock(asMedia(media), scheduler);
-
-    media.playbackRate = 1.25;
-    await clock.play();
-    clock.seek(2_000);
-    scheduler.frame();
-    clock.pause();
-
-    expect(media.playbackRate).toBe(1.25);
-  });
+  it.each([0.5, 0.75, 1, 1.25, 1.5])(
+    "uses %sx for media and source time outside the audio range",
+    async (rate) => {
+      const media = new FakeAudio({ durationMs: 1000 });
+      const scheduler = new TestFrameScheduler();
+      const clock = new MediaPlaybackClock(asMedia(media), scheduler, undefined, -100);
+      clock.setPlaybackRate(rate);
+      expect(media.playbackRate).toBe(rate);
+      expect(asMedia(media).preservesPitch).toBe(true);
+      await clock.play();
+      scheduler.advance(40);
+      expect(clock.currentTimeMs).toBe(40 * rate);
+      clock.seek(400);
+      await Promise.resolve();
+      expect(media.currentTime).toBe(0.3);
+      media.currentTime = 0.6;
+      scheduler.frame();
+      expect(clock.currentTimeMs).toBe(700);
+      clock.seek(1200);
+      scheduler.advance(80);
+      expect(clock.currentTimeMs).toBe(1200 + 80 * rate);
+      clock.dispose();
+    },
+  );
 
   it("keeps chart time moving before a negative offset reaches media time zero", async () => {
     const media = new FakeAudio({ durationMs: 1_000 });

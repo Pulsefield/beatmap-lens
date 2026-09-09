@@ -1,5 +1,6 @@
 import { serializeCanonicalJson, sha256Hex } from "../canonical-json";
 import type { SourceIdentityV1, StableNoteRefV1, TimeRangeV1 } from "../contracts";
+import { resolvePlaybackRate } from "../playback-rate";
 import { inspectOsuSourceV1 } from "../source-identity";
 import { createStableNoteRefsV1, stableNoteRefKey } from "../stable-note-ref";
 import {
@@ -670,6 +671,7 @@ export async function decideClaimV2(
       "Choose present with salience or absent before confirming a proposal, or defer this review. Unresolved and unreviewed do not decide presence.",
     );
   equal(claim.id, proposal.id, "Modified claim identity");
+  assertSamePlaybackRate(proposal, claim);
   const id = input.id ?? crypto.randomUUID();
   if (document.decisions.some((decision) => decision.id === id))
     throw new Error("Human decision ID already exists.");
@@ -727,6 +729,7 @@ export async function addHumanObservationsV2(
     );
     if (prior?.origin.kind !== "direct-human")
       throw new Error("A direct human revision must target a current direct-human observation.");
+    assertSamePlaybackRate(prior.claim, input.claims[0] as ClaimV2);
   }
   const refs = createStableNoteRefsV1(inspected.chart);
   for (const claim of input.claims) assertClaimV2(claim, refs, document.foundation);
@@ -886,6 +889,7 @@ function assertSupersessionTargets(prior: ReviewDocumentV2["handoffs"], handoff:
     const previous = original.handoff.proposals.find((claim) => claim.id === link.claimId);
     const next = handoff.proposals.find((claim) => claim.id === link.replacementClaimId);
     if (!previous || !next) throw new Error("Supersession must reference existing claims.");
+    assertSamePlaybackRate(previous, next);
     equal(previous.tagId, next.tagId, "Supersession must retain the target tag");
     if (
       previous.scope.startMs !== next.scope.startMs ||
@@ -1142,10 +1146,11 @@ export function assertClaimV2(
   const claim = record(
     input,
     ["id", "tagId", "scope", "reviewContext", "assessment", "evidence"],
-    ["sectionId", "boundaryUncertainty", "transition", "exemplarRole"],
+    ["playbackRate", "sectionId", "boundaryUncertainty", "transition", "exemplarRole"],
     "claim",
   );
   nonempty(claim.id, "claim.id");
+  resolvePlaybackRate(claim.playbackRate as number | undefined);
   if ("sectionId" in claim) nonempty(claim.sectionId, "claim.sectionId");
   if (!foundation.tags.some((tag) => tag.id === claim.tagId))
     throw new Error(`Unknown Foundation tag ${String(claim.tagId)}.`);
@@ -1343,6 +1348,7 @@ export async function validateReviewDocumentV2(
           "Observation revision must reference a preceding current direct-human observation.",
         );
       supersededObservations.add(previous.id);
+      assertSamePlaybackRate(previous.claim, observation.claim);
     }
     seenObservations.set(observation.id, observation);
     nonempty(observation.humanId, "observation.humanId");
@@ -1402,11 +1408,19 @@ export async function validateReviewDocumentV2(
       throw new Error("Only accepted or modified decisions produce observations.");
     if (decision.disposition === "accepted")
       same(observation?.claim, proposal, "Accepted observation changed the original claim.");
+    if (observation) assertSamePlaybackRate(proposal, observation.claim);
   }
 }
 
 export function sameBase(left: ReviewBaseV2, right: ReviewBaseV2): boolean {
   return left.revision === right.revision && left.sha256 === right.sha256;
+}
+
+function assertSamePlaybackRate(previous: ClaimV2, next: ClaimV2): void {
+  if (resolvePlaybackRate(previous.playbackRate) !== resolvePlaybackRate(next.playbackRate))
+    throw new Error(
+      "A revision must retain its playback rate. Record a different playback rate as a new observation or proposal.",
+    );
 }
 
 function sourceStructure(

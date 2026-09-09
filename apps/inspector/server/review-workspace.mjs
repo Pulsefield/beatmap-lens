@@ -124,6 +124,7 @@ export async function startReviewWorkspace(options) {
         claimId,
         tagId: claim.tagId,
         scope: claim.scope,
+        ...(claim.playbackRate !== undefined ? { playbackRate: claim.playbackRate } : {}),
         status,
         trust,
         rationale,
@@ -663,6 +664,8 @@ export async function startReviewWorkspace(options) {
             assessment: displayedClaims.get(json([review.handoffId, review.claimId])).assessment,
             scope: displayedClaims.get(json([review.handoffId, review.claimId])).scope,
             tagId: displayedClaims.get(json([review.handoffId, review.claimId])).tagId,
+            playbackRate:
+              displayedClaims.get(json([review.handoffId, review.claimId])).playbackRate ?? 1,
           })),
           humanAssessmentCounts,
           requests: reviewRequests(current),

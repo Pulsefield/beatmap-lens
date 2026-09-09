@@ -4,6 +4,10 @@ import hashlib
 import json
 from pathlib import Path
 import shutil
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'annotation'))
+from playback_rate import playback_rate_fields
 
 import pyarrow.parquet as pq
 
@@ -12,7 +16,7 @@ from harness_examples import evidence_ref, extract_examples, filter_contrast_set
 REPO = Path(__file__).resolve().parents[1]
 CONTRAST_SETS = REPO / '.agents/skills/mania-pattern-judgment/references/human-contrast-sets.json'
 TOOL_FILES = ('annotation-harness.py', 'harness_examples.py', 'harness_inspection.py',
-              'harness_render.py', 'annotation-queries.py', 'annotation-facts.py')
+              'harness_render.py', 'harness_playback.py', 'annotation-queries.py', 'annotation-facts.py')
 
 
 def read(path):
@@ -37,10 +41,12 @@ def prepare(campaign, section_file, feedback_dir, out, mode='annotation', source
     sections = raw['sections'] if 'sections' in raw else raw['cases']
     sections = [{'sectionId': c.get('caseId', c.get('sectionId', f'section-{i + 1:03d}')),
                  'sourceSha256': c['sourceSha256'], 'scope': c['scope'],
-                 'reviewContext': c.get('reviewContext', c['scope'])} for i, c in enumerate(sections)]
+                 'reviewContext': c.get('reviewContext', c['scope']),
+                 **playback_rate_fields(c)} for i, c in enumerate(sections)]
     if len({s['sectionId'] for s in sections}) != len(sections):
         raise ValueError('Section handles must be unique within the job. Supply unique caseId values for source-local section IDs.')
     out.mkdir(parents=True, exist_ok=False)
+    save(out / 'sections.json', sections)
     excluded_sources = sorted({c['sourceSha256'] for c in sections}) if mode == 'evaluation' else []
     excluded_groups = sorted({groups[sha] for sha in excluded_sources})
     feedback_paths = sorted(feedback_dir.glob('*.json'))
@@ -79,6 +85,7 @@ def prepare(campaign, section_file, feedback_dir, out, mode='annotation', source
     for name in TOOL_FILES:
         (out / 'tools').mkdir(exist_ok=True)
         shutil.copyfile(REPO / 'harness' / name, out / 'tools' / name)
+    shutil.copyfile(REPO / 'annotation/playback_rate.py', out / 'tools/playback_rate.py')
     files = {str(p.relative_to(out)): digest(p) for p in sorted(out.rglob('*')) if p.is_file()}
     manifest = {'kind': 'beatmap-lens-annotation-harness-v1', 'mode': mode,
                 'humanEvidenceTracking': 'returned-examples-v1',

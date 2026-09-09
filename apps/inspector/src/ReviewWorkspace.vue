@@ -8,6 +8,7 @@ import { serializeCanonicalJson } from "./annotation/canonical-json";
 import type { StableNoteRefV1, TimeRangeV1 } from "./annotation/contracts";
 import { pickDatasetDirectory } from "./annotation/file-system-access";
 import { ManiaNoteTimeIndex } from "./annotation/note-time-index";
+import { type PlaybackRate, resolvePlaybackRate, SUPPORTED_PLAYBACK_RATES } from "./annotation/playback-rate";
 import { chartEndMs } from "./annotation/range";
 import { IndexedDbSessionStore, type SessionPreferences } from "./annotation/session-store";
 import { type InspectedOsuSourceV1, inspectOsuSourceV1 } from "./annotation/source-identity";
@@ -47,6 +48,7 @@ let pendingOpenClaim = false;
 const mobilePanel = ref("preview");
 const playhead = ref(0);
 const speed = ref(240);
+const playbackRate = ref<PlaybackRate>(1);
 const size = ref({ width: 640, height: 900 });
 const timelineRange = ref<TimeRangeV1>({ startMs: 0, endMs: 1000 });
 const drafts = ref<readonly ClaimV2[]>([]);
@@ -72,6 +74,7 @@ const calibrationId = ref("");
 const document = computed(() => stored.value?.document);
 const activeFoundation = computed(() => document.value?.foundation ?? foundation.value);
 const activeClaim = computed(() => drafts.value.find(claim => claim.id === activeClaimId.value));
+const claimRateMatchesPlayback = computed(() => !activeClaim.value || resolvePlaybackRate(activeClaim.value.playbackRate) === playbackRate.value);
 const expertQueue = computed(() => agentReviews.value.filter(review => review.status === "needs-expert"));
 const activeReview = computed(() => agentReviews.value.find(review => review.handoffId === activeHandoffId.value && review.claimId === activeClaimId.value));
 const activeTrust = computed(() => props.remoteSource?.handoffTrust?.[activeHandoffId.value] ?? activeReview.value?.trust);
@@ -93,7 +96,7 @@ const originalProposal = computed(() => document.value?.handoffs.find(entry => e
 const sectionReviews = computed(() => {
   const claim = originalProposal.value;
   if (editorOrigin.value !== "proposal" || !claim) return [];
-  return agentReviews.value.filter(review => review.handoffId === activeHandoffId.value && (claim.sectionId
+  return agentReviews.value.filter(review => review.handoffId === activeHandoffId.value && resolvePlaybackRate(review.claim.playbackRate) === resolvePlaybackRate(claim.playbackRate) && (claim.sectionId
     ? review.claim.sectionId === claim.sectionId
     : !review.claim.sectionId && review.claim.scope.startMs === claim.scope.startMs && review.claim.scope.endMs === claim.scope.endMs));
 });
@@ -119,13 +122,14 @@ const uncertainAcceptance = computed(() => Boolean(finalObservation.value && !se
 const laterClarification = computed(() => {
   const prior = finalObservation.value;
   if (!prior || !uncertainAcceptance.value) return undefined;
-  return document.value?.observations.filter(observation => observation.origin.kind === "direct-human" && observation.confirmedAt > prior.confirmedAt && observation.claim.id === prior.claim.id && observation.claim.tagId === prior.claim.tagId && observation.claim.scope.startMs === prior.claim.scope.startMs && observation.claim.scope.endMs === prior.claim.scope.endMs && settled(observation.claim)).at(-1);
+  return document.value?.observations.filter(observation => observation.origin.kind === "direct-human" && observation.confirmedAt > prior.confirmedAt && observation.claim.id === prior.claim.id && observation.claim.tagId === prior.claim.tagId && resolvePlaybackRate(observation.claim.playbackRate) === resolvePlaybackRate(prior.claim.playbackRate) && observation.claim.scope.startMs === prior.claim.scope.startMs && observation.claim.scope.endMs === prior.claim.scope.endMs && settled(observation.claim)).at(-1);
 });
 const routineCount = computed(() => agentReviews.value.filter(review => review.status === "agent-reviewed").length);
 const agentActionCount = computed(() => agentReviews.value.filter(review => ["awaiting-audit", "needs-revision", "stale"].includes(review.status)).length);
 const endMs = computed(() => source.value ? chartEndMs(source.value.chart) : 1000);
+const sourceVisualSpeed = computed(() => speed.value / playbackRate.value);
 const controller = computed(() => source.value ? new BufferedSceneController(source.value.chart, {
-  viewportHeight: size.value.height, width: size.value.width, pixelsPerSecond: speed.value,
+  viewportHeight: size.value.height, width: size.value.width, pixelsPerSecond: sourceVisualSpeed.value,
 }) : undefined);
 const frame = computed(() => controller.value?.frame(playhead.value));
 const selectedNotes = computed(() => new Set((activeClaim.value?.evidence.noteRefs ?? []).concat(activeClaim.value?.evidence.contextNoteRefs ?? []).map(stableNoteRefKey)));
@@ -146,7 +150,7 @@ const selectionBand = computed(() => {
   const band = projectSceneRange(frame.value.scene.projection, activeClaim.value.scope);
   return band ? { ...band, x: 0, width: size.value.width } : undefined;
 });
-const canEdit = computed(() => !busy.value && !sourceLoading.value && editorOrigin.value !== "calibration" && !historicalObservation.value);
+const canEdit = computed(() => !busy.value && !sourceLoading.value && editorOrigin.value !== "calibration" && !historicalObservation.value && claimRateMatchesPlayback.value);
 const approved = computed(() => activeFoundation.value.approval.status === "human-approved");
 const decisionsForClaim = computed(() => document.value?.decisions.filter(decision => decision.handoffId === activeHandoffId.value && decision.claimId === activeClaimId.value) ?? []);
 const draftIsStale = computed(() => editorReviewRevision.value === undefined
@@ -203,6 +207,7 @@ watch(source, async (current, _previous, onCleanup) => {
     setItem: () => {},
   } });
   playback = clock;
+  clock.setPlaybackRate(playbackRate.value);
   clock.seek(playhead.value);
   clock.subscribe(state => {
     if (disposed || source.value !== current) return;
@@ -227,7 +232,10 @@ watch(source, async (current, _previous, onCleanup) => {
 watch(() => [props.active, sourceLoading.value, calibrationId.value], () => {
   if (props.active === false || sourceLoading.value || calibrationId.value) playback?.pause();
 });
-watch(() => [activeClaim.value?.id, activeClaim.value?.scope.startMs, activeClaim.value?.scope.endMs], () => playback?.pause());
+watch(() => [activeClaim.value?.id, activeClaim.value?.playbackRate], () => {
+  if (activeClaim.value) setPlaybackRate(resolvePlaybackRate(activeClaim.value.playbackRate));
+});
+watch(() => [activeClaim.value?.scope.startMs, activeClaim.value?.scope.endMs], () => playback?.pause());
 
 function savePreferences(patch: Partial<SessionPreferences>): void {
   preferenceWrite = preferenceWrite.then(async () => {
@@ -271,6 +279,36 @@ function setAudioOffset(value: number): void {
   if (!Number.isFinite(value)) return;
   playback?.setAudioOffsetMs(value);
   savePreferences({ audioOffsetMs: value });
+}
+
+function setPlaybackRate(rate: number): void {
+  playback?.pause();
+  playbackRate.value = resolvePlaybackRate(rate);
+  playback?.setPlaybackRate(playbackRate.value);
+}
+
+function createRateJudgment(): void {
+  const original = activeClaim.value;
+  if (!original || claimRateMatchesPlayback.value || busy.value || sourceLoading.value || savingDecision.value) return;
+  stashDraft();
+  const claim: ClaimV2 = {
+    id: crypto.randomUUID(), sectionId: original.sectionId ?? crypto.randomUUID(),
+    tagId: original.tagId, playbackRate: playbackRate.value,
+    scope: { ...original.scope }, reviewContext: { ...original.reviewContext },
+    assessment: { presence: "unreviewed" },
+    evidence: { noteRefs: [...original.evidence.noteRefs], contextNoteRefs: [...original.evidence.contextNoteRefs], rationale: "" },
+  };
+  drafts.value = [claim];
+  activeClaimId.value = claim.id;
+  editorOrigin.value = "direct";
+  activeObservationId.value = "";
+  activeHandoffId.value = "";
+  historicalObservation.value = undefined;
+  calibrationId.value = "";
+  decisionNote.value = "";
+  editorBase.value = stored.value?.version;
+  editorReviewRevision.value = document.value?.reviewRevision;
+  status.value = `New ${playbackRate.value}× judgment. Assess this rate before saving.`;
 }
 
 function setVisualSpeed(event: Event): void {
@@ -318,7 +356,8 @@ function workspaceKeydown(event: KeyboardEvent): void {
   }
 }
 
-function draftKey(kind = editorOrigin.value === "proposal" ? `proposal:${activeHandoffId.value}:${activeClaimId.value}` : "direct"): string {
+function draftKey(kind = editorOrigin.value === "proposal" ? `proposal:${activeHandoffId.value}:${activeClaimId.value}` : "direct", rate = resolvePlaybackRate(activeClaim.value?.playbackRate)): string {
+  if (kind === "direct" && rate !== 1) kind = `direct:${rate}x`;
   return `beatmap-lens-review-draft:${source.value?.source.sha256}:${stored.value?.document.documentId ?? "unbound"}:${activeFoundation.value.foundationId}:${activeFoundation.value.revision}:${kind}`;
 }
 
@@ -333,7 +372,7 @@ function stashDraft(): void {
 function restoreSection(): void {
   historicalObservation.value = undefined;
   stashDraft();
-  const text = localStorage.getItem(draftKey("direct"));
+  const text = localStorage.getItem(draftKey("direct", playbackRate.value));
   if (!text) { newSection(); return; }
   const saved = JSON.parse(text);
   drafts.value = saved.drafts;
@@ -552,12 +591,13 @@ function approveFoundation(): void {
 }
 
 function newSection(): void {
+  stashDraft();
   historicalObservation.value = undefined;
   const sectionId = crypto.randomUUID();
   const startMs = Math.max(0, Math.min(playhead.value, endMs.value - 1));
   const scope = { startMs, endMs: Math.min(endMs.value, startMs + 4000) };
   drafts.value = activeFoundation.value.tags.map(tag => ({
-    id: crypto.randomUUID(), sectionId, tagId: tag.id, scope,
+    id: crypto.randomUUID(), sectionId, tagId: tag.id, playbackRate: playbackRate.value, scope,
     reviewContext: { startMs: Math.max(0, scope.startMs - 2000), endMs: Math.min(endMs.value, scope.endMs + 1000) },
     assessment: { presence: "unreviewed" }, evidence: { noteRefs: [], contextNoteRefs: [], rationale: "" },
   }));
@@ -572,11 +612,13 @@ function newSection(): void {
 }
 
 function updateClaim(claim: ClaimV2): void {
+  if (!canEdit.value) return;
   playback?.pause();
   drafts.value = drafts.value.map(current => current.id === claim.id ? claim : current);
 }
 
 function focus(range: TimeRangeV1): void {
+  if (activeClaim.value) setPlaybackRate(resolvePlaybackRate(activeClaim.value.playbackRate));
   playback?.pause();
   seekPlayhead(range.startMs);
   mobilePanel.value = "preview";
@@ -715,6 +757,7 @@ function dragRange(timeMs: number): void {
 }
 
 function saveSection(): void {
+  if (!claimRateMatchesPlayback.value) return;
   void run(async () => {
     if (!directory.value || !sourceBytes.value || !stored.value) return;
     const sourceSha = stored.value.document.source.sha256;
@@ -740,7 +783,7 @@ function saveSection(): void {
 }
 
 function decide(disposition: "accepted" | "modified"): void {
-  if (busy.value || sourceLoading.value || savingDecision.value || !directory.value || !sourceBytes.value || !stored.value || !activeClaim.value) return;
+  if (!claimRateMatchesPlayback.value || busy.value || sourceLoading.value || savingDecision.value || !directory.value || !sourceBytes.value || !stored.value || !activeClaim.value) return;
   const sourceSha = stored.value.document.source.sha256;
   const claimId = activeClaim.value.id;
   const handoffId = activeHandoffId.value;
@@ -814,6 +857,10 @@ function latestDecision(handoffId: string, claimId: string): string {
 
 function settled(claim: ClaimV2 | undefined): boolean {
   return claim?.assessment.presence === "present" || claim?.assessment.presence === "absent";
+}
+
+function playbackDurationSeconds(range: TimeRangeV1, rate?: number): string {
+  return ((range.endMs - range.startMs) / resolvePlaybackRate(rate) / 1000).toFixed(3);
 }
 
 function assessmentLabel(claim: ClaimV2): string {
@@ -896,7 +943,7 @@ onBeforeUnmount(() => { window.removeEventListener("keydown", workspaceKeydown);
         <div v-for="review in expertQueue.slice(0, expertLimit)" :key="`${review.handoffId}:${review.claimId}`" class="review-question">
           <strong>{{ review.claim.tagId }} · {{ review.expertReason }}</strong>
           <p>{{ review.question }}</p><p class="review-copy">{{ review.rationale }}</p>
-          <button type="button" @click="openProposal(review.handoffId, review.claim)">Review {{ review.claim.tagId }} · {{ review.claim.scope.startMs }}–{{ review.claim.scope.endMs }} ms</button>
+          <button type="button" @click="openProposal(review.handoffId, review.claim)">Review {{ review.claim.tagId }} · {{ review.claim.scope.startMs }}–{{ review.claim.scope.endMs }} ms · {{ resolvePlaybackRate(review.claim.playbackRate) }}×</button>
         </div>
         <button v-if="expertQueue.length > expertLimit" type="button" @click="expertLimit += 5">Show more · {{ expertQueue.length - expertLimit }} remaining</button>
         <details class="review-all-agent-work"><summary>Review history · {{ agentReviews.length }} claims</summary>
@@ -905,21 +952,21 @@ onBeforeUnmount(() => { window.removeEventListener("keydown", workspaceKeydown);
           <strong>{{ entry.handoff.agent.producerId }} · {{ entry.handoff.agent.role }}</strong>
           <p class="review-copy" :title="entry.handoff.agent.skill?.sha256">{{ agentVersionLabel(entry.handoff.agent) }} · {{ new Date(entry.handoff.createdAt).toLocaleString() }}</p>
           <p class="review-copy">Task base: {{ handoffStatuses[entry.handoff.handoffId] ?? entry.baseStatus }} · {{ entry.handoff.handoffId.slice(0, 12) }}</p>
-          <button v-for="claim in entry.handoff.proposals" :key="claim.id" type="button" class="review-list-row" @click="openProposal(entry.handoff.handoffId, claim)"><span>{{ claim.tagId }}<small>{{ claim.scope.startMs }}–{{ claim.scope.endMs }} ms</small></span><span>{{ latestDecision(entry.handoff.handoffId, claim.id) }}</span></button>
+          <button v-for="claim in entry.handoff.proposals" :key="claim.id" type="button" class="review-list-row" @click="openProposal(entry.handoff.handoffId, claim)"><span>{{ claim.tagId }}<small>{{ claim.scope.startMs }}–{{ claim.scope.endMs }} ms · {{ resolvePlaybackRate(claim.playbackRate) }}×</small></span><span>{{ latestDecision(entry.handoff.handoffId, claim.id) }}</span></button>
           <details v-if="entry.handoff.audit.length"><summary>Submission self-checks · {{ entry.handoff.audit.length }}</summary><p v-for="audit in entry.handoff.audit" :key="audit.id">{{ audit.finding }}</p></details>
           <details v-if="entry.handoff.questions.length"><summary>Original questions · {{ entry.handoff.questions.length }}</summary><div v-for="question in entry.handoff.questions" :key="question.id" class="review-question"><p>{{ question.text }}</p><button v-for="claimId in question.claimIds" :key="claimId" type="button" @click="openQuestion(entry.handoff.handoffId, claimId)">Open {{ entry.handoff.proposals.find(claim => claim.id === claimId)?.tagId }}</button></div></details>
         </div>
         </details>
       </section>
-      <details v-if="document?.observations.length" class="review-section"><summary>Human observations · {{ document.observations.length }}</summary><button v-for="observation in document.observations" :key="observation.id" type="button" class="review-list-row" @click="currentObservations.some(entry => entry.id === observation.id) ? openObservation(observation) : openHistoricalObservation(observation)"><span>{{ observation.claim.tagId }}<small>{{ observation.claim.scope.startMs }}–{{ observation.claim.scope.endMs }} ms</small><small>{{ observation.origin.kind === 'direct-human' ? 'Direct human judgment' : 'Proposal decision' }} · {{ observation.confirmedAt }} · {{ currentObservations.some(entry => entry.id === observation.id) ? 'current' : 'history' }}</small></span><span>{{ assessmentLabel(observation.claim) }}</span></button></details>
+      <details v-if="document?.observations.length" class="review-section"><summary>Human observations · {{ document.observations.length }}</summary><button v-for="observation in document.observations" :key="observation.id" type="button" class="review-list-row" @click="currentObservations.some(entry => entry.id === observation.id) ? openObservation(observation) : openHistoricalObservation(observation)"><span>{{ observation.claim.tagId }}<small>{{ observation.claim.scope.startMs }}–{{ observation.claim.scope.endMs }} ms · {{ resolvePlaybackRate(observation.claim.playbackRate) }}×</small><small>{{ observation.origin.kind === 'direct-human' ? 'Direct human judgment' : 'Proposal decision' }} · {{ observation.confirmedAt }} · {{ currentObservations.some(entry => entry.id === observation.id) ? 'current' : 'history' }}</small></span><span>{{ assessmentLabel(observation.claim) }}</span></button></details>
 
     </aside>
     <div v-if="source && frame && !calibrationExample" class="review-preview" :class="{ 'mobile-active': mobilePanel === 'preview' }">
-      <FallingNoteViewport :annotation-bands="[]" :candidate-note-ids="candidateIds" :chart-artist="source.source.artist" :chart-difficulty="source.source.difficulty" :chart-end-ms="endMs" :chart-title="source.source.title" :frame="frame" :frame-p95-ms="0" :key-count="source.chart.keyCount" :locked="busy" :playhead-ms="playhead" :selected-note-ids="selectedNoteIds" v-bind="selectionBand ? { selectionBand } : {}" :size="size" :visual-speed="speed" @resize="size = $event" @seek="seekPlayhead" @viewport-navigate="seekPlayhead" @note-toggle="toggleNote" @range-start="beginRange($event.anchorMs)" @range-preview="dragRange($event.focusMs)" @range-commit="dragRange($event.focusMs); selectionAnchor = undefined; gestureClaim = undefined" @range-cancel="cancelRange" />
+      <FallingNoteViewport :annotation-bands="[]" :candidate-note-ids="candidateIds" :chart-artist="source.source.artist" :chart-difficulty="source.source.difficulty" :chart-end-ms="endMs" :chart-title="source.source.title" :frame="frame" :frame-p95-ms="0" :key-count="source.chart.keyCount" :locked="busy" :playhead-ms="playhead" :selected-note-ids="selectedNoteIds" v-bind="selectionBand ? { selectionBand } : {}" :size="size" :visual-speed="sourceVisualSpeed" @resize="size = $event" @seek="seekPlayhead" @viewport-navigate="seekPlayhead" @note-toggle="toggleNote" @range-start="beginRange($event.anchorMs)" @range-preview="dragRange($event.focusMs)" @range-commit="dragRange($event.focusMs); selectionAnchor = undefined; gestureClaim = undefined" @range-cancel="cancelRange" />
       <section class="review-mobile-transport" aria-label="Preview playback">
         <button type="button" :disabled="transportDisabled" :aria-label="playing ? 'Pause preview' : 'Play preview'" @click="togglePlayback">{{ playing ? 'Pause' : 'Play' }}</button>
         <button type="button" :disabled="transportDisabled || !activeClaim" :aria-pressed="looping" @click="playSelection(true)">Loop</button>
-        <button type="button" :disabled="transportDisabled" :aria-pressed="musicEnabled" @click="toggleMusic">Music {{ musicEnabled ? 'on' : 'off' }}</button>
+        <select aria-label="Preview playback rate" :value="playbackRate" :disabled="transportDisabled || !!savingDecision" @change="setPlaybackRate(Number(($event.target as HTMLSelectElement).value))"><option v-for="rate in SUPPORTED_PLAYBACK_RATES" :key="rate" :value="rate">{{ rate }}×</option></select>
       </section>
     </div>
     <div v-else-if="!calibrationExample" class="review-empty"><h2>One source. Independent judgments.</h2><p>Open a difficulty to inspect its full structure, or open a task to review agent evidence.</p></div>
@@ -928,8 +975,9 @@ onBeforeUnmount(() => { window.removeEventListener("keydown", workspaceKeydown);
     </div>
     <section v-if="calibrationExample" class="review-calibration" :class="{ 'mobile-active': mobilePanel === 'preview' }">
       <button type="button" @click="calibrationId = ''">Return to difficulty review</button>
-      <h2>{{ calibrationExample.claim.tagId }} · {{ calibrationExample.source.title }} [{{ calibrationExample.source.difficulty }}]</h2>
-      <p>Claim {{ calibrationExample.claim.scope.startMs }}–{{ calibrationExample.claim.scope.endMs }} ms · Context {{ calibrationExample.claim.reviewContext.startMs }}–{{ calibrationExample.claim.reviewContext.endMs }} ms</p>
+      <h2>{{ calibrationExample.claim.tagId }} · {{ resolvePlaybackRate(calibrationExample.claim.playbackRate) }}× · {{ calibrationExample.source.title }} [{{ calibrationExample.source.difficulty }}]</h2>
+      <p>Claim {{ calibrationExample.claim.scope.startMs }}–{{ calibrationExample.claim.scope.endMs }} source ms · Context {{ calibrationExample.claim.reviewContext.startMs }}–{{ calibrationExample.claim.reviewContext.endMs }} source ms</p>
+      <p>At {{ resolvePlaybackRate(calibrationExample.claim.playbackRate) }}×: claim duration {{ playbackDurationSeconds(calibrationExample.claim.scope, calibrationExample.claim.playbackRate) }} s · context duration {{ playbackDurationSeconds(calibrationExample.claim.reviewContext, calibrationExample.claim.playbackRate) }} s. Static source evidence; playback is unavailable in this view.</p>
       <p>{{ calibrationExample.explanation }}</p>
       <div v-for="page in calibrationPages" :key="page.index" v-html="page.svg" />
     </section>
@@ -944,13 +992,18 @@ onBeforeUnmount(() => { window.removeEventListener("keydown", workspaceKeydown);
             <button type="button" :disabled="transportDisabled || !activeClaim" :aria-pressed="looping" @click="playSelection(true)">Loop <kbd>L</kbd></button>
             <button type="button" :disabled="transportDisabled" :aria-pressed="musicEnabled" @click="toggleMusic">Music {{ musicEnabled ? 'on' : 'off' }}</button>
           </div>
+          <label>Playback rate
+            <select aria-label="Playback rate" :value="calibrationExample ? resolvePlaybackRate(calibrationExample.claim.playbackRate) : playbackRate" :disabled="transportDisabled || !!savingDecision" @change="setPlaybackRate(Number(($event.target as HTMLSelectElement).value))">
+              <option v-for="rate in SUPPORTED_PLAYBACK_RATES" :key="rate" :value="rate">{{ rate }}×</option>
+            </select>
+          </label>
           <details>
             <summary>Playback settings &amp; zoom</summary>
             <div class="review-playback-settings">
               <p class="review-copy">{{ audioDescription }}</p>
               <div class="review-controls">
                 <label>Source time · ms<input :value="Math.round(playhead)" type="number" min="0" :max="endMs" @input="seekPlayhead(($event.target as HTMLInputElement).valueAsNumber)"></label>
-                <label>Visual speed<input :value="speed" type="number" min="30" max="2000" step="30" @change="setVisualSpeed"></label>
+                <label>Visual speed · px/s<input :value="speed" type="number" min="30" max="2000" step="30" @change="setVisualSpeed"></label>
               </div>
               <label>Global audio offset · ms<input :value="audioOffsetMs" type="number" step="10" :disabled="transportDisabled" @change="setAudioOffset(($event.target as HTMLInputElement).valueAsNumber)"></label>
               <div class="review-offset-actions">
@@ -969,8 +1022,12 @@ onBeforeUnmount(() => { window.removeEventListener("keydown", workspaceKeydown);
         </section>
         <p v-if="editorOrigin === 'proposal' && sectionComplete" class="review-section-complete" role="status">{{ savingDecision ? "Saving final judgment…" : "All section judgments reviewed." }}</p>
         <div v-if="drafts.length > 1" class="review-assessments"><button v-for="claim in drafts" :key="claim.id" type="button" :class="{ 'is-active': activeClaimId === claim.id }" @click="activeClaimId = claim.id"><span>{{ claim.tagId }}</span><span>{{ claim.assessment.presence === 'present' ? claim.assessment.salience : claim.assessment.presence }}</span></button></div>
-        <p v-if="activeClaim" class="review-kicker">{{ editorOrigin === 'proposal' ? 'Agent proposal' : editorOrigin === 'observation' ? 'Saved human observation' : 'Human section draft' }}</p>
+        <p v-if="activeClaim" class="review-kicker">{{ editorOrigin === 'proposal' ? 'Agent proposal' : editorOrigin === 'observation' ? 'Saved human observation' : 'Human section draft' }} · {{ resolvePlaybackRate(activeClaim.playbackRate) }}×</p>
         <template v-if="activeClaim">
+          <section v-if="!claimRateMatchesPlayback" class="review-rate-comparison" aria-label="Playback rate comparison">
+            <p>Playing {{ playbackRate }}× · this judgment is for {{ resolvePlaybackRate(activeClaim.playbackRate) }}×.</p>
+            <div class="review-actions"><button type="button" :disabled="busy || sourceLoading" @click="setPlaybackRate(resolvePlaybackRate(activeClaim.playbackRate))">Return to judgment rate</button><button type="button" :disabled="busy || sourceLoading || !!savingDecision" @click="createRateJudgment">Create judgment at {{ playbackRate }}×</button></div>
+          </section>
           <section v-if="editorOrigin === 'proposal' && activeReview" class="review-judgment-status">
             <p class="review-kicker">{{ latestDecision(activeHandoffId, activeClaim.id) }} · <span :title="activeHandoff ? agentVersionLabel(activeHandoff.agent) : ''">version {{ activeHandoff?.agent.skill?.sha256.slice(0, 8) ?? 'unversioned' }}</span></p>
             <p class="review-copy" v-if="activeTrust">Evidence context · Source {{ activeTrust.source }} · Foundation {{ activeTrust.foundation }} · Human context {{ activeTrust.humanContext }}</p>
@@ -997,9 +1054,9 @@ onBeforeUnmount(() => { window.removeEventListener("keydown", workspaceKeydown);
             <WorkflowClaimEditor :model-value="activeClaim" :tags="activeFoundation.tags" :disabled="!canEdit" @update:model-value="updateClaim" @focus="focus" />
             <details class="review-section"><summary>Choose source-backed evidence</summary><label>Click notes to toggle<select v-model="evidenceMode"><option value="noteRefs">Witness for this claim</option><option value="contextNoteRefs">Necessary context</option></select></label><button type="button" :disabled="!canEdit" @click="selectScopeNotes">Use arrangement in claim scope</button><p class="review-copy">Notes crossing the start retain their original LN start and end. Select witnesses independently for each concept.</p><div class="review-note-list"><label v-for="note in visibleNotes" :key="note.id"><input type="checkbox" :checked="activeClaim.evidence[evidenceMode].some(ref => ref.sourceLine === note.sourceLine)" :disabled="!canEdit" @change="toggleNote(note.id)"><span>L{{ note.sourceLine }} · C{{ note.column + 1 }} · {{ note.startMs }}{{ note.kind === 'long' ? `–${note.endMs}` : '' }} ms</span></label></div><div class="review-actions"><button type="button" :disabled="notePage === 0" @click="notePage--">Previous notes</button><button type="button" :disabled="(notePage + 1) * 80 >= candidateNotes.length" @click="notePage++">Next notes</button></div></details>
           </template>
-          <button v-if="!historicalObservation && (editorOrigin === 'direct' || editorOrigin === 'observation')" class="review-primary" type="button" :disabled="busy || !!savingDecision || sourceLoading || !stored || !approved || !humanId.trim() || draftIsStale" @click="saveSection">{{ editorOrigin === 'observation' ? 'Save revised judgment' : 'Save section judgments' }}</button>
+          <button v-if="!historicalObservation && (editorOrigin === 'direct' || editorOrigin === 'observation')" class="review-primary" type="button" :disabled="busy || !!savingDecision || sourceLoading || !stored || !approved || !humanId.trim() || draftIsStale || !claimRateMatchesPlayback" @click="saveSection">{{ editorOrigin === 'observation' ? 'Save revised judgment' : 'Save section judgments' }}</button>
           <section v-if="historicalObservation" class="review-historical-observation"><h2>Historical human judgment</h2><p>{{ historicalObservation.confirmedAt }} · earlier version</p><button type="button" @click="openObservation(historicalObservation)">View current judgment</button><button type="button" @click="reviseFromHistoricalObservation">Revise current judgment using this version</button></section>
-          <details v-if="editorOrigin === 'observation' && observationHistory.length" class="review-observation-history"><summary>Human observation history · {{ observationHistory.length }}</summary><p v-for="entry in observationHistory" :key="entry.id">{{ assessmentLabel(entry.claim) }} · {{ entry.confirmedAt }}<br>{{ entry.claim.scope.startMs }}–{{ entry.claim.scope.endMs }} ms<button type="button" @click="openHistoricalObservation(entry)">View this version</button></p></details>
+          <details v-if="editorOrigin === 'observation' && observationHistory.length" class="review-observation-history"><summary>Human observation history · {{ observationHistory.length }}</summary><p v-for="entry in observationHistory" :key="entry.id">{{ assessmentLabel(entry.claim) }} · {{ entry.confirmedAt }}<br>{{ entry.claim.scope.startMs }}–{{ entry.claim.scope.endMs }} ms · {{ resolvePlaybackRate(entry.claim.playbackRate) }}×<button type="button" @click="openHistoricalObservation(entry)">View this version</button></p></details>
           <template v-if="editorOrigin === 'proposal'">
             <section v-if="finalDecision" class="review-human-result"><h2>Human judgment · {{ finalDecision.disposition }}</h2><template v-if="finalObservation"><p>{{ finalObservation.claim.tagId }} · {{ assessmentLabel(finalObservation.claim) }}</p><button type="button" @click="openObservation(finalObservation)">View saved human judgment</button></template><p v-if="finalDecision.rationale">{{ finalDecision.rationale }}</p></section>
             <p v-if="uncertainAcceptance" class="review-copy">This historical acceptance kept {{ finalObservation?.claim.assessment.presence }}. It did not decide whether this pattern is present.</p>
@@ -1007,7 +1064,7 @@ onBeforeUnmount(() => { window.removeEventListener("keydown", workspaceKeydown);
             <p v-else-if="!finalDecision && !settled(originalProposal)" class="review-copy">This proposal does not decide presence. Choose present with salience or absent in the judgment editor.</p>
             <div class="review-decision-controls">
             <details :key="`${activeHandoffId}:${activeClaim.id}:${proposalEditing}`" class="review-decision-note" :open="proposalEditing"><summary>Decision note (optional)</summary><label>Human decision rationale<textarea v-model="decisionNote" rows="3" placeholder="Optional, including when modifying a judgment."></textarea></label></details>
-            <div class="review-actions"><button v-if="!finalDecision && settled(originalProposal) && activeTrust?.foundation !== 'changed'" type="button" :disabled="busy || !!savingDecision || sourceLoading || !approved || !humanId.trim()" class="review-primary" @click="decide('accepted')">Accept original</button><button v-if="remoteSource && !proposalEditing" type="button" :disabled="busy || sourceLoading" @click="beginProposalRevision">{{ finalDecision ? 'Revise human judgment' : 'Modify judgment' }}</button><button v-else type="button" :disabled="busy || !!savingDecision || sourceLoading || !approved || !humanId.trim() || !settled(activeClaim)" class="review-primary" @click="decide('modified')">Save modified</button></div>
+            <div class="review-actions"><button v-if="!finalDecision && settled(originalProposal) && activeTrust?.foundation !== 'changed'" type="button" :disabled="busy || !!savingDecision || sourceLoading || !approved || !humanId.trim() || !claimRateMatchesPlayback" class="review-primary" @click="decide('accepted')">Accept original</button><button v-if="remoteSource && !proposalEditing" type="button" :disabled="busy || sourceLoading || !claimRateMatchesPlayback" @click="beginProposalRevision">{{ finalDecision ? 'Revise human judgment' : 'Modify judgment' }}</button><button v-else type="button" :disabled="busy || !!savingDecision || sourceLoading || !approved || !humanId.trim() || !settled(activeClaim) || !claimRateMatchesPlayback" class="review-primary" @click="decide('modified')">Save modified</button></div>
             </div>
             <details v-if="decisionsForClaim.length"><summary>Human decision history · {{ decisionsForClaim.length }}</summary><p v-for="decision in decisionsForClaim" :key="decision.id" class="review-decision">{{ decision.disposition }} · {{ decision.humanId }} · {{ decision.decidedAt }}<br>{{ decision.rationale }}<button v-if="decisionObservation(decision.observationId)" type="button" @click="openHistoricalObservation(decisionObservation(decision.observationId))">View this judgment</button></p></details>
           </template>
@@ -1018,7 +1075,7 @@ onBeforeUnmount(() => { window.removeEventListener("keydown", workspaceKeydown);
             <p class="review-rationale">{{ originalProposal?.evidence.rationale }}</p>
             </details>
             <details v-if="activeReview.audits.length"><summary>Independent findings · {{ activeReview.audits.length }}</summary><p v-for="finding in activeReview.audits" :key="finding.auditId" class="review-decision"><strong>{{ finding.producerId }} · {{ finding.result.outcome }}</strong><br><span :title="auditPackets.get(finding.auditId)?.agent.skill?.sha256">Auditor {{ agentVersionLabel(auditPackets.get(finding.auditId)?.agent) }}</span><br>{{ auditPackets.get(finding.auditId)?.createdAt }}<br>{{ finding.result.rationale }}</p></details>
-            <details v-if="relatedReviews.length" class="review-related-history"><summary>Other judgments for this range · {{ relatedReviews.length }}</summary><p class="review-copy">Same label and overlapping ranges. These may be separate submissions; only explicit replacement links establish a revision chain.</p><button v-for="review in relatedReviews" :key="`${review.handoffId}:${review.claimId}`" type="button" @click="openQuestion(review.handoffId, review.claimId)"><span>{{ agentVersionLabel(review.agent) }}<br>{{ review.scope.startMs }}–{{ review.scope.endMs }} ms · {{ review.status }}</span><span>View →</span></button></details>
+            <details v-if="relatedReviews.length" class="review-related-history"><summary>Other judgments for this range · {{ relatedReviews.length }}</summary><p class="review-copy">Same label and overlapping ranges. These may be separate submissions; only explicit replacement links establish a revision chain.</p><button v-for="review in relatedReviews" :key="`${review.handoffId}:${review.claimId}`" type="button" @click="openQuestion(review.handoffId, review.claimId)"><span>{{ agentVersionLabel(review.agent) }}<br>{{ review.scope.startMs }}–{{ review.scope.endMs }} ms · {{ resolvePlaybackRate(review.claim.playbackRate) }}× · {{ review.status }}</span><span>View →</span></button></details>
           </section>
         </template>
         <details class="review-section" :open="!activeClaim"><summary>New section &amp; drafts</summary><div class="review-actions"><button type="button" :disabled="busy || sourceLoading" @click="newSection">New section at playhead</button><button type="button" :disabled="busy || sourceLoading" @click="restoreSection">Restore section draft</button></div></details>
@@ -1034,7 +1091,7 @@ onBeforeUnmount(() => { window.removeEventListener("keydown", workspaceKeydown);
             <p v-if="!communityAlignments(tag).length" class="review-copy">No community correspondence declared.</p>
           </div>
           <p v-if="!activeFoundation.calibrationExamples.length" class="review-copy">Initial examples are still proposed. Import a source-backed calibration Foundation before human approval.</p>
-          <div v-for="example in activeFoundation.calibrationExamples" :key="example.id" class="review-definition"><strong>{{ example.claim.tagId }} · {{ example.claim.exemplarRole }}</strong><p>{{ example.source.title }} · {{ example.source.difficulty }} · {{ example.claim.scope.startMs }}–{{ example.claim.scope.endMs }} ms</p><p>{{ example.explanation }}</p><button type="button" @click="calibrationId = example.id; mobilePanel = 'preview'">View exact source evidence</button><details><summary>Exact evidence</summary><pre>{{ serializeCanonicalJson(example.claim) }}</pre></details></div>
+          <div v-for="example in activeFoundation.calibrationExamples" :key="example.id" class="review-definition review-calibration-example"><strong>{{ example.claim.tagId }} · {{ example.claim.exemplarRole }} · {{ resolvePlaybackRate(example.claim.playbackRate) }}×</strong><p>{{ example.source.title }} · {{ example.source.difficulty }} · {{ example.claim.scope.startMs }}–{{ example.claim.scope.endMs }} source ms</p><p>Claim duration {{ playbackDurationSeconds(example.claim.scope, example.claim.playbackRate) }} s at {{ resolvePlaybackRate(example.claim.playbackRate) }}×.</p><p>{{ example.explanation }}</p><button type="button" @click="calibrationId = example.id; mobilePanel = 'preview'">View exact source evidence</button><details><summary>Exact evidence</summary><pre>{{ serializeCanonicalJson(example.claim) }}</pre></details></div>
           <label v-if="!approved" class="review-file">Import calibration Foundation<input type="file" accept=".json" :disabled="busy || sourceLoading || !stored" @change="importJson($event, 'foundation')"></label>
           <button v-if="!approved" type="button" :disabled="busy || sourceLoading || !stored || !humanId.trim() || !activeFoundation.calibrationExamples.length" @click="approveFoundation">Approve these definitions and examples</button>
         </details>
@@ -1093,6 +1150,7 @@ summary { min-height: 40px; padding-block: 10px; box-sizing: border-box; cursor:
 .review-transport button, .review-mobile-transport button { min-height: 40px; }
 .review-transport button[aria-pressed=true], .review-mobile-transport button[aria-pressed=true] { color: var(--signal); background: var(--surface-quiet); }
 .review-transport kbd { float: right; font: 10px var(--font-data); opacity: .65; line-height: 20px; }
+.review-rate-comparison { display: grid; gap: 8px; padding-block: 12px; border-block: 1px solid var(--line); font-size: 12px; }
 .review-playback-settings { display: grid; gap: 12px; }
 .review-offset-actions, .review-zoom { display: flex; gap: 8px; }
 .review-mobile-transport { display: none; }

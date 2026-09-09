@@ -1,3 +1,4 @@
+import { resolvePlaybackRate } from "../playback-rate";
 import type { InboxClaimV2, InboxSourceV2 } from "./remote-workspace";
 import {
   matchesReviewVersions,
@@ -75,6 +76,7 @@ export function sampleCandidates(
           claim.scope.startMs,
           claim.scope.endMs,
           claim.tagId,
+          resolvePlaybackRate(claim.playbackRate),
           level,
           reviewVersionKey(claim),
         ]);

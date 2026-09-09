@@ -9,6 +9,7 @@ import {
   type PlaybackSelection,
   SyntheticPlaybackClock,
 } from "./playback-clock";
+import { type PlaybackRate, resolvePlaybackRate } from "./playback-rate";
 
 export const MUSIC_PREFERENCE_KEY = "beatmap-lens.inspector.music-enabled";
 export const AUDIO_OFFSET_PREFERENCE_KEY = "beatmap-lens.inspector.audio-offset-ms";
@@ -118,6 +119,7 @@ export class AudioPlaybackController implements PlaybackClock {
   #intentId = 0;
   #musicEnabled: boolean;
   #audioOffsetMs: number;
+  #playbackRate: PlaybackRate = 1;
   #status: AudioPlaybackStatus = { kind: "idle" };
   #disposed = false;
 
@@ -146,6 +148,16 @@ export class AudioPlaybackController implements PlaybackClock {
 
   get playing(): boolean {
     return this.#activeClock.playing;
+  }
+
+  get playbackRate(): PlaybackRate {
+    return this.#playbackRate;
+  }
+
+  setPlaybackRate(rate: number): void {
+    this.#playbackRate = resolvePlaybackRate(rate);
+    this.#syntheticClock.setPlaybackRate(this.#playbackRate);
+    this.#mediaClock?.setPlaybackRate(this.#playbackRate);
   }
 
   get musicEnabled(): boolean {
@@ -256,6 +268,7 @@ export class AudioPlaybackController implements PlaybackClock {
       },
       this.#audioOffsetMs,
     );
+    this.#mediaClock.setPlaybackRate(this.#playbackRate);
     this.#setStatus({ kind: "ready" });
 
     if (this.#musicEnabled) {

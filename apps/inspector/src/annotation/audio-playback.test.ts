@@ -45,6 +45,38 @@ describe("resolveBeatmapAudioFile", () => {
 });
 
 describe("AudioPlaybackController", () => {
+  it("retains rate through music switching, loading and media failure", async () => {
+    const media = new FakeAudio();
+    const scheduler = new TestFrameScheduler();
+    const controller = new AudioPlaybackController({
+      scheduler,
+      preferenceStore: new MemoryPreferenceStore(),
+      createMedia: () => media as unknown as HTMLAudioElement,
+    });
+    controller.setPlaybackRate(0.75);
+    await controller.play();
+    scheduler.advance(400);
+    expect(controller.currentTimeMs).toBe(300);
+    await controller.loadAudioUrl("/synthetic-audio");
+    expect(media.playbackRate).toBe(0.75);
+    await controller.setMusicEnabled(true);
+    expect(media.currentTime).toBe(0.3);
+    media.currentTime = 0.6;
+    scheduler.advance(400);
+    expect(controller.currentTimeMs).toBe(600);
+    await controller.setMusicEnabled(false);
+    scheduler.advance(400);
+    expect(controller.currentTimeMs).toBe(900);
+    controller.setPlaybackRate(1.5);
+    await controller.setMusicEnabled(true);
+    expect(media.playbackRate).toBe(1.5);
+    media.failPlayback(new Error("Rate fixture failure"));
+    scheduler.advance(400);
+    expect(controller.currentTimeMs).toBe(1500);
+    expect(controller.playbackRate).toBe(1.5);
+    controller.dispose();
+  });
+
   it("streams remote audio with the existing offset and fallback clock", async () => {
     const media = new FakeAudio();
     const scheduler = new TestFrameScheduler();

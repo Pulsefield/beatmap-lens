@@ -8,6 +8,8 @@ from copy import deepcopy
 import hashlib
 from itertools import zip_longest
 
+from playback_rate import normalize_playback_rate, playback_rate_fields
+
 
 LABELS = ('absent', 'supporting', 'prominent')
 MAX_CARDS = 6
@@ -28,6 +30,7 @@ def _record(feedback, groups, claim, identity, rationale, origin, provenance):
         'sourceSha256': source,
         'groupId': groups.get(source, source),
         **{key: claim[key] for key in ('tagId', 'assessment', 'scope', 'reviewContext')},
+        **playback_rate_fields(claim),
         'rationale': rationale,
         'rationaleOrigin': origin,
         'provenance': {**provenance, 'documentVersion': feedback.get('documentVersion')},
@@ -137,6 +140,7 @@ def _human_comment(record):
 def public_example(record, comment_chars=None):
     """Project an extracted record or prior projection to judgment + human comment."""
     result = {key: record[key] for key in ('id', 'sourceSha256', 'tagId')}
+    result.update(playback_rate_fields(record))
     result['assessment'] = {key: record['assessment'][key] for key in ('presence', 'salience')
                             if key in record['assessment']}
     for key in ('scope', 'reviewContext'):
@@ -170,7 +174,7 @@ def _assessment_counts(records):
 
 
 def search_examples(records, tag_id='tech', assessment=None, text='', offset=0, limit=3,
-                    excluded_sources=(), excluded_groups=(), contrast_sets=(), contrast_set=None):
+                    excluded_sources=(), excluded_groups=(), contrast_sets=(), contrast_set=None, playback_rate=None):
     """Return at most six cards, with no note arrays or full provenance.
 
     Assessment accepts absent, supporting, prominent, or present. Keywords match
@@ -185,8 +189,10 @@ def search_examples(records, tag_id='tech', assessment=None, text='', offset=0, 
     if offset < 0 or limit < 1:
         raise ValueError('offset must be nonnegative and limit positive')
     limit = min(limit, MAX_CARDS)
+    rate = normalize_playback_rate(playback_rate) if playback_rate is not None else None
     allowed = [record for record in records if record['tagId'] == tag_id
-               and _allowed(record, excluded_sources, excluded_groups)]
+               and _allowed(record, excluded_sources, excluded_groups)
+               and (rate is None or normalize_playback_rate(record.get('playbackRate')) == rate)]
     sets = filter_contrast_sets(contrast_sets, allowed)
     available_sets = [
         {'id': item['id'],
@@ -216,6 +222,11 @@ def search_examples(records, tag_id='tech', assessment=None, text='', offset=0, 
               'order': 'label-interleaved-then-id', 'matchedAssessmentCounts': counts,
               'missingContrastLabels': [label for label, count in counts.items() if not count],
               'availableContrastSets': available_sets}
+    if rate is not None:
+        result['playbackRateFilter'] = rate
+    if rate is not None or any(normalize_playback_rate(record.get('playbackRate')) != 1 for record in ordered):
+        result['playbackRateMeaning'] = ('Each judgment applies only at its own playbackRate; omitted means 1x. '
+                                         'A judgment at another rate is a comparison, never target gold.')
     if assessment or terms or contrast_set is not None or result['missingContrastLabels']:
         result['contrastCaveat'] = ('Counts cover all matches, not just this page. Filters and exclusions may leave '
                                     'one-sided results; missing labels are not evidence of style absence. '

@@ -1,4 +1,5 @@
 import type { SourceIdentityV1 } from "../contracts";
+import type { PlaybackRate } from "../playback-rate";
 import type {
   AgentProvenanceV2,
   AgentReviewV2,
@@ -48,6 +49,7 @@ export type InboxClaimV2 = Pick<
 > & {
   readonly trust?: ReviewTrustV2;
   readonly tagId: string;
+  readonly playbackRate?: PlaybackRate;
   readonly scope: { readonly startMs: number; readonly endMs: number };
   readonly assessment?: AssessmentV2;
   readonly agent?: AgentProvenanceV2;

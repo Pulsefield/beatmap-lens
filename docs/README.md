@@ -16,6 +16,8 @@ and design choices.
 - [Section selection](annotation/annotation-selection.md): coverage, repair targets,
   exploration, and the limits of ranking heuristics.
 - [Fine annotation](annotation/fine-annotation.md): bounded section jobs and batches.
+- [Playback rates](annotation/playback-rate.md): rate-specific judgments, agent
+  evidence, human Review, and source-time coordinates.
 - [Natural-chart learning](annotation/beatmap-learning.md): explore arrangements and
   revise interpretations without creating human labels.
 - [Regression gate](../annotation/evaluation/README.md): checks for candidate skill

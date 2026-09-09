@@ -1,3 +1,5 @@
+import { type PlaybackRate, resolvePlaybackRate } from "./playback-rate";
+
 export interface PlaybackSelection {
   readonly startMs: number;
   readonly endMs: number;
@@ -15,7 +17,9 @@ export type PlaybackClockListener = (state: PlaybackClockState) => void;
 export interface PlaybackClock {
   readonly currentTimeMs: number;
   readonly playing: boolean;
+  readonly playbackRate: PlaybackRate;
 
+  setPlaybackRate(rate: number): void;
   play(): Promise<void>;
   pause(): void;
   seek(timeMs: number): void;
@@ -47,6 +51,7 @@ export class SyntheticPlaybackClock implements PlaybackClock {
   readonly #listeners = new Set<PlaybackClockListener>();
 
   #timeMs = 0;
+  #playbackRate: PlaybackRate = 1;
   #playing = false;
   #lastFrameTimeMs = 0;
   #frameHandle: number | undefined;
@@ -63,6 +68,17 @@ export class SyntheticPlaybackClock implements PlaybackClock {
 
   get playing(): boolean {
     return this.#playing;
+  }
+
+  get playbackRate(): PlaybackRate {
+    return this.#playbackRate;
+  }
+
+  setPlaybackRate(rate: number): void {
+    const next = resolvePlaybackRate(rate);
+    if (this.#playing) this.#advance(this.#scheduler.now());
+    this.#playbackRate = next;
+    this.#emit();
   }
 
   play(): Promise<void> {
@@ -155,7 +171,7 @@ export class SyntheticPlaybackClock implements PlaybackClock {
   #advance(frameTimeMs: number): void {
     const elapsedMs = Math.max(0, frameTimeMs - this.#lastFrameTimeMs);
     this.#lastFrameTimeMs = frameTimeMs;
-    this.#timeMs += elapsedMs;
+    this.#timeMs += elapsedMs * this.#playbackRate;
 
     const playback = this.#selectionPlayback;
     if (!playback || this.#timeMs < playback.range.endMs) return;

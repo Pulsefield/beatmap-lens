@@ -71,6 +71,42 @@ class SectionDeliveryTest(unittest.TestCase):
         self.write_job(self.label_job, 'labeler', [self.case], [{'caseId': self.case['caseId'], 'judgments': self.judgments}])
         return delivery.prepare_handoffs(self.batch, self.label_job, self.config)
 
+    def test_rate_judgments_coexist_with_original_rate_human_and_machine_cells(self):
+        self.add_review(delivery.TAGS[0], 'accepted')
+        self.add_review(delivery.TAGS[1], 'agent-reviewed')
+        self.case['playbackRate'] = 0.75
+        manifest = self.label()
+        self.assertEqual(manifest['skippedCells'], [])
+        entry = manifest['entries'][0]
+        self.assertEqual(entry['playbackRate'], 0.75)
+        handoff = delivery.read(entry['handoffPath'])
+        self.assertEqual([c['playbackRate'] for c in handoff['proposals']], [0.75] * 5)
+        self.assertEqual(handoff['proposals'][0]['scope'], self.case['scope'])
+        self.assertEqual(handoff['proposals'][0]['evidence']['noteRefs'][0]['startMs'], 1000)
+        self.auditor(manifest)
+        result = delivery.deliver_audits(self.batch, self.audit_job, self.config)
+        self.assertEqual(result['status'], 'complete')
+
+    def test_same_rate_human_still_protects_its_scope(self):
+        self.case['playbackRate'] = 1.5
+        self.add_review(delivery.TAGS[0], 'accepted')
+        self.current['agentReviews'][0]['summary']['playbackRate'] = 1.5
+        selected, _, skipped = delivery.select_cells(self.case, self.judgments, self.current,
+                                                     self.config['foundationSha256'])
+        self.assertEqual(len(selected), 4)
+        self.assertEqual(skipped[0]['reason'], 'human-exact')
+        self.assertEqual(skipped[0]['playbackRate'], 1.5)
+
+    def test_auditor_must_read_the_sealed_rate(self):
+        self.case['playbackRate'] = 0.5
+        manifest = self.label()
+        self.auditor(manifest)
+        self.write_job(self.audit_job, 'auditor', [{'caseId': self.case['caseId']}],
+                       delivery.read(self.audit_job / 'response.json')['cases'],
+                       [Path(manifest['entries'][0][k]) for k in ('taskPath', 'handoffPath')])
+        with self.assertRaisesRegex(ValueError, 'Auditor case playback rate'):
+            delivery.deliver_audits(self.batch, self.audit_job, self.config)
+
     def attach_human_evidence(self, refs, events, tracked=True, job=None):
         job = job or self.label_job
         bundle = self.root / (job.name + '-harness')
@@ -148,7 +184,7 @@ class SectionDeliveryTest(unittest.TestCase):
     def auditor(self, manifest, outcomes=None):
         cases, responses, copies = [], [], []
         for entry in manifest['entries']:
-            cases.append({'caseId': entry['caseId']})
+            cases.append({'caseId': entry['caseId'], **delivery.playback_rate_fields(entry)})
             responses.append({'caseId': entry['caseId'], 'coverageRationale': ['Every sealed target was independently inspected.'],
                               'results': [{'claimId': claim_id, 'status': (outcomes or {}).get(claim_id, 'supported'),
                                            'rationale': ['The exact supplied witnesses support this outcome.',

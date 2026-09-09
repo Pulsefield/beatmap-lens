@@ -108,7 +108,10 @@ supporting audit are excluded from the agent subset.
 Validation checks schemas, hashes, counts, identifiers, ranges, assessments,
 references, and the exact file inventory. Unexpected files and symbolic links
 fail validation. It does not claim semantic accuracy or execute a model evaluation.
-Contradictory supervised human judgments for the exact same source/scope/tag block
+New snapshots use manifest version 2 and `judgment-v2`, including a required
+`playback_rate`. Historical version 1 snapshots remain readable as 1×. All source
+coordinates stay in original milliseconds; see [playback rates](playback-rate.md).
+Contradictory supervised human judgments for the exact same source/scope/tag/rate block
 release; different overlapping scopes remain distinguishable. Empty configurations
 can be inspected locally but cannot be published: deselect empty agent methods,
 and include at least one effective human judgment in the default configuration.

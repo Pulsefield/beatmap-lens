@@ -15,6 +15,7 @@ import subprocess
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from annotation_runtime import REPO, load_module
+from playback_rate import same_playback_rate
 
 public_example = load_module(REPO / 'harness/harness_examples.py').public_example
 
@@ -278,6 +279,7 @@ class LearningCorpus(_harness.Harness):
                       community=deepcopy(ref['community']), audio=deepcopy(ref['audio']),
                       existingHumanJudgments=[public_example(example) for example in self.examples
                                               if example['sourceSha256'] == sha
+                                              and same_playback_rate(example, section)
                                               and max(start, example['scope']['startMs']) < min(end, example['scope']['endMs'])],
                       siblingDifficulties=[{'handle': 'chart:' + other_sha, 'source': _source(other['source'])}
                                            for other_sha, other in self.manifest['charts'].items()

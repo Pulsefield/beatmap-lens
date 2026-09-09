@@ -3,6 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp, h, nextTick, shallowRef } from "vue";
 import { AudioPlaybackController } from "./annotation/audio-playback";
+import type { PlaybackRate } from "./annotation/playback-rate";
 import type { SessionPreferences } from "./annotation/session-store";
 import { FakeDirectoryHandle } from "./annotation/test-helpers";
 import type { ClaimV2, FoundationV2 } from "./annotation/workflow/contracts";
@@ -48,6 +49,194 @@ afterEach(() => {
 });
 
 describe("ReviewWorkspace mounted workflow", () => {
+  it.each([undefined, 0.5, 1.5] as const)(
+    "shows calibration rate %s and played duration while keeping source coordinates",
+    async (rate) => {
+      const f = await workspaceFixture(false, false, rate);
+      const before = await f.read();
+      const { container } = await openWorkspace(f);
+      const duration = ((f.claim.scope.endMs - f.claim.scope.startMs) / (rate ?? 1) / 1000).toFixed(
+        3,
+      );
+      const contextDuration = (
+        (f.claim.reviewContext.endMs - f.claim.reviewContext.startMs) /
+        (rate ?? 1) /
+        1000
+      ).toFixed(3);
+      const listed = container.querySelector(".review-calibration-example");
+      expect(listed?.textContent).toContain(`${rate ?? 1}×`);
+      expect(listed?.textContent).toContain(
+        `${f.claim.scope.startMs}–${f.claim.scope.endMs} source ms`,
+      );
+      expect(listed?.textContent).toContain(`Claim duration ${duration} s`);
+      await click(container, "View exact source evidence");
+      const focused = container.querySelector(".review-calibration");
+      expect(focused?.querySelector("h2")?.textContent).toContain(`${rate ?? 1}×`);
+      expect(focused?.textContent).toContain(
+        `Claim ${f.claim.scope.startMs}–${f.claim.scope.endMs} source ms`,
+      );
+      expect(focused?.textContent).toContain(
+        `claim duration ${duration} s · context duration ${contextDuration} s`,
+      );
+      expect(focused?.textContent).toContain(
+        "Static source evidence; playback is unavailable in this view.",
+      );
+      expect(control(container, "Playback rate").value).toBe(String(rate ?? 1));
+      expect(control(container, "Playback rate").disabled).toBe(true);
+      await click(container, "Return to difficulty review");
+      expect(control(container, "Playback rate").value).toBe("1");
+      expect(await f.read()).toEqual(before);
+    },
+  );
+
+  it("creates separate judgments at every supported rate and revises only the selected rate", async () => {
+    const f = await workspaceFixture();
+    const initial = await f.read();
+    if (!initial) throw new Error("Missing review.");
+    const first = await f.directory.addObservations(f.sourceBytes, initial.version, {
+      claims: [{ ...f.claim, assessment: { presence: "absent" } }],
+      humanId: "fixture-human",
+    });
+    const original = first.document.observations[0];
+    const { container } = await openWorkspace(f);
+    await setValue(control(container, "Human reviewer"), "fixture-human", "input");
+    const observations = () =>
+      [...container.querySelectorAll(".review-source details")].find((entry) =>
+        entry.querySelector("summary")?.textContent?.startsWith("Human observations"),
+      );
+    for (const rate of [0.5, 0.75, 1.25, 1.5]) {
+      observations()?.querySelector<HTMLButtonElement>("button")?.click();
+      await nextTick();
+      expect(control(container, "Playback rate").value).toBe("1");
+      await setValue(control(container, "Playback rate"), String(rate));
+      expect(control(container, "Assessment").disabled).toBe(true);
+      expect(button(container, "Save revised judgment").disabled).toBe(true);
+      expect(container.textContent).toContain(`Playing ${rate}× · this judgment is for 1×`);
+      await click(container, `Create judgment at ${rate}×`);
+      expect(control(container, "Assessment").value).toBe("unreviewed");
+      await setValue(control(container, "Assessment"), "present");
+      await setValue(
+        control(container, "Evidence / judgment rationale"),
+        `Observed at ${rate}x`,
+        "input",
+      );
+      await click(container, "Save section judgments");
+      const saved = await f.read();
+      const observation = saved?.document.observations.at(-1);
+      expect(observation?.claim.playbackRate).toBe(rate);
+      expect(observation?.claim.scope).toEqual(f.claim.scope);
+      expect(observation?.claim.reviewContext).toEqual(f.claim.reviewContext);
+      expect(observation?.claim.id).not.toBe(f.claim.id);
+      expect(observation?.supersedesObservationId).toBeUndefined();
+      await setValue(control(container, "Salience"), "supporting");
+      await click(container, "Save revised judgment");
+      const revised = (await f.read())?.document.observations.at(-1);
+      expect(revised?.claim.playbackRate).toBe(rate);
+      expect(revised?.supersedesObservationId).toBe(observation?.id);
+      expect((await f.read())?.document.observations[0]).toEqual(original);
+    }
+    expect((await f.read())?.document.observations).toHaveLength(9);
+    expect((await f.read())?.document.decisions).toHaveLength(0);
+  });
+
+  it("opens proposals at their rate and prevents accepting a different audition rate", async () => {
+    const f = await workspaceFixture(true);
+    if (!f.task || !f.handoff) throw new Error("Missing task.");
+    const handoff = await sealHandoffV2(f.task, {
+      handoffId: "rate-handoff",
+      createdAt: NOW,
+      agent: f.handoff.agent,
+      proposals: [
+        { ...f.claim, sectionId: "same-section", playbackRate: 1.25 },
+        {
+          ...f.claim,
+          id: "same-rate",
+          tagId: "synthetic-b",
+          sectionId: "same-section",
+          playbackRate: 1.25,
+        },
+        {
+          ...f.claim,
+          id: "other-rate",
+          tagId: "synthetic-b",
+          sectionId: "same-section",
+          playbackRate: 0.5,
+        },
+      ],
+      audit: [],
+      questions: [],
+    });
+    const current = await f.read();
+    if (!current) throw new Error("Missing review.");
+    const imported = await f.directory.importHandoff(f.sourceBytes, current.version, handoff);
+    const container = document.createElement("div");
+    document.body.append(container);
+    const app = createApp(ReviewWorkspace, {
+      remoteSource: { ...imported.stored, sourceBytes: Array.from(f.sourceBytes) },
+      openClaim: { handoffId: handoff.handoffId, claimId: f.claim.id },
+    });
+    app.config.errorHandler = (error) => appErrors.push(error);
+    apps.push(app);
+    app.mount(container);
+    await vi.waitFor(() => expect(container.textContent).toContain("Accept original"));
+    await setValue(control(container, "Human reviewer"), "fixture-human", "input");
+    expect(control(container, "Playback rate").value).toBe("1.25");
+    expect(container.querySelector(".review-tag-navigation")?.textContent).toContain("1/2");
+    await setValue(control(container, "Playback rate"), "0.5");
+    expect(button(container, "Accept original").disabled).toBe(true);
+    expect(button(container, "Modify judgment").disabled).toBe(true);
+    await click(container, "Return to judgment rate");
+    expect(control(container, "Playback rate").value).toBe("1.25");
+    expect(button(container, "Accept original").disabled).toBe(false);
+    container.querySelector<HTMLButtonElement>('button[aria-label="Next tag"]')?.click();
+    await nextTick();
+    expect(control(container, "Playback rate").value).toBe("1.25");
+    expect((await f.read())?.document.decisions).toEqual([]);
+  });
+
+  it("changes source spacing with rate while preserving the chosen visual scroll speed", async () => {
+    const f = await workspaceFixture();
+    const { container } = await openWorkspace(f);
+    const noteSpread = () => {
+      const positions = [...container.querySelectorAll(".falling-note")].map((note) =>
+        Number(note.getAttribute("y")),
+      );
+      return Math.max(...positions) - Math.min(...positions);
+    };
+    const originalSpacing = noteSpread();
+    expect(originalSpacing).toBeGreaterThan(0);
+    await setValue(control(container, "Playback rate"), "0.5");
+    expect(noteSpread()).toBeCloseTo(originalSpacing * 2);
+    expect(control(container, "Visual speed").value).toBe("240");
+    await setValue(control(container, "Playback rate"), "1.5");
+    expect(noteSpread()).toBeCloseTo(originalSpacing / 1.5);
+    expect(control(container, "Visual speed").value).toBe("240");
+  });
+
+  it("retains drafts separately when comparing rates", async () => {
+    const f = await workspaceFixture();
+    const { container } = await openWorkspace(f);
+    await click(container, "New section at playhead");
+    await setValue(
+      control(container, "Evidence / judgment rationale"),
+      "Original rate draft",
+      "input",
+    );
+    await setValue(control(container, "Playback rate"), "0.5");
+    await click(container, "Create judgment at 0.5×");
+    await setValue(control(container, "Evidence / judgment rationale"), "Half-rate draft", "input");
+    await setValue(control(container, "Playback rate"), "0.75");
+    await click(container, "Create judgment at 0.75×");
+    await setValue(control(container, "Playback rate"), "0.5");
+    await click(container, "Restore section draft");
+    expect(control(container, "Evidence / judgment rationale").value).toBe("Half-rate draft");
+    expect(control(container, "Playback rate").value).toBe("0.5");
+    await setValue(control(container, "Playback rate"), "1");
+    await click(container, "Restore section draft");
+    expect(control(container, "Evidence / judgment rationale").value).toBe("Original rate draft");
+    expect(control(container, "Playback rate").value).toBe("1");
+  });
+
   it("shows remote evidence context separately and permits human review without an agent reread", async () => {
     const f = await workspaceFixture(true);
     if (!f.handoff) throw new Error("Missing handoff.");
@@ -527,7 +716,7 @@ describe("ReviewWorkspace mounted workflow", () => {
     await vi.waitFor(() =>
       expect(container.querySelector(".review-tag-navigation")?.textContent).toContain("1/3"),
     );
-    expect(container.querySelector(".review-details select")).toBeNull();
+    expect(container.querySelector(".claim-fields select")).toBeNull();
     expect(
       [...container.querySelectorAll("button")].some((node) =>
         ["Defer", "Reject proposal"].includes(node.textContent ?? ""),
@@ -1130,7 +1319,11 @@ class ReviewTestAudio extends EventTarget {
   }
 }
 
-async function workspaceFixture(withTask = false, mixedCorrespondences = false) {
+async function workspaceFixture(
+  withTask = false,
+  mixedCorrespondences = false,
+  calibrationPlaybackRate?: PlaybackRate,
+) {
   const f = await workflowFixture();
   const claim: ClaimV2 = { ...f.claim, id: "claim-a", tagId: "synthetic-a" };
   const foundation: FoundationV2 = {
@@ -1174,7 +1367,12 @@ async function workspaceFixture(withTask = false, mixedCorrespondences = false) 
         id: "synthetic-example",
         source: f.inspected.source,
         sourceBytes: Array.from(f.sourceBytes),
-        claim,
+        claim: {
+          ...claim,
+          ...(calibrationPlaybackRate === undefined
+            ? {}
+            : { playbackRate: calibrationPlaybackRate }),
+        },
         explanation: "Synthetic fixture approval; no real style semantics are calibrated here.",
       },
     ],

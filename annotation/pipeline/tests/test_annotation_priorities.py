@@ -42,6 +42,21 @@ def candidate(sha, start, end, value=0, group=None, kind='discovery'):
 
 
 class CoverageTest(unittest.TestCase):
+    def test_feedback_and_coverage_require_the_requested_speed(self):
+        original = claim('original')
+        slower = {**claim('slower', presence='absent'), 'playbackRate': 0.75}
+        faster = {**claim('faster'), 'playbackRate': 1.25}
+        pending = {**claim('pending'), 'playbackRate': 0.5}
+        feedback = {'agentReviews': [review(original), review(faster), review(pending, 'needs-expert')],
+                    'effectiveHumanObservations': [{'summary': slower}]}
+        self.assertEqual(priorities.feedback_labels(feedback), ([], [original], []))
+        self.assertEqual(priorities.feedback_labels(feedback, .75), ([slower], [], []))
+        self.assertEqual(priorities.feedback_labels(feedback, 1.25), ([], [faster], []))
+        self.assertEqual(len(priorities.feedback_labels(feedback, .5)[2]), 1)
+        self.assertEqual(priorities.human_conflicts([original, slower]), [])
+        self.assertEqual(priorities.coverage([slower], (0, 1000), [0])[0]['anyDimension']['ms'], 0)
+        self.assertEqual(priorities.coverage([slower], (0, 1000), [0], .75)[0]['anyDimension']['ms'], 1000)
+
     def test_interval_union_clipping_and_human_subtraction(self):
         ranges = [(0, 400), (200, 500), (500, 800), (900, 1000)]
         original = deepcopy(ranges)
@@ -144,6 +159,18 @@ class CoverageTest(unittest.TestCase):
 
 
 class SelectionTest(unittest.TestCase):
+    def test_overlapping_repairs_and_sampling_stay_independent_at_each_speed(self):
+        original = {'issueId': 'original', 'scope': {'startMs': 0, 'endMs': 1000},
+                    'reviewContext': {'startMs': 0, 'endMs': 2000}}
+        slower = {**original, 'issueId': 'slower', 'playbackRate': .75}
+        repairs = priorities.repair_ranges([original, slower])
+        self.assertEqual(len(repairs), 2)
+        self.assertEqual({tuple(item['issueIds']) for item in repairs}, {('original',), ('slower',)})
+        self.assertEqual(next(item for item in repairs if item['issueIds'] == ['slower'])['playbackRate'], .75)
+        candidates = [candidate('source', 0, 1000),
+                      {**candidate('source', 0, 1000), 'playbackRate': .75}]
+        self.assertEqual(len(priorities.select_batch(candidates, 2, 1)), 2)
+
     def test_repair_scopes_merge_overlap_once_and_keep_full_long_claims(self):
         issues = [{"issueId": identity, "scope": {"startMs": start, "endMs": end},
                    "reviewContext": {"startMs": start - 3000, "endMs": end + 4000}}
@@ -230,6 +257,52 @@ class SelectionTest(unittest.TestCase):
 
 
 class CampaignReplayTest(unittest.TestCase):
+    def test_default_queue_repairs_other_rates_with_independent_coverage_and_exclusions(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            campaign, feedback_dir = root / 'campaign', root / 'feedback'
+            for path in (campaign / 'controller', campaign / 'admin', campaign / 'agent/charts', feedback_dir):
+                path.mkdir(parents=True)
+            source, foundation = 'a' * 64, 'f' * 64
+            (campaign / 'controller/config.json').write_text(json.dumps({
+                'foundationSha256': foundation, 'skill': {}, 'workspace': str(root / 'workspace')}))
+            metadata = {'sha256': source, 'beatmapSetId': 1}
+            (campaign / 'admin/source-map.json').write_text(json.dumps([{'source': metadata}]))
+            notes = [{'source_line': i + 1, 'column': i % 4, 'kind': 'tap', 'start_ms': i * 200, 'end_ms': i * 200}
+                     for i in range(10)]
+            table = pa.Table.from_pylist(notes).replace_schema_metadata({b'beatmap_lens': json.dumps({
+                'source': metadata, 'range': {'startMs': 0, 'endMs': 2000}}).encode()})
+            pq.write_table(table, campaign / 'agent/charts' / f'{source}.parquet')
+            reviews = [review(claim(f'original-{tag}', tag, 0, 2000, 'absent')) for tag in priorities.TAGS]
+            reviews += [
+                review({**claim('slower-stream', priorities.TAGS[1]), 'playbackRate': .75}),
+                review({**claim('slower-repair'), 'playbackRate': .75}, 'needs-revision'),
+                review({**claim('faster-repair'), 'playbackRate': 1.5}, 'needs-expert'),
+            ]
+            (feedback_dir / f'{source}.json').write_text(json.dumps({
+                'sourceSha256': source, 'taskBinding': {'foundationSha256': foundation},
+                'agentReviews': reviews, 'directObservations': []}))
+            exclusions = root / 'exclusions.json'
+            exclusions.write_text(json.dumps({'sections': [{'sourceSha256': source,
+                'scope': {'startMs': 0, 'endMs': 2000}}]}))
+            out = root / 'output'
+            subprocess.run([sys.executable, str(SCRIPT), '--campaign', str(campaign),
+                            '--feedback-dir', str(feedback_dir), '--out', str(out), '--batch-size', '3',
+                            '--exclude-sections', str(exclusions)], check=True, capture_output=True, text=True)
+            queue = json.loads((out / 'queue.json').read_text())['sections']
+            by_rate = {item['playbackRate']: item for item in queue}
+            self.assertEqual(set(by_rate), {.75, 1.5})
+            self.assertTrue(all(item['candidateKind'] == 'repair' for item in queue))
+            self.assertEqual(by_rate[.75]['missingDimensions'][priorities.TAGS[1]], 0)
+            self.assertEqual(by_rate[1.5]['missingDimensions'][priorities.TAGS[1]], 1)
+            self.assertTrue(all(item['scope'] == {'startMs': 0, 'endMs': 1000} for item in queue))
+            quality = json.loads((out / 'quality.json').read_text())
+            self.assertEqual(quality['combined']['allDimensions']['timeRate'], 1)
+            self.assertEqual({item['playbackRate'] for item in quality['openIssues']}, {.75, 1.5})
+            self.assertEqual(quality['pendingIssueIds'], [])
+            assignment = json.loads((out / 'assignment.proposed.json').read_text())
+            self.assertEqual({item['playbackRate'] for item in assignment['charts']}, {.75, 1.5})
+
     def test_saved_feedback_builds_coverage_and_queue_without_changing_campaign(self):
         with TemporaryDirectory() as directory:
             root = Path(directory)

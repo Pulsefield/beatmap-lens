@@ -189,14 +189,17 @@ class RegressionGateTests(unittest.TestCase):
         self.assertTrue(moon['critical'])
         self.assertTrue(any(r['run'].endswith('/old-skill') for r in moon['previouslyCorrect']))
 
-    def completed_capture(self, directory):
+    def completed_capture(self, directory, playback_rate=None):
         root = Path(directory)
         suite = copy.deepcopy(self.suite)
         source_cases = []
         for case in suite['cases']:
             case.update(sourceSha256='source-sha', scope={'startMs': 0, 'endMs': 100},
                         reviewContext={'startMs': 0, 'endMs': 200})
+            if playback_rate is not None:
+                case['playbackRate'] = playback_rate
             source_cases.append({**{k: case[k] for k in ('caseId', 'sourceSha256', 'scope', 'reviewContext')},
+                                 **({'playbackRate': playback_rate} if playback_rate is not None else {}),
                                  'notes': [{'source_line': 10, 'column': 0, 'kind': 'tap',
                                             'start_ms': 50, 'end_ms': 50}]})
         gate.save(root / 'harness/manifest.json', {'mode': 'evaluation'})
@@ -244,6 +247,19 @@ class RegressionGateTests(unittest.TestCase):
             preparation['sources']['files']['new-guide'] = 'new-hash'
             gate.save(root / 'regression.json', preparation)
             with self.assertRaisesRegex(ValueError, 'source identity differs'):
+                gate.capture(root, suite)
+
+    def test_capture_requires_worker_and_gold_playback_rates_to_match(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, job, suite = self.completed_capture(directory, .75)
+            self.assertEqual(gate.capture(root, suite)[1][0]['mechanicalErrors'], [])
+            cases = gate.read(job / 'cases.json')
+            cases['cases'][0]['playbackRate'] = 1.5
+            gate.save(job / 'cases.json', cases)
+            run = gate.read(job / 'run.json')
+            run['inputHashes']['cases.json'] = gate.sha(job / 'cases.json')
+            gate.save(job / 'run.json', run)
+            with self.assertRaisesRegex(ValueError, 'playback rate differs'):
                 gate.capture(root, suite)
 
 

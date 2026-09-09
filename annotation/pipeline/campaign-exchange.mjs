@@ -136,6 +136,7 @@ if (command === "refresh") {
         const proposals = result.claims.map((claim) => ({
           id: claim.id,
           sectionId: claim.sectionId,
+          ...(claim.playbackRate !== undefined ? { playbackRate: claim.playbackRate } : {}),
           tagId: claim.tagId,
           scope: claim.scope,
           reviewContext: claim.reviewContext,

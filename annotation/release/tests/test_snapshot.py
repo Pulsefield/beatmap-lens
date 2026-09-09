@@ -5,11 +5,15 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import Mock, patch
+from types import SimpleNamespace
 
 import pyarrow.parquet as pq
+import pyarrow as pa
+import publish
 
 from snapshot import (
-    JUDGMENT_SCHEMA, build_snapshot, canonical_json, sha256_bytes, validate_snapshot,
+    JUDGMENT_SCHEMA, JUDGMENT_SCHEMA_V1, build_snapshot, canonical_json, sha256_bytes, validate_snapshot,
 )
 
 
@@ -153,6 +157,60 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual(manifest["methods"][METHOD]["provenance_status"], "partial")
         self.assertEqual(manifest["provenance"][PROVENANCE]["human_evidence_refs"][0]["record_id"], "human:one")
         self.assertIn("default: true", (path / "README.md").read_text())
+
+    def test_different_rates_can_have_opposite_human_judgments(self):
+        slow = deepcopy(self.projection['human'][0])
+        slow.update(record_id='human:slow', observation_id='slow', playback_rate=0.5,
+                    presence='absent', salience=None)
+        self.projection['human'].append(slow)
+        path, manifest = self.build()
+        rows = pq.read_table(path / 'data/human.parquet').to_pylist()
+        self.assertEqual(manifest['version'], 2)
+        self.assertEqual({r['playback_rate'] for r in rows}, {1, 0.5})
+        self.assertEqual({r['start_ms'] for r in rows}, {100})
+        self.assertEqual(validate_snapshot(path)['human_overlap_pairs'], 0)
+        slow['playback_rate'] = 1
+        with self.assertRaisesRegex(ValueError, 'contradictory human gold'):
+            self.build('same-rate-conflict')
+
+    def test_historical_v1_snapshot_migrates_without_changing_immutable_record(self):
+        path, manifest = self.build('old')
+        name = 'data/human.parquet'
+        rows = pq.read_table(path / name).to_pylist()
+        for row in rows:
+            row.pop('playback_rate')
+        pq.write_table(pa.Table.from_pylist(rows, schema=JUDGMENT_SCHEMA_V1), path / name, compression='zstd')
+        manifest['version'] = 1
+        manifest['files'][name].update(schema='judgment-v1', sha256=sha256_bytes((path / name).read_bytes()))
+        self.rewrite_manifest(path, manifest)
+        self.assertEqual(validate_snapshot(path)['version'], 1)
+        self.config['previous_snapshot'] = {'repo_id': self.config['repo_id'], 'commit': 'e' * 40}
+        fresh, revised = self.build('new', previous=path)
+        self.assertEqual(revised['removed_records'], [])
+        self.assertEqual(pq.read_table(fresh / name).to_pylist()[0]['playback_rate'], 1)
+
+    def test_rate_snapshot_can_be_staged_published_and_retried(self):
+        self.projection['human'][0]['playback_rate'] = 1.5
+        path, manifest = self.build()
+        api = Mock()
+        api.repo_info.return_value = SimpleNamespace(sha='a' * 40)
+        api.list_repo_files.return_value = ['.gitattributes']
+        api.create_commit.return_value = SimpleNamespace(oid='b' * 40)
+        references = Mock(return_value={})
+        with patch.object(publish, '_remote_manifest', return_value=(None, None)):
+            receipt = publish.publish_snapshot(path, api=api, reference_verifier=references)
+        self.assertEqual(receipt['commit'], 'b' * 40)
+        api.create_commit.assert_called_once()
+        api.reset_mock()
+        api.repo_info.return_value = SimpleNamespace(sha='b' * 40)
+        api.list_repo_files.return_value = [*manifest['files'], 'manifest.json']
+        # Exercise the actual remote manifest parser and checksum verification,
+        # using local files in place of Hub downloads.
+        with patch.object(publish, 'hf_hub_download', side_effect=lambda **kwargs: str(path / kwargs['filename'])):
+            receipt = publish.publish_snapshot(path, api=api, reference_verifier=references)
+        self.assertTrue(receipt['already_published'])
+        self.assertEqual(receipt['commit'], 'b' * 40)
+        api.create_commit.assert_not_called()
 
     def test_human_correction_does_not_require_written_rationale(self):
         self.projection["human"][0]["details"]["evidence"]["rationale"] = ""

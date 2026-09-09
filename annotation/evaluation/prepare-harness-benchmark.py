@@ -11,6 +11,7 @@ import pyarrow.parquet as pq
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from annotation_runtime import REPO, load_module
+from playback_rate import playback_rate_fields, same_playback_rate
 from section_evidence import brief, source_cases
 
 examples = load_module(REPO / 'harness/harness_examples.py')
@@ -71,7 +72,8 @@ def benchmark_gold(case, feedback):
                    if e['provenance'].get('decisionId') == case['decisionId']
                    and e['provenance'].get('handoffId') == case['handoffId']
                    and e['provenance'].get('claimId') == case['claimId']), None)
-    if record is None or any(record[key] != case[key] for key in ('sourceSha256', 'scope', 'reviewContext')):
+    if (record is None or any(record[key] != case[key] for key in ('sourceSha256', 'scope', 'reviewContext'))
+            or not same_playback_rate(record, case)):
         raise ValueError(f"Benchmark scope is not the referenced final human judgment: {case['benchmarkCaseId']}")
     if record['tagId'] != case['goldTagId'] or record['assessment'] != case['goldAssessment']:
         raise ValueError(f"Benchmark gold differs from the final human judgment: {case['benchmarkCaseId']}")
@@ -113,8 +115,9 @@ def prepare(design_path, root, campaign, python):
     save(root / 'design.json', design)
     save(root / 'gold.json', {'cases': gold})
     save(root / 'source-groups.json', groups)
-    save(root / 'sections.json', {'sections': [{key: c[key] for key in
-                                              ('sectionId', 'sourceSha256', 'scope', 'reviewContext')} for c in cases]})
+    save(root / 'sections.json', {'sections': [{**{key: c[key] for key in
+                                              ('sectionId', 'sourceSha256', 'scope', 'reviewContext')},
+                                              **playback_rate_fields(c)} for c in cases]})
     harness_preparer = module('prepare-annotation-harness')
     bundle = root / 'evaluation-bundle'
     bundle_result = harness_preparer.prepare(campaign, root / 'sections.json', feedback_dir,

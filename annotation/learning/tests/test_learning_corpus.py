@@ -156,6 +156,27 @@ class LearningCorpusTest(unittest.TestCase):
             prepare_corpus(self.dataset, [10], human, self.root / 'blocked')
         self.assertFalse((self.root / 'blocked').exists())
 
+    def test_human_rate_survives_learning_import_without_becoming_normal_rate_gold(self):
+        human = self.make_human_bundle()
+        records = read(human / 'examples.json')
+        records[0]['playbackRate'] = 0.75
+        save(human / 'examples.json', records)
+        manifest = read(human / 'manifest.json')
+        manifest['files']['examples.json'] = digest(human / 'examples.json')
+        save(human / 'manifest.json', manifest)
+        out = self.root / 'rated-human'
+        prepare_corpus(self.dataset, [10], human, out)
+        corpus = LearningCorpus(out)
+        handle = 'chart:' + digest(self.paths[101])
+        self.assertEqual(corpus.context(handle, 1000, 1251)['existingHumanJudgments'], [])
+        context = corpus.context('example:human-confirmed')
+        self.assertEqual(context['playbackRate'], 0.75)
+        self.assertEqual(context['existingHumanJudgments'][0]['playbackRate'], 0.75)
+        inspection = corpus.inspect('example:human-confirmed')
+        self.assertEqual(inspection['performanceTiming']['rows'][1][1], 250 / 0.75)
+        self.assertEqual(corpus.search(playback_rate=1)['total'], 0)
+        self.assertEqual(corpus.search(playback_rate=0.75)['total'], 1)
+
 
 if __name__ == '__main__':
     unittest.main()

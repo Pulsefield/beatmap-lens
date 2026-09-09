@@ -9,7 +9,11 @@ import importlib.util
 import json
 from pathlib import Path
 import random
+import sys
 from urllib.request import urlopen
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from playback_rate import normalize_playback_rate, playback_rate_fields, same_playback_rate
 
 TAGS = ('jack-organization', 'stream-organization', 'trill-organization', 'tech', 'ln-coordination')
 FEATURES = ('nps', 'peakHalfSecondAttacks', 'adjacentSharedColumnShare', 'disjointAlternationShare',
@@ -70,13 +74,16 @@ def known(claim):
     return claim['assessment']['presence'] in ('present', 'absent')
 
 
-def feedback_labels(feedback):
-    """Human coverage overrides overlapping machine coverage, independently per dimension."""
+def feedback_labels(feedback, playback_rate=1):
+    """Read one judgment speed; human coverage overrides machine coverage per dimension."""
+    playback_rate = normalize_playback_rate(playback_rate)
     human, machine, signals = [], [], []
     for row in feedback.get('agentReviews', []):
         if row['status'] == 'superseded':
             continue
         claim = row.get('modifiedClaim', row['summary'])
+        if normalize_playback_rate(claim.get('playbackRate')) != playback_rate:
+            continue
         if 'effectiveHumanObservations' not in feedback and row['status'] in ('accepted', 'modified') and known(claim):
             human.append(claim)
         elif row['status'] == 'agent-reviewed' and row['baseStatus'] == 'current' and known(claim):
@@ -90,15 +97,20 @@ def feedback_labels(feedback):
                             'handoffId': row['handoffId'], 'decisionId': row['decision'].get('id')})
     for observation in feedback.get('effectiveHumanObservations', feedback.get('directObservations', [])):
         claim = observation.get('claim', observation.get('summary'))
+        if normalize_playback_rate(claim.get('playbackRate')) != playback_rate:
+            continue
         if known(claim) and all(value == 'current' for value in observation.get('trust', {}).values()):
             human.append(claim)
     return human, machine, signals
 
 
-def confidence_counts(feedback):
+def confidence_counts(feedback, playback_rate=1):
     """Report evidence currency separately; it never creates an automatic repair request."""
-    machine = [row for row in feedback.get('agentReviews', []) if not row.get('decision') and row['status'] != 'superseded']
-    gold = feedback.get('effectiveHumanObservations', [])
+    playback_rate = normalize_playback_rate(playback_rate)
+    machine = [row for row in feedback.get('agentReviews', []) if not row.get('decision') and row['status'] != 'superseded'
+               and normalize_playback_rate(row['summary'].get('playbackRate')) == playback_rate]
+    gold = [row for row in feedback.get('effectiveHumanObservations', [])
+            if normalize_playback_rate(row.get('claim', row.get('summary')).get('playbackRate')) == playback_rate]
     return {
         'machine': {layer: dict(Counter(row.get('trust', {}).get(layer, 'untracked') for row in machine))
                     for layer in ('source', 'foundation', 'humanContext')},
@@ -112,17 +124,20 @@ def human_conflicts(claims):
     conflicts = []
     for index, claim in enumerate(claims):
         for other in claims[index + 1:]:
-            if claim['tagId'] != other['tagId'] or claim['assessment'] == other['assessment']:
+            if (claim['tagId'] != other['tagId'] or claim['assessment'] == other['assessment']
+                    or not same_playback_rate(claim, other)):
                 continue
             overlap = intersect([bounds(claim)], [bounds(other)])
             if overlap:
-                conflicts.append({'tagId': claim['tagId'], 'ranges': overlap,
+                conflicts.append({'tagId': claim['tagId'], **playback_rate_fields(claim), 'ranges': overlap,
                                   'claimIds': [claim['id'], other['id']],
                                   'assessments': [claim['assessment'], other['assessment']]})
     return conflicts
 
 
-def coverage(claims, chart_range, times):
+def coverage(claims, chart_range, times, playback_rate=1):
+    playback_rate = normalize_playback_rate(playback_rate)
+    claims = [claim for claim in claims if normalize_playback_rate(claim.get('playbackRate')) == playback_rate]
     per_tag = {tag: intersect(union(bounds(c) for c in claims if c['tagId'] == tag), [chart_range]) for tag in TAGS}
     all_tags = [chart_range]
     for ranges in per_tag.values():
@@ -138,7 +153,27 @@ def coverage(claims, chart_range, times):
             'dimensions': {tag: measure(ranges) for tag, ranges in per_tag.items()}}, per_tag
 
 
-def candidate_ranges(chart_range, claims, window_ms, stride_ms):
+def source_coverage(feedback, chart_range, times, playback_rate=1):
+    """Resolve human precedence and coverage within one speed for both discovery and repair."""
+    human, machine, signals = feedback_labels(feedback, playback_rate)
+    conflicts = human_conflicts(human)
+    _, human_ranges = coverage(human, chart_range, times, playback_rate)
+    conflict_ranges = {tag: union(r for item in conflicts if item['tagId'] == tag for r in item['ranges']) for tag in TAGS}
+    human = [{**c, 'scope': {'startMs': a, 'endMs': b}} for c in human
+             for a, b in subtract([bounds(c)], conflict_ranges[c['tagId']])]
+    machine = [{**c, 'scope': {'startMs': a, 'endMs': b}} for c in machine
+               for a, b in subtract([bounds(c)], human_ranges.get(c['tagId'], []))]
+    human_metrics, _ = coverage(human, chart_range, times, playback_rate)
+    machine_metrics, _ = coverage(machine, chart_range, times, playback_rate)
+    combined_metrics, covered = coverage(human + machine, chart_range, times, playback_rate)
+    return {'human': human, 'machine': machine, 'signals': signals, 'conflicts': conflicts,
+            'conflictRanges': conflict_ranges, 'humanMetrics': human_metrics,
+            'machineMetrics': machine_metrics, 'combinedMetrics': combined_metrics, 'covered': covered}
+
+
+def candidate_ranges(chart_range, claims, window_ms, stride_ms, playback_rate=1):
+    playback_rate = normalize_playback_rate(playback_rate)
+    claims = [claim for claim in claims if normalize_playback_rate(claim.get('playbackRate')) == playback_rate]
     start, end = chart_range
     return sorted({(a, min(a + window_ms, end)) for a in range(start, end, stride_ms)
                    if a == start or end - a >= window_ms / 2} |
@@ -149,16 +184,16 @@ def candidate_ranges(chart_range, claims, window_ms, stride_ms):
 def repair_ranges(issues):
     """For one source, merge overlapping full scopes while retaining every issue identity."""
     result = []
-    for issue in sorted(issues, key=lambda i: (*bounds(i), i['issueId'])):
+    for issue in sorted(issues, key=lambda i: (normalize_playback_rate(i.get('playbackRate')), *bounds(i), i['issueId'])):
         start, end = bounds(issue)
-        if result and start < result[-1]['scope']['endMs']:
+        if result and same_playback_rate(result[-1], issue) and start < result[-1]['scope']['endMs']:
             result[-1]['scope']['endMs'] = max(end, result[-1]['scope']['endMs'])
             result[-1]['issueIds'].append(issue['issueId'])
             context = result[-1]['reviewContext']
             context['startMs'] = min(context['startMs'], issue['reviewContext']['startMs'])
             context['endMs'] = max(context['endMs'], issue['reviewContext']['endMs'])
         else:
-            result.append({'scope': {'startMs': start, 'endMs': end}, 'issueIds': [issue['issueId']],
+            result.append({'scope': {'startMs': start, 'endMs': end}, **playback_rate_fields(issue), 'issueIds': [issue['issueId']],
                            'reviewContext': dict(issue['reviewContext'])})
     return result
 
@@ -177,14 +212,16 @@ def rank_candidates(candidates, corrections):
     for candidate in candidates:
         vec = candidate['featureRanks']
         nearest = sorted(((sum(abs(a-b) for a, b in zip(vec, other)) / len(vec), item)
-                          for item, other in correction_vectors if item['sourceSha256'] != candidate['sourceSha256']),
+                          for item, other in correction_vectors if item['sourceSha256'] != candidate['sourceSha256']
+                          and same_playback_rate(item, candidate)),
                          key=lambda pair: (pair[0], pair[1]['sourceSha256'], pair[1]['claimId']))[:1]
         similarity = max(0, 1 - nearest[0][0] / .25) if nearest else 0
         candidate['components'].update(feedbackSimilarity=similarity,
                                        rarity=1 / frequencies[candidate['stratum']] ** .5,
                                        demand=(vec[0] + vec[1]) / 2)
         candidate['priority'] = sum(candidate['components'][key] * weight for key, weight in WEIGHTS.items())
-        candidate['feedbackExample'] = ({key: nearest[0][1][key] for key in ('sourceSha256', 'claimId', 'scope', 'tagId', 'handoffId', 'decisionId')}
+        candidate['feedbackExample'] = ({**{key: nearest[0][1][key] for key in ('sourceSha256', 'claimId', 'scope', 'tagId', 'handoffId', 'decisionId')},
+                                         **playback_rate_fields(nearest[0][1])}
                                         if nearest else None)
         candidate['reasons'] = [key for key, value in sorted(candidate['components'].items(),
                                key=lambda pair: -pair[1] * WEIGHTS[pair[0]]) if value > 0][:3]
@@ -197,7 +234,8 @@ def select_batch(ranked, size, seed, max_per_group=2, max_repairs=10):
     def add(candidate, route):
         if route != 'repair' and (groups[candidate['selectionGroup']] >= max_per_group or strata[candidate['stratum']] >= 2):
             return False
-        if any(c['sourceSha256'] == candidate['sourceSha256'] and intersect([bounds(c)], [bounds(candidate)]) for c in chosen):
+        if any(c['sourceSha256'] == candidate['sourceSha256'] and same_playback_rate(c, candidate)
+               and intersect([bounds(c)], [bounds(candidate)]) for c in chosen):
             return False
         chosen.append({**candidate, 'selectionRoute': route})
         if route != 'repair':
@@ -288,21 +326,18 @@ def main():
             raise ValueError(f'Source identity differs: {parquet}')
         times = sorted(n['start_ms'] for n in notes)
         chart_range = (meta['range']['startMs'], meta['range']['endMs'])
-        human, machine, signals = feedback_labels(feedback[sha])
+        rate_views = {rate: source_coverage(feedback[sha], chart_range, times, rate) for rate in sorted({1,
+            *(normalize_playback_rate(row.get('modifiedClaim', row['summary']).get('playbackRate'))
+              for row in feedback[sha].get('agentReviews', [])),
+            *(normalize_playback_rate(row.get('claim', row.get('summary')).get('playbackRate'))
+              for row in feedback[sha].get('effectiveHumanObservations', feedback[sha].get('directObservations', [])))})}
+        original = rate_views[1]
+        human, machine = original['human'], original['machine']
+        human_metrics, machine_metrics, combined_metrics = (original[key] for key in ('humanMetrics', 'machineMetrics', 'combinedMetrics'))
+        signals = [signal for view in rate_views.values() for signal in view['signals']]
         states.update(row['status'] for row in feedback[sha].get('agentReviews', []))
-        chart_conflicts = human_conflicts(human)
+        chart_conflicts = [item for view in rate_views.values() for item in view['conflicts']]
         conflicts.extend({'sourceSha256': sha, **item} for item in chart_conflicts)
-        _, human_ranges = coverage(human, chart_range, times)
-        # Conflicting human coverage remains visible as reviewed but is excluded from usable labels.
-        conflict_ranges = {tag: union(r for item in chart_conflicts if item['tagId'] == tag for r in item['ranges']) for tag in TAGS}
-        human = [{**c, 'scope': {'startMs': a, 'endMs': b}} for c in human
-                 for a, b in subtract([bounds(c)], conflict_ranges[c['tagId']])]
-        human_metrics, _ = coverage(human, chart_range, times)
-        # A human judgment owns its exact target/scope even when a prior proposal overlaps it.
-        machine = [{**c, 'scope': {'startMs': a, 'endMs': b}} for c in machine
-                   for a, b in subtract([bounds(c)], human_ranges.get(c['tagId'], []))]
-        machine_metrics, _ = coverage(machine, chart_range, times)
-        combined_metrics, covered = coverage(human + machine, chart_range, times)
         set_id = source['source'].get('beatmapSetId')
         group = str(song_groups[sha]) if song_groups is not None else f'mapset:{set_id}' if set_id and set_id > 0 else f'source:{sha}'
         label_counts = {}
@@ -321,11 +356,13 @@ def main():
             if signal['kind'] == 'correction':
                 claim = signal['claim']
                 corrections.append({'sourceSha256': sha, 'claimId': signal['claimId'], 'scope': claim['scope'],
+                                    **playback_rate_fields(claim),
                                     'tagId': claim['tagId'], 'handoffId': signal['handoffId'], 'decisionId': signal['decisionId'],
                                     'features': scorer.section_features(notes, *bounds(claim))})
         issues = [{'issueId': '/'.join((sha, s['handoffId'], s['claimId'])),
                    'sourceSha256': sha, 'handoffId': s['handoffId'], 'claimId': s['claimId'],
                    'scope': s['claim']['scope'], 'tagId': s['claim']['tagId'],
+                   **playback_rate_fields(s['claim']),
                    'reviewContext': s['claim']['reviewContext'],
                    **{key: s[key] for key in ('status', 'expertReason', 'question', 'audits') if key in s}}
                   for s in signals if s['kind'] == 'openReview']
@@ -333,8 +370,11 @@ def main():
         repairs = repair_ranges(issues)
         ordinary = [{'scope': {'startMs': start, 'endMs': end}, 'issueIds': []}
                     for start, end in candidate_ranges(chart_range, human + machine, args.window_ms, args.stride_ms)
-                    if not any(intersect([bounds(issue)], [(start, end)]) for issue in issues)]
+                    if not any(normalize_playback_rate(issue.get('playbackRate')) == 1
+                               and intersect([bounds(issue)], [(start, end)]) for issue in issues)]
         for target in repairs + ordinary:
+            rate_view = rate_views[normalize_playback_rate(target.get('playbackRate'))]
+            covered, conflict_ranges = rate_view['covered'], rate_view['conflictRanges']
             start, end = bounds(target)
             context = target.get('reviewContext', target['scope'])
             features = scorer.section_features(notes, start, end)
@@ -352,13 +392,14 @@ def main():
                                                  'endMs': min(chart_range[1], max(end + 2000, context['endMs']))},
                                'selectionGroup': group, 'features': features, 'missingDimensions': missing,
                                'components': {'openReview': int(open_review), 'dimensionGap': sum(missing.values()) / len(TAGS),
-                                              'chartGap': 1 - sum(combined_metrics['dimensions'][t]['timeRate'] for t in TAGS) / len(TAGS)}})
+                                              'chartGap': 1 - sum(rate_view['combinedMetrics']['dimensions'][t]['timeRate'] for t in TAGS) / len(TAGS)}})
         if (index + 1) % 100 == 0:
             print(f'Scored {index + 1}/{len(sources)} charts.', flush=True)
     ranked = rank_candidates(candidates, corrections) if candidates else []
     excluded = read(args.exclude_sections)['sections'] if args.exclude_sections else []
     eligible = [candidate for candidate in ranked if not any(
         candidate['sourceSha256'] == previous['sourceSha256']
+        and same_playback_rate(candidate, previous)
         and intersect([bounds(candidate)], [bounds(previous)]) for previous in excluded)]
     batch = select_batch(eligible, args.batch_size, args.seed)
     selected_issue_ids = {issue_id for c in batch for issue_id in c['issueIds']}
@@ -375,6 +416,7 @@ def main():
                          'requestedBatchSize': args.batch_size, 'explorationFraction': .2, 'maxRepairSections': 10,
                          'discoveryMaxPerGroup': 2, 'discoveryMaxPerStratum': 2, 'feedbackRetrieval': 'cross-source'},
               'limits': ['Experimental, unvalidated heuristic weights; no measured annotation value, cost model, V3 uncertainty or calibrated difficulty.',
+                         'Coverage totals and discovery use 1x; repair selection and coverage use each issue playback rate.',
                          'Repairs retain full open-claim scopes; discovery excludes every open-issue overlap, including pending repairs.',
                          'Correction similarity retrieves different sources only; settled human cells are reused, never inferred from similarity.',
                          'Grid windows are inspection targets; labelers choose semantic episode boundaries.',
@@ -405,12 +447,13 @@ def main():
     by_sha = {c['sourceSha256']: c for c in charts}
     target_groups = defaultdict(list)
     for item in batch:
-        target_groups[item['sourceSha256']].append(item['scope'])
+        target_groups[(item['sourceSha256'], normalize_playback_rate(item.get('playbackRate')))].append(item['scope'])
     assignment = {'assignmentId': 'selected-' + digest(args.out / 'queue.json')[:16],
                   'coverageMode': 'selected-sections', 'queueSha256': digest(args.out / 'queue.json'),
                   'charts': [{'sourceSha256': sha, 'parquetPath': str((args.campaign / 'agent/charts' / f'{sha}.parquet').resolve()),
+                              **({'playbackRate': rate} if rate != 1 else {}),
                               'parquetSha256': by_sha[sha]['parquetSha256'], 'durationMs': by_sha[sha]['durationMs'],
-                              'targetRanges': ranges} for sha, ranges in sorted(target_groups.items())]}
+                              'targetRanges': ranges} for (sha, rate), ranges in sorted(target_groups.items())]}
     (args.out / 'assignment.proposed.json').write_text(json.dumps(assignment, indent=2) + '\n')
     with (args.out / 'candidates.jsonl').open('w') as file:
         for c in ranked:
@@ -433,11 +476,11 @@ def main():
               '', f"Open issues: {len(open_issues)} total; {len(selected_issue_ids)} scheduled in {report['selectionRoutes'].get('repair', 0)} repair targets; {len(report['pendingIssueIds'])} pending.",
               'Issue identities are source SHA / handoff ID / claim ID; full issue scopes and selected identities are recorded in quality.json and queue.json.',
               '', 'Pending issue IDs:', *(['- ' + i for i in report['pendingIssueIds']] or ['- None.']),
-              '', '## Next batch', '', '| Chart | Scope (seconds) | Route | Issues | Leading reasons |', '| --- | --- | --- | ---: | --- |']
+              '', '## Next batch', '', '| Chart | Source scope (seconds) | Rate | Route | Issues | Leading reasons |', '| --- | --- | --- | --- | ---: | --- |']
     for c in batch:
         chart = by_sha[c['sourceSha256']]
         title = f"{chart['title']} [{chart['difficulty']}]".replace('|', '\\|').replace('\n', ' ')
-        lines.append(f"| {title} · {c['sourceSha256'][:12]} | {c['scope']['startMs']/1000:.3f}–{c['scope']['endMs']/1000:.3f} | {c['selectionRoute']} | {len(c['issueIds'])} | {', '.join(c['reasons'])} |")
+        lines.append(f"| {title} · {c['sourceSha256'][:12]} | {c['scope']['startMs']/1000:.3f}–{c['scope']['endMs']/1000:.3f} | {normalize_playback_rate(c.get('playbackRate')):g}x | {c['selectionRoute']} | {len(c['issueIds'])} | {', '.join(c['reasons'])} |")
     lines += ['', *['- ' + limit for limit in report['limits']], '']
     (args.out / 'report.md').write_text('\n'.join(lines))
     print(json.dumps({'output': str(args.out.resolve()), 'charts': len(charts), 'candidates': len(candidates), 'selected': len(batch)}))

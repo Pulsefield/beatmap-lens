@@ -6,6 +6,7 @@ import {
   type PlaybackFrameScheduler,
   type PlaybackSelection,
 } from "./playback-clock";
+import { type PlaybackRate, resolvePlaybackRate } from "./playback-rate";
 
 type SelectionPlayback = {
   readonly range: PlaybackSelection;
@@ -23,6 +24,7 @@ export class MediaPlaybackClock implements PlaybackClock {
   readonly #onMediaError = () => this.#handleMediaError();
 
   #audioOffsetMs: number;
+  #playbackRate: PlaybackRate = 1;
   #chartTimeMs = 0;
   #frameHandle: number | undefined;
   #lastFrameTimeMs = 0;
@@ -40,6 +42,8 @@ export class MediaPlaybackClock implements PlaybackClock {
     audioOffsetMs = 0,
   ) {
     this.#media = media;
+    this.#media.playbackRate = this.#playbackRate;
+    this.#media.preservesPitch = true;
     this.#scheduler = scheduler;
     this.#onPlaybackError = onPlaybackError;
     this.#audioOffsetMs = normalizeAudioOffsetMs(audioOffsetMs);
@@ -61,6 +65,18 @@ export class MediaPlaybackClock implements PlaybackClock {
 
   get audioOffsetMs(): number {
     return this.#audioOffsetMs;
+  }
+
+  get playbackRate(): PlaybackRate {
+    return this.#playbackRate;
+  }
+
+  setPlaybackRate(rate: number): void {
+    const next = resolvePlaybackRate(rate);
+    this.#syncChartTime(this.#scheduler.now());
+    this.#playbackRate = next;
+    this.#media.playbackRate = next;
+    this.#emit();
   }
 
   play(): Promise<void> {
@@ -208,7 +224,7 @@ export class MediaPlaybackClock implements PlaybackClock {
   #syncChartTime(frameTimeMs: number): void {
     if (this.#usingMediaClock()) this.#chartTimeMs = this.#chartTimeFromMedia();
     else if (this.#playing) {
-      this.#chartTimeMs += Math.max(0, frameTimeMs - this.#lastFrameTimeMs);
+      this.#chartTimeMs += Math.max(0, frameTimeMs - this.#lastFrameTimeMs) * this.#playbackRate;
     }
     this.#chartTimeMs = Math.max(0, this.#chartTimeMs);
     this.#lastFrameTimeMs = frameTimeMs;

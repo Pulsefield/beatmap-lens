@@ -7,6 +7,9 @@ range, but its bounded examples do not substitute for inspecting those events.
 from bisect import bisect_left, bisect_right
 from collections import Counter, defaultdict
 
+from harness_playback import add_inspection_timing, tempo_timing, timing_context
+from playback_rate import normalize_playback_rate
+
 
 NOTE_SCHEMA = ["sourceLine", "column", "kind", "startMs", "endMs"]
 MAX_PAGE = 64
@@ -52,7 +55,7 @@ def _actions(chart, start_ms, end_ms):
     return result
 
 
-def inspect(chart, start_ms, end_ms, view="rows", offset=0, limit=32):
+def inspect(chart, start_ms, end_ms, view="rows", offset=0, limit=32, playback_rate=1):
     """Page exact attack rows, LN articulation, or simultaneous actions.
 
     Entering holds are complete, even if their head is outside the requested
@@ -97,7 +100,7 @@ def inspect(chart, start_ms, end_ms, view="rows", offset=0, limit=32):
         result["pageEnteringHolds"] = [_ref(n) for n in page_entering]
     if view == "articulation":
         result.update(_articulation(chart, selected, entering, page_entering))
-    return result
+    return add_inspection_timing(result, chart, start_ms, end_ms, playback_rate)
 
 
 def _timing(chart):
@@ -185,7 +188,7 @@ def _overview(chart, start_ms, end_ms):
             "holdHeads": sum(n["kind"] == "long" for n in notes)}
 
 
-def chart_context(chart, start_ms, end_ms, timing_offset=0, timing_limit=12):
+def chart_context(chart, start_ms, end_ms, timing_offset=0, timing_limit=12, playback_rate=1):
     """Return metadata, timing and neighboring arrangement, without loading labels."""
     if timing_offset < 0:
         raise ValueError("timing_offset must be nonnegative; start at 0, then follow nextOffset")
@@ -202,7 +205,7 @@ def chart_context(chart, start_ms, end_ms, timing_offset=0, timing_limit=12):
     width = (chart_end - chart_start) / 8
     overview = [_overview(chart, round(chart_start + i * width), round(chart_start + (i + 1) * width))
                 for i in range(8)]
-    return {
+    result = {
         "source": chart["source"], "chartRange": chart["range"],
         "scope": {"startMs": start_ms, "endMs": end_ms},
         "activeTempoAtStart": tempo,
@@ -222,6 +225,15 @@ def chart_context(chart, start_ms, end_ms, timing_offset=0, timing_limit=12):
         "contextSuggestion": {"startMs": max(chart_start, start_ms - 2000),
                               "endMs": min(chart_end, end_ms + 2000)},
     }
+    rate = normalize_playback_rate(playback_rate)
+    if rate != 1:
+        result.update(playbackRate=rate, performanceTiming=timing_context(start_ms, end_ms, rate) | {
+            'activeTempoAtStart': tempo_timing(tempo, start_ms, rate) if tempo else None,
+            'timingChanges': [tempo_timing(point, start_ms, rate) for point in page],
+            'neighborElapsedMs': {key: (row['timeMs'] - start_ms) / rate if row else None
+                                  for key, row in result['neighbors'].items()},
+        })
+    return result
 
 
 def _recurrences(rows):
@@ -272,7 +284,7 @@ def _recurrences(rows):
             "examplePolicy": "Longest run per listed recurrence kind; boundary rows cited, interior rows omitted. No rows are skipped inside a run."}
 
 
-def perspective(chart, start_ms, end_ms):
+def perspective(chart, start_ms, end_ms, playback_rate=1):
     """A bounded player-action lens: recurrence, pulse and simultaneous duties.
 
     Definitions are observational, not thresholds for a style or salience.
@@ -311,7 +323,7 @@ def perspective(chart, start_ms, end_ms):
             action_examples.append({"relationship": relationship, "timeMs": event[0],
                                     **{key: [[n["sourceLine"], n["column"]] for n in notes]
                                        for key, notes in zip(("presses", "releases", "continuingHolds"), event[1:])}})
-    return {
+    result = {
         "sourceSha256": chart["source"]["sha256"], "scope": {"startMs": start_ms, "endMs": end_ms},
         "perspective": "player-action relationships v1",
         "definition": "Read each timestamp as presses, releases, and holds continuing strictly across it. Compare how those duties repeat or change, alongside the attack pulse; these facts assign no style or strength.",
@@ -342,3 +354,15 @@ def perspective(chart, start_ms, end_ms):
             "Which retrieved human supporting and prominent examples have the same relationships, and where does this section differ in typicality or how much of the episode they govern?",
         ],
     }
+    rate = normalize_playback_rate(playback_rate)
+    if rate != 1:
+        result.update(playbackRate=rate, performanceTiming=timing_context(start_ms, end_ms, rate) | {
+            'commonGapsMsAndCounts': [(gap / rate, count) for gap, count in Counter(gaps).most_common(4)],
+            'pulseExamples': [{'sourceTimesMs': [row['timeMs'] for row in example['rows']],
+                               'elapsedMs': [(row['timeMs'] - start_ms) / rate for row in example['rows']],
+                               'gapsMs': [gap / rate for gap in example['gapsMs']],
+                               'beatDistances': example['beatDistances']} for example in pulse_examples],
+            'actionExamples': [{'sourceTimeMs': event['timeMs'],
+                                'elapsedMs': (event['timeMs'] - start_ms) / rate} for event in action_examples],
+        })
+    return result

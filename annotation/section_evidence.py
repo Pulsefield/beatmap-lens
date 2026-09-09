@@ -5,6 +5,7 @@ import json
 import pyarrow.parquet as pq
 
 from annotation_runtime import sha
+from playback_rate import normalize_playback_rate, playback_rate_fields
 
 NOTE_FIELDS = ('source_line', 'column', 'kind', 'start_ms', 'end_ms')
 
@@ -30,6 +31,7 @@ def source_cases(design, campaign, sources):
         boundary = [note for note in notes if note['kind'] == 'long' and note['end_ms'] == context['startMs']]
         cases.append({
             'caseId': case['benchmarkCaseId'], 'sectionId': case['benchmarkCaseId'],
+            **playback_rate_fields(case),
             'sourceSha256': source, 'sourceMetadata': sources[source]['source'],
             'scope': case['scope'], 'reviewContext': context, 'parquetSha256': sha(parquet),
             'notes': [{key: note[key] for key in NOTE_FIELDS} for note in selected],
@@ -59,6 +61,13 @@ def brief(cases):
         lines.extend([f"## {case['caseId']}", '', compact(metadata),
                       f"sourceSha256={case['sourceSha256']}; sectionId={case['sectionId']}",
                       f"scope=[{scope['startMs']},{scope['endMs']}); reviewContext=[{context['startMs']},{context['endMs']})"])
+        rate = normalize_playback_rate(case.get('playbackRate'))
+        if rate != 1:
+            lines.extend([
+                f"Playback rate: {rate:g}x. Judge this rate only. All scope and witness coordinates remain source-ms.",
+                f"Performance duration: {(scope['endMs'] - scope['startMs']) / rate:g} ms. "
+                f"Performance time, gaps and hold lengths = source milliseconds / {rate:g}; BPM = source BPM * {rate:g}.",
+            ])
         points = sorted(case['timingPoints'], key=lambda p: (float(p['fields'][0]), p['sourceLine']))
         prior_tempo = next((p for p in reversed(points) if float(p['fields'][0]) <= context['startMs']
                             and float(p['fields'][1]) > 0), None)
@@ -68,6 +77,10 @@ def brief(cases):
                                 if context['startMs'] < float(p['fields'][0]) < context['endMs']})
         lines.append('Timing [sourceLine,osu timing fields]: ' + compact(
             [[p['sourceLine'], p['fields']] for p in selected_points.values()]))
+        if rate != 1:
+            lines.append('Effective tempo [sourceLine,performance BPM]: ' + compact([
+                [p['sourceLine'], 60000 / float(p['fields'][1]) * rate]
+                for p in selected_points.values() if float(p['fields'][1]) > 0]))
 
         def full(note):
             return [note['source_line'], note['column'], 'L' if note['kind'] == 'long' else 'T',
@@ -89,4 +102,15 @@ def brief(cases):
                                                     'L' if n['kind'] == 'long' else 'T', n['end_ms']]
                                                    for n in sorted(notes, key=lambda n: (n['column'], n['source_line']))]))
         lines.extend(['```', ''])
+        if rate != 1:
+            previous = None
+            performance_rows = []
+            for time, notes in sorted(rows.items()):
+                performance_rows.append([time, (time - scope['startMs']) / rate,
+                    None if previous is None else (time - previous) / rate,
+                    [[n['source_line'], (n['end_ms'] - n['start_ms']) / rate]
+                     for n in notes if n['kind'] == 'long']])
+                previous = time
+            lines.append('Performance rows [sourceMs,msFromTargetStart,gapMs,LN[sourceLine,lengthMs]]: ' +
+                         compact(performance_rows))
     return '\n'.join(lines)

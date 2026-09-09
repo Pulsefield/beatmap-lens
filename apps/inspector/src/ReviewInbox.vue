@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
+import { resolvePlaybackRate } from "./annotation/playback-rate";
 import { type InboxClaimV2, type InboxSourceV2, type RemoteSourceV2, type ReviewInboxV2, reviewRequest } from "./annotation/workflow/remote-workspace";
 import { agentVersionLabel, auditVersionLabel, matchesReviewVersions, reviewVersionOptions } from "./annotation/workflow/review-provenance";
 import { assessmentStrength, drawReviewSample, REVIEW_TARGETS, type ReviewSampleBatch, type ReviewSampleItem, type SampleStrength, sampleCandidates, sampleKey, sampleRef } from "./annotation/workflow/review-sampling";
@@ -264,7 +265,7 @@ onBeforeUnmount(() => { stopped = true; clearTimeout(timer); });
 
         <div class="inbox-sample-list"><template v-for="(row, index) in sampleRows" :key="row.key">
           <button v-if="row.item" type="button" :disabled="loading" @click="openSample(row.item)">
-            <span><span class="inbox-sample-number">{{ index + 1 }}.</span> {{ row.item.source.source.title }} <small>[{{ row.item.source.source.difficulty }}] · {{ (row.item.claim.scope.startMs / 1000).toFixed(3) }}–{{ (row.item.claim.scope.endMs / 1000).toFixed(3) }} s</small><small :title="agentVersionLabel(row.item.claim.agent)">Version {{ row.item.claim.agent?.skill?.sha256.slice(0, 8) ?? 'unversioned' }}</small></span>
+            <span><span class="inbox-sample-number">{{ index + 1 }}.</span> {{ row.item.source.source.title }} <small>[{{ row.item.source.source.difficulty }}] · {{ (row.item.claim.scope.startMs / 1000).toFixed(3) }}–{{ (row.item.claim.scope.endMs / 1000).toFixed(3) }} s · {{ resolvePlaybackRate(row.item.claim.playbackRate) }}×</small><small :title="agentVersionLabel(row.item.claim.agent)">Version {{ row.item.claim.agent?.skill?.sha256.slice(0, 8) ?? 'unversioned' }}</small></span>
             <span>{{ REVIEW_TARGETS[row.item.claim.tagId] ?? row.item.claim.tagId }} · {{ strengthLabel(row.item.claim) }}<small>{{ reviewLabel(row.item.claim) }} →</small><small>{{ trustLabel(row.item.claim) }}</small></span>
           </button>
           <p v-else>Sample {{ index + 1 }} is no longer available in this workspace.</p>
@@ -281,7 +282,7 @@ onBeforeUnmount(() => { stopped = true; clearTimeout(timer); });
       <p role="status">{{ historyItems.length }} matching records · newest first · showing {{ Math.min(historyLimit, historyItems.length) }}</p>
       <div class="inbox-history-list"><button v-for="item in historyItems.slice(0, historyLimit)" :key="sampleKey(sampleRef(item))" type="button" :disabled="loading" @click="open(item.source, item.claim)">
         <span>{{ item.source.source.title }} <small>[{{ item.source.source.difficulty }}] · <span :title="agentVersionLabel(item.claim.agent)">version {{ item.claim.agent?.skill?.sha256.slice(0, 8) ?? 'unversioned' }}</span></small><small v-if="showingProvenance">{{ submittedLabel(item.claim) }}<br>Labeler {{ agentVersionLabel(item.claim.agent) }}<br>Auditor {{ auditVersionLabel(item.claim) }}</small></span>
-        <span>{{ REVIEW_TARGETS[item.claim.tagId] ?? item.claim.tagId }} · {{ strengthLabel(item.claim) }}<small>{{ (item.claim.scope.startMs / 1000).toFixed(3) }}–{{ (item.claim.scope.endMs / 1000).toFixed(3) }} s · {{ reviewLabel(item.claim) }} →</small><small>{{ trustLabel(item.claim) }}</small></span>
+        <span>{{ REVIEW_TARGETS[item.claim.tagId] ?? item.claim.tagId }} · {{ strengthLabel(item.claim) }}<small>{{ (item.claim.scope.startMs / 1000).toFixed(3) }}–{{ (item.claim.scope.endMs / 1000).toFixed(3) }} s · {{ resolvePlaybackRate(item.claim.playbackRate) }}× · {{ reviewLabel(item.claim) }} →</small><small>{{ trustLabel(item.claim) }}</small></span>
       </button></div>
       <details class="inbox-chart-history"><summary>Charts and human judgments · {{ historySources.length }}</summary><p>Open a chart to inspect or revise saved human judgments, including charts without agent proposals.</p><div class="inbox-history-list"><button v-for="source in historySources.slice(0, historyLimit)" :key="source.source.sha256" type="button" :disabled="loading" @click="open(source)"><span>{{ source.source.title }}<small>{{ source.source.difficulty }}</small></span><span>Open chart →</span></button></div><button v-if="historySources.length > historyLimit" type="button" @click="historyLimit += 50">Show 50 more charts</button></details>
       <p v-if="!historyItems.length">No review history matches these filters.</p>
@@ -291,7 +292,7 @@ onBeforeUnmount(() => { stopped = true; clearTimeout(timer); });
     <section v-if="inbox && !tasks.length" class="inbox-empty"><h2>No requests waiting{{ labelerVersion || auditorVersion ? ' for these versions' : '' }}</h2><p>New requests arrive here automatically. Browse review history to inspect earlier results.</p></section>
     <section v-for="task in tasks" :key="`${task.source.source.sha256}:${task.id}`" class="inbox-task">
       <div><p class="inbox-kicker">{{ task.title }}</p><h2>{{ task.source.source.title }} <span>[{{ task.source.source.difficulty }}]</span></h2><p class="inbox-question">{{ task.question }}</p></div>
-      <div class="inbox-claims"><button v-for="claim in task.claims" :key="claim.claimId" type="button" :disabled="loading" @click="open(task.source, claim)"><span>{{ claim.tagId }}<small>{{ (claim.scope.startMs / 1000).toFixed(3) }}–{{ (claim.scope.endMs / 1000).toFixed(3) }} s · {{ claim.status }}</small><small :title="agentVersionLabel(claim.agent)">Version {{ claim.agent?.skill?.sha256.slice(0, 8) ?? 'unversioned' }}</small></span><span>Review →</span></button></div>
+      <div class="inbox-claims"><button v-for="claim in task.claims" :key="claim.claimId" type="button" :disabled="loading" @click="open(task.source, claim)"><span>{{ claim.tagId }}<small>{{ (claim.scope.startMs / 1000).toFixed(3) }}–{{ (claim.scope.endMs / 1000).toFixed(3) }} s · {{ resolvePlaybackRate(claim.playbackRate) }}× · {{ claim.status }}</small><small :title="agentVersionLabel(claim.agent)">Version {{ claim.agent?.skill?.sha256.slice(0, 8) ?? 'unversioned' }}</small></span><span>Review →</span></button></div>
     </section>
     </template>
     <details v-if="failedDeliveries.length" class="inbox-history"><summary>Delivery issues · {{ failedDeliveries.length }}</summary><p v-for="receipt in failedDeliveries" :key="receipt.id">{{ receipt.error }}</p></details>

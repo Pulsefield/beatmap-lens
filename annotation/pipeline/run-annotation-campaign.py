@@ -17,6 +17,7 @@ import uuid
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from annotation_runtime import REPO, load_module
+from playback_rate import normalize_playback_rate, playback_rate_fields
 
 public_example = load_module(REPO / 'harness/harness_examples.py').public_example
 
@@ -172,19 +173,21 @@ def prior_feedback(root, job, assignment):
         for row in view["agentReviews"]:
             if not row.get("decision") and row["status"] not in HUMAN_STATES:
                 claim = row["summary"]
-                key = (claim["tagId"], claim["scope"]["startMs"], claim["scope"]["endMs"])
+                key = (claim["tagId"], claim["scope"]["startMs"], claim["scope"]["endMs"],
+                       normalize_playback_rate(claim.get('playbackRate')))
                 hints[key] = {
                     "sourceSha256": sha, "originalHandoffId": row["handoffId"],
                     "originalFoundationSha256": headers[row["handoffId"]]["foundationSha256"],
                     "originalClaimId": row["claimId"], "originalStatus": row["status"],
                     **{key: claim[key] for key in ("tagId", "scope", "reviewContext")},
+                    **playback_rate_fields(claim),
                 }
         human.append({**public_feedback(view), "snapshotAvailable": True})
         machine.extend(hints.values())
     write(job / "prior-human-feedback.json", {"charts": human})
     write(job / "prior-machine-candidates.json", {
         "kind": "historical-location-hints-not-current-labels",
-        "selectionPolicy": "Last listed location per source/tag/scope; no supersession lineage inferred.",
+        "selectionPolicy": "Last listed location per source/tag/scope/playback-rate; no supersession lineage inferred.",
         "candidates": machine,
     })
 
@@ -226,6 +229,8 @@ def prepare_review_package(job, label_job, assignment):
 
 
 def setup_job(root, assignment, role, label_job=None):
+    if any(normalize_playback_rate(chart.get('playbackRate')) != 1 for chart in assignment['charts']):
+        raise ValueError('Whole-chart jobs support 1x assignments only. Use selected-section fine annotation for rate-specific assignments.')
     job = root / "workers" / f"{assignment['assignmentId']}-{role}"
     if (job / "run.json").exists():
         return job
