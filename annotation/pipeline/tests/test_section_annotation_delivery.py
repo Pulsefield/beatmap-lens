@@ -71,6 +71,54 @@ class SectionDeliveryTest(unittest.TestCase):
         self.write_job(self.label_job, 'labeler', [self.case], [{'caseId': self.case['caseId'], 'judgments': self.judgments}])
         return delivery.prepare_handoffs(self.batch, self.label_job, self.config)
 
+    def test_disjoint_labeler_case_fragments_preserve_all_judgments_and_raw_worker_hashes(self):
+        self.case.update(caseId='scale500-421', sectionId='scale500-421')
+        fragments = [{'caseId': self.case['caseId'], 'judgments': self.judgments[:3]},
+                     {'caseId': self.case['caseId'], 'judgments': self.judgments[3:]}]
+        self.write_job(self.label_job, 'labeler', [self.case], fragments)
+        frozen = {path: path.read_bytes() for path in self.label_job.rglob('*') if path.is_file()}
+        manifest = delivery.prepare_handoffs(self.batch, self.label_job, self.config)
+        handoff = delivery.read(manifest['entries'][0]['handoffPath'])
+        self.assertEqual([claim['tagId'] for claim in handoff['proposals']], list(delivery.TAGS))
+        self.assertEqual(delivery.group_labeler_cases(fragments, [self.case['caseId']])[self.case['caseId']],
+                         {'caseId': self.case['caseId'], 'judgments': self.judgments})
+        self.assertEqual(manifest['labelerRun']['responseSha256'], delivery.sha(self.label_job / 'response.json'))
+        self.auditor(manifest)
+        self.assertEqual(delivery.deliver_audits(self.batch, self.audit_job, self.config)['status'], 'complete')
+        for path, contents in frozen.items():
+            self.assertEqual(path.read_bytes(), contents)
+
+    def test_labeler_fragment_conflicts_and_missing_coverage_fail_before_sealing(self):
+        complete = {'caseId': self.case['caseId'], 'judgments': self.judgments}
+        duplicate = deepcopy(self.judgments[0])
+        duplicate.update(presence='present', salience='supporting')
+        invalid = [
+            ('identical-tag', [complete, {'caseId': self.case['caseId'], 'judgments': self.judgments[:1]}], 'Duplicate tagId'),
+            ('conflicting-tag', [complete, {'caseId': self.case['caseId'], 'judgments': [duplicate]}], 'Duplicate tagId'),
+            ('unexpected-case', [complete, {**complete, 'caseId': 'unexpected'}], 'caseId coverage'),
+            ('wrong-case', [{**complete, 'caseId': 'wrong'}], 'caseId coverage'),
+            ('missing-case', [], 'caseId coverage'),
+            ('missing-tag', [{'caseId': self.case['caseId'], 'judgments': self.judgments[:3]},
+                             {'caseId': self.case['caseId'], 'judgments': self.judgments[3:4]}], 'tagId coverage')]
+        for name, fragments, error in invalid:
+            with self.subTest(name=name):
+                self.write_job(self.label_job, 'labeler', [self.case], fragments)
+                with self.assertRaisesRegex(ValueError, error):
+                    delivery.prepare_handoffs(self.batch, self.label_job, self.config)
+                self.assertEqual(self.commands, [])
+
+    def test_auditor_case_fragments_remain_rejected_before_submission(self):
+        manifest = self.label()
+        self.auditor(manifest)
+        original = delivery.read(self.audit_job / 'response.json')['cases'][0]
+        fragments = [{**original, 'results': original['results'][:3]},
+                     {**original, 'results': original['results'][3:]}]
+        self.write_job(self.audit_job, 'auditor', [{'caseId': self.case['caseId']}], fragments,
+                       [Path(manifest['entries'][0][k]) for k in ('taskPath', 'handoffPath')])
+        with self.assertRaisesRegex(ValueError, 'Duplicate caseId'):
+            delivery.deliver_audits(self.batch, self.audit_job, self.config)
+        self.assertNotIn('submit', self.commands)
+
     def test_raw_foundation_document_delivers_labels_and_independent_audits(self):
         self.foundation.pop('foundationSha256')
         self.foundation.update(contract='beatmap-lens-judgment-foundation', version=2)

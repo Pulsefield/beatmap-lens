@@ -124,6 +124,18 @@ def keyed(items, key, expected=None):
     return result
 
 
+def group_labeler_cases(items, expected):
+    """Group disjoint judgment fragments without changing the raw worker response."""
+    result = {}
+    for item in items:
+        case = result.setdefault(item['caseId'], {'caseId': item['caseId'], 'judgments': []})
+        case['judgments'].extend(item['judgments'])
+    require(result.keys() == set(expected), 'Incomplete or unexpected caseId coverage.')
+    for case in result.values():
+        keyed(case['judgments'], 'tagId')
+    return result
+
+
 def rationale(lines, bounded=True):
     require(isinstance(lines, list) and lines and all(isinstance(line, str) and line.strip() for line in lines),
             'Rationale must contain nonempty strings.')
@@ -391,7 +403,7 @@ def prepare_handoffs(batch_root, label_job, campaign, *, follow_terminal_lineage
     run, agent = completed_job(label_job, 'labeler')
     human_refs, evidence_trace_sha = human_evidence(label_job, run)
     cases = keyed(read(label_job / 'cases.json')['cases'], 'caseId')
-    outputs = keyed(read(label_job / 'response.json')['cases'], 'caseId', cases)
+    outputs = group_labeler_cases(read(label_job / 'response.json')['cases'], cases)
     for case_id, case in cases.items():
         validate_judgments(case, outputs[case_id]['judgments'])
     manifest_path = batch_root / 'packets/manifest.json'

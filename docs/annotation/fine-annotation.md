@@ -54,6 +54,12 @@ field with the task, including all required definitions. An embedded pin must
 also match. Recovery reuses completed responses and their unchanged input hashes;
 do not edit a frozen document to add a missing embedded pin.
 
+When a labeler splits one case across response records, the controller groups its
+disjoint judgment fragments in memory before the existing five-dimension checks.
+Duplicate tags, missing dimensions, and wrong or missing cases still block sealing.
+The raw response, its recorded hash, frozen inputs, and worker identity remain
+unchanged. Auditor response records still require unique case IDs.
+
 `--labels-only` runs prepared labelers without sealing or submitting. Running the
 same root normally afterward uses the completed labeler results for audit and
 delivery, retaining their actual producer identity and frozen evidence.
