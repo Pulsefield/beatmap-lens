@@ -58,6 +58,13 @@ do not edit a frozen document to add a missing embedded pin.
 same root normally afterward uses the completed labeler results for audit and
 delivery, retaining their actual producer identity and frozen evidence.
 
+A provider usage-limit failure stops new worker dispatch for that invocation.
+Active workers finish and their results are retained; queued jobs stay prepared,
+including audits prepared from those finishing labelers. Run the same root again
+when capacity is available to continue queued work. Failed attempts remain visible
+for controller inspection and are never automatically relaunched under their old
+producer identities; retained failures do not stop a later invocation.
+
 ## Recurring target
 
 The `fine-annotation-campaign.py` controller tracks a target across section batches.

@@ -267,6 +267,26 @@ def run_worker(job, config):
     return run
 
 
+def usage_limit_error(job):
+    events = job / 'events.jsonl'
+    if not events.exists():
+        return None
+    with events.open() as stream:
+        for line in stream:
+            if not line.strip():
+                continue
+            event = json.loads(line)
+            if event.get('type') == 'error':
+                message = event.get('message', '')
+            elif event.get('type') == 'turn.failed':
+                message = event.get('error', {}).get('message', '')
+            else:
+                continue
+            if message.startswith("You've hit your usage limit."):
+                return message
+    return None
+
+
 def run(root, concurrency, labels_only=False):
     root = Path(root).resolve()
     preparation = read(root / 'preparation.json')
@@ -284,15 +304,24 @@ def run(root, concurrency, labels_only=False):
     queue = sorted((root / 'runs').glob('labeler-*'))
     with ThreadPoolExecutor(max_workers=concurrency) as pool:
         pending = {}
-        while queue or pending:
-            while queue and len(pending) < concurrency:
+        dispatch_stopped = False
+        while (queue and not dispatch_stopped) or pending:
+            while queue and not dispatch_stopped and len(pending) < concurrency:
                 job = queue.pop(0)
-                pending[pool.submit(run_worker, job, config)] = job
+                # Retained failures remain inspectable on resume, but only an
+                # attempted or adopted worker can stop this invocation.
+                attempted = read(job / 'run.json')['status'] in ('prepared', 'running')
+                pending[pool.submit(run_worker, job, config)] = (job, attempted)
             done, _ = wait(pending, timeout=10, return_when=FIRST_COMPLETED)
             for future in done:
-                job = pending.pop(future)
+                job, attempted = pending.pop(future)
                 try:
                     result = future.result()
+                    if attempted and result['status'] in ('failed', 'interrupted'):
+                        limit = usage_limit_error(job)
+                        if limit:
+                            dispatch_stopped = True
+                            raise ValueError('Worker stopped at provider usage limit: ' + limit)
                     if result['status'] != 'completed' or not result['inputsUnchanged']:
                         raise ValueError('Worker needs controller inspection: ' + result['status'])
                     if labels_only:

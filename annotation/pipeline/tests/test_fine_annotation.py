@@ -3,6 +3,7 @@ import importlib.util
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from threading import Event
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -96,6 +97,131 @@ class FineAnnotationTest(unittest.TestCase):
             self.assertEqual(result['controllerErrors'][0]['job'], 'labeler-001')
             self.assertEqual(result['deliveries'][0]['status'], 'needs-controller')
             self.assertTrue(result['deliveries'][0]['skippedCells'][0]['conflict'])
+
+    def test_usage_limit_stops_dispatch_preserves_active_output_and_allows_resume(self):
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            fine.save(root / 'campaign/controller/config.json', {})
+            fine.save(root / 'preparation.json', {'campaign': str(root / 'campaign')})
+            jobs = [root / 'runs' / f'labeler-{i:03d}' for i in (1, 2, 3)]
+            for job in jobs:
+                fine.save(job / 'input.json', {'source': job.name})
+                fine.save(job / 'run.json', {'status': 'prepared', 'role': 'labeler',
+                    'producerId': job.name, 'inputHashes': {'input.json': fine.sha(job / 'input.json')}})
+            prepared = (jobs[2] / 'run.json').read_bytes()
+            second_started, stop_observed = Event(), Event()
+            attempts = []
+            message = "You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Sep 12th, 2026 8:34 PM."
+
+            def worker(job, _config):
+                run = fine.read(job / 'run.json')
+                if run['status'] != 'prepared':
+                    return run
+                attempts.append(job.name)
+                if job == jobs[0]:
+                    self.assertTrue(second_started.wait(5))
+                    (job / 'events.jsonl').write_text(json.dumps({'type': 'error', 'message': message}) + '\n'
+                        + json.dumps({'type': 'turn.failed', 'error': {'message': message}}) + '\n')
+                    run.update(status='failed', inputsUnchanged=True)
+                else:
+                    if job == jobs[1]:
+                        second_started.set()
+                        self.assertTrue(stop_observed.wait(5))
+                    fine.save(job / 'response.json', {'cases': [job.name]})
+                    run.update(status='completed', inputsUnchanged=True)
+                fine.save(job / 'run.json', run)
+                return run
+
+            original_status = fine.status
+
+            def status(root):
+                if (root / 'controller-errors/labeler-001.json').exists():
+                    stop_observed.set()
+                return original_status(root)
+
+            with patch.object(fine.base, 'run_job', side_effect=worker), \
+                    patch.object(fine, 'status', side_effect=status):
+                result = fine.run(root, 2, labels_only=True)
+                self.assertEqual(set(attempts), {'labeler-001', 'labeler-002'})
+                self.assertEqual((jobs[2] / 'run.json').read_bytes(), prepared)
+                self.assertFalse((jobs[2] / 'events.jsonl').exists())
+                self.assertIn('usage limit', result['controllerErrors'][0]['error'])
+                retained = {str(path.relative_to(root)): path.read_bytes()
+                            for job in jobs[:2] for path in job.iterdir()}
+                result = fine.run(root, 2, labels_only=True)
+
+            self.assertEqual(sorted(attempts), ['labeler-001', 'labeler-002', 'labeler-003'])
+            self.assertEqual([r['status'] for r in result['runs']], ['failed', 'completed', 'completed'])
+            for name, contents in retained.items():
+                self.assertEqual((root / name).read_bytes(), contents)
+            for job in jobs:
+                self.assertEqual(fine.read(job / 'run.json')['inputHashes']['input.json'], fine.sha(job / 'input.json'))
+
+    def test_ordinary_worker_failure_does_not_stop_prepared_jobs(self):
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            fine.save(root / 'campaign/controller/config.json', {})
+            fine.save(root / 'preparation.json', {'campaign': str(root / 'campaign')})
+            jobs = [root / 'runs' / f'labeler-{i:03d}' for i in (1, 2)]
+            for job in jobs:
+                fine.save(job / 'run.json', {'status': 'prepared', 'role': 'labeler'})
+            seen = []
+
+            def worker(job, _config):
+                seen.append(job.name)
+                if job == jobs[0]:
+                    (job / 'events.jsonl').write_text(json.dumps({
+                        'type': 'turn.failed', 'error': {'message': 'MCP startup failed.'}}) + '\n')
+                return {'status': 'failed' if job == jobs[0] else 'completed', 'inputsUnchanged': True}
+
+            with patch.object(fine, 'run_worker', side_effect=worker):
+                fine.run(root, 1, labels_only=True)
+            self.assertEqual(seen, ['labeler-001', 'labeler-002'])
+
+    def test_auditor_usage_limit_stops_remaining_labelers(self):
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            fine.save(root / 'campaign/controller/config.json', {})
+            fine.save(root / 'preparation.json', {'campaign': str(root / 'campaign')})
+            jobs = [root / 'runs' / f'labeler-{i:03d}' for i in (1, 2)]
+            for job in jobs:
+                fine.save(job / 'run.json', {'status': 'prepared', 'role': 'labeler'})
+                fine.save(job / 'cases.json', {'cases': [{'caseId': job.name}]})
+            prepared = (jobs[1] / 'run.json').read_bytes()
+            seen = []
+
+            def worker(job, _config):
+                seen.append(job.name)
+                run = fine.read(job / 'run.json')
+                if run['role'] == 'auditor':
+                    (job / 'events.jsonl').write_text(json.dumps({'type': 'turn.failed',
+                        'error': {'message': "You've hit your usage limit. Try again later."}}) + '\n')
+                    run.update(status='failed', inputsUnchanged=True)
+                else:
+                    run.update(status='completed', inputsUnchanged=True)
+                fine.save(job / 'run.json', run)
+                return run
+
+            def handoffs(group, job, _campaign):
+                fine.save(group / 'handoff.json', {})
+                manifest = {'entries': [{'caseId': job.name, 'handoffPath': str(group / 'handoff.json')}],
+                            'skippedCells': []}
+                fine.save(group / 'packets/manifest.json', manifest)
+                return manifest
+
+            def audit_job(root, _cases, role, _config, number, _handoffs):
+                job = root / 'runs' / f'{role}-{number:03d}'
+                fine.save(job / 'run.json', {'status': 'prepared', 'role': role, 'inputHashes': {}})
+                return job
+
+            with patch.object(fine.base, 'run_job', side_effect=worker), \
+                    patch.object(fine, 'prepare_job', side_effect=audit_job), \
+                    patch.object(fine, 'module', return_value=SimpleNamespace(prepare_handoffs=handoffs)):
+                result = fine.run(root, 1)
+            self.assertEqual(seen, ['labeler-001', 'auditor-001'])
+            self.assertEqual((jobs[1] / 'run.json').read_bytes(), prepared)
+            self.assertEqual(result['controllerErrors'][0]['job'], 'auditor-001')
+            self.assertIn('usage limit', result['controllerErrors'][0]['error'])
 
     def worker(self, root, completed):
         fine.save(root / 'input.json', {'source': 'frozen'})
