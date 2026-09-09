@@ -7,21 +7,28 @@ export interface ReviewVersionFilter {
 }
 
 export function skillKey(agent?: AgentProvenanceV2): string {
-  return agent?.skill?.sha256 ?? "unversioned";
+  const skill = agent?.skill;
+  return skill ? JSON.stringify([skill.name, skill.version, skill.sha256]) : "unversioned";
 }
 
 export function agentVersionLabel(agent?: AgentProvenanceV2): string {
   const skill = agent?.skill;
   if (!skill) return "Unversioned";
   const version = skill.version.replace(/[a-f0-9]{40}/g, (hash) => hash.slice(0, 8));
-  return `${version} · ${skill.sha256.slice(0, 8)}`;
+  return `${skill.name} · ${version} · ${skill.sha256.slice(0, 8)}`;
+}
+
+function matchesSkillVersion(agent: AgentProvenanceV2 | undefined, version: string): boolean {
+  // Saved sample batches used content hashes before version identity included name and revision.
+  return skillKey(agent) === version || agent?.skill?.sha256 === version;
 }
 
 export function matchesReviewVersions(claim: InboxClaimV2, filter: ReviewVersionFilter): boolean {
+  const { labelerVersion, auditorVersion } = filter;
   return (
-    (!filter.labelerVersion || skillKey(claim.agent) === filter.labelerVersion) &&
-    (!filter.auditorVersion ||
-      (claim.audits ?? []).some((audit) => skillKey(audit.agent) === filter.auditorVersion))
+    (!labelerVersion || matchesSkillVersion(claim.agent, labelerVersion)) &&
+    (!auditorVersion ||
+      (claim.audits ?? []).some((audit) => matchesSkillVersion(audit.agent, auditorVersion)))
   );
 }
 

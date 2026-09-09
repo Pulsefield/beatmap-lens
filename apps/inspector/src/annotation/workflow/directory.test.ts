@@ -7,6 +7,77 @@ import { hashWorkflowValueV2, sealHandoffV2 } from "./domain";
 import { workflowFixture } from "./test-fixtures";
 
 describe("V2 canonical workflow commands", () => {
+  it("persists all section dimensions in one write and leaves no partial saves on failure", async () => {
+    const f = await workflowFixture();
+    const root = new FakeDirectoryHandle();
+    const directory = new WorkflowDirectoryV2(root);
+    const initial = await directory.initialize(f.sourceBytes, f.foundation);
+    const approved = await directory.approveFoundation(f.sourceBytes, initial.version, "expert");
+    const exported = await directory.exportTask(f.sourceBytes, approved.version);
+    const handoff = await sealHandoffV2(exported.task, {
+      handoffId: "complete-section",
+      createdAt: f.handoff.createdAt,
+      agent: f.handoff.agent,
+      proposals: f.foundation.tags.map((tag) => ({
+        ...f.claim,
+        id: tag.id,
+        tagId: tag.id,
+        playbackRate: 0.75,
+      })),
+      audit: [],
+      questions: [],
+    });
+    const imported = await directory.importHandoff(f.sourceBytes, exported.stored.version, handoff);
+    const decisions = handoff.proposals.map((claim) => ({
+      handoffId: handoff.handoffId,
+      claimId: claim.id,
+      disposition: "accepted" as const,
+    }));
+    const writes = vi.spyOn(FakeFileHandle.prototype, "createWritable");
+    writes.mockClear();
+    await expect(
+      directory.decideSection(f.sourceBytes, imported.stored.version, {
+        humanId: "expert",
+        decisions: decisions.map((decision, index) => {
+          const claim = handoff.proposals[index];
+          if (!claim) throw new Error("Missing section fixture claim.");
+          return index === decisions.length - 1
+            ? {
+                ...decision,
+                disposition: "modified",
+                modifiedClaim: {
+                  ...claim,
+                  assessment: { presence: "unresolved" },
+                },
+              }
+            : decision;
+        }),
+      }),
+    ).rejects.toThrow("Unresolved and unreviewed do not decide presence");
+    expect(writes).not.toHaveBeenCalled();
+    expect(await directory.read(f.inspected.source.sha256, f.sourceBytes)).toEqual(imported.stored);
+    const saved = await directory.decideSection(f.sourceBytes, imported.stored.version, {
+      id: "all-five",
+      humanId: "expert",
+      decisions,
+    });
+    expect(writes).toHaveBeenCalledTimes(1);
+    expect(saved.document.revision).toBe(imported.stored.document.revision + 1);
+    expect(saved.document.reviewRevision).toBe(imported.stored.document.reviewRevision + 1);
+    expect(saved.document.decisions).toHaveLength(5);
+    expect(saved.document.observations).toHaveLength(5);
+    await expect(
+      directory.decideSection(f.sourceBytes, imported.stored.version, {
+        id: "stale-repeat",
+        humanId: "expert",
+        decisions,
+      }),
+    ).rejects.toBeInstanceOf(WorkflowConflictError);
+    expect(writes).toHaveBeenCalledTimes(1);
+    expect(await directory.read(f.inspected.source.sha256, f.sourceBytes)).toEqual(saved);
+    writes.mockRestore();
+  });
+
   it("derives the version from exact canonical bytes while retaining semantic validation", async () => {
     const f = await workflowFixture();
     const root = new FakeDirectoryHandle();
@@ -116,10 +187,15 @@ describe("V2 canonical workflow commands", () => {
     const directory = new WorkflowDirectoryV2(root);
     const initial = await directory.initialize(f.sourceBytes, f.foundation);
     const approved = await directory.approveFoundation(f.sourceBytes, initial.version, "expert");
+    const claim = { ...f.claim, evidence: { ...f.claim.evidence, rationale: "" } };
     const saved = await directory.addObservations(f.sourceBytes, approved.version, {
-      claims: [f.claim, { ...f.claim, id: "streams", tagId: "streams" }],
+      claims: [claim, { ...claim, id: "streams", tagId: "streams" }],
       humanId: "expert",
     });
+    expect(saved.document.observations.map((entry) => entry.claim.evidence.rationale)).toEqual([
+      "",
+      "",
+    ]);
     expect(
       await new WorkflowDirectoryV2(root).read(f.inspected.source.sha256, f.sourceBytes),
     ).toEqual(saved);

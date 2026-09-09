@@ -110,7 +110,7 @@ describe("ReviewWorkspace mounted workflow", () => {
       expect(control(container, "Playback rate").value).toBe("1");
       await setValue(control(container, "Playback rate"), String(rate));
       expect(control(container, "Assessment").disabled).toBe(true);
-      expect(button(container, "Save revised judgment").disabled).toBe(true);
+      expect(button(container, "Save revised section").disabled).toBe(true);
       expect(container.textContent).toContain(`Playing ${rate}× · this judgment is for 1×`);
       await click(container, `Create judgment at ${rate}×`);
       expect(control(container, "Assessment").value).toBe("unreviewed");
@@ -129,7 +129,7 @@ describe("ReviewWorkspace mounted workflow", () => {
       expect(observation?.claim.id).not.toBe(f.claim.id);
       expect(observation?.supersedesObservationId).toBeUndefined();
       await setValue(control(container, "Salience"), "supporting");
-      await click(container, "Save revised judgment");
+      await click(container, "Save revised section");
       const revised = (await f.read())?.document.observations.at(-1);
       expect(revised?.claim.playbackRate).toBe(rate);
       expect(revised?.supersedesObservationId).toBe(observation?.id);
@@ -139,7 +139,7 @@ describe("ReviewWorkspace mounted workflow", () => {
     expect((await f.read())?.document.decisions).toHaveLength(0);
   });
 
-  it("opens proposals at their rate and prevents accepting a different audition rate", async () => {
+  it("opens complete section drafts at the proposal rate and blocks review at a different audition rate", async () => {
     const f = await workspaceFixture(true);
     if (!f.task || !f.handoff) throw new Error("Missing task.");
     const handoff = await sealHandoffV2(f.task, {
@@ -169,27 +169,30 @@ describe("ReviewWorkspace mounted workflow", () => {
     const current = await f.read();
     if (!current) throw new Error("Missing review.");
     const imported = await f.directory.importHandoff(f.sourceBytes, current.version, handoff);
-    const container = document.createElement("div");
-    document.body.append(container);
-    const app = createApp(ReviewWorkspace, {
-      remoteSource: { ...imported.stored, sourceBytes: Array.from(f.sourceBytes) },
-      openClaim: { handoffId: handoff.handoffId, claimId: f.claim.id },
+    const { container } = mountRemote(f, imported.stored, {
+      handoffId: handoff.handoffId,
+      claimId: f.claim.id,
     });
-    app.config.errorHandler = (error) => appErrors.push(error);
-    apps.push(app);
-    app.mount(container);
-    await vi.waitFor(() => expect(container.textContent).toContain("Accept original"));
+    await vi.waitFor(() =>
+      expect(container.querySelectorAll('.section-sliders input[type="range"]')).toHaveLength(9),
+    );
     await setValue(control(container, "Human reviewer"), "fixture-human", "input");
     expect(control(container, "Playback rate").value).toBe("1.25");
-    expect(container.querySelector(".review-tag-navigation")?.textContent).toContain("1/2");
+    expect(slider(container, "synthetic-a").getAttribute("aria-valuetext")).toBe("Prominent");
+    expect(slider(container, "synthetic-b").getAttribute("aria-valuetext")).toBe("Prominent");
+    await settleUnratedDimensions(container);
+    expect(button(container, "Submit section review").disabled).toBe(false);
     await setValue(control(container, "Playback rate"), "0.5");
-    expect(button(container, "Accept original").disabled).toBe(true);
-    expect(button(container, "Modify judgment").disabled).toBe(true);
+    expect(button(container, "Submit section review").disabled).toBe(true);
+    expect(
+      [...container.querySelectorAll<HTMLInputElement>(".section-sliders input")].every(
+        (input) => input.disabled,
+      ),
+    ).toBe(true);
     await click(container, "Return to judgment rate");
     expect(control(container, "Playback rate").value).toBe("1.25");
-    expect(button(container, "Accept original").disabled).toBe(false);
-    container.querySelector<HTMLButtonElement>('button[aria-label="Next tag"]')?.click();
-    await nextTick();
+    expect(button(container, "Submit section review").disabled).toBe(false);
+    await chooseAssessment(container, "synthetic-b");
     expect(control(container, "Playback rate").value).toBe("1.25");
     expect((await f.read())?.document.decisions).toEqual([]);
   });
@@ -264,10 +267,10 @@ describe("ReviewWorkspace mounted workflow", () => {
     app.mount(container);
     await vi.waitFor(() => expect(container.textContent).toContain("Human context changed"));
     await setValue(control(container, "Human reviewer"), "fixture-human", "input");
-    expect(button(container, "Accept original").disabled).toBe(false);
-    await click(container, "Modify judgment");
     expect(control(container, "Assessment").disabled).toBe(false);
-    expect(button(container, "Save modified").disabled).toBe(false);
+    expect(button(container, "Submit section review").disabled).toBe(true);
+    await settleUnratedDimensions(container);
+    expect(button(container, "Submit section review").disabled).toBe(false);
     expect((await f.read())?.document.decisions).toEqual([]);
   });
 
@@ -304,36 +307,37 @@ describe("ReviewWorkspace mounted workflow", () => {
     app.config.errorHandler = (error) => appErrors.push(error);
     apps.push(app);
     app.mount(container);
-    await vi.waitFor(() => expect(container.textContent).toContain("Revise human judgment"));
+    await vi.waitFor(() =>
+      expect(container.querySelectorAll('.section-sliders input[type="range"]')).toHaveLength(9),
+    );
     await setValue(control(container, "Human reviewer"), "fixture-human", "input");
     expect(control(container, "Source time").value).toBe("200");
-    await click(container, "Revise human judgment");
     expect(control(container, "Assessment").value).toBe("absent");
-    expect(
-      [...container.querySelectorAll<HTMLInputElement>(".claim-range input")].map(
-        (input) => input.value,
-      ),
-    ).toEqual(["1100", "1750", "200", "1801"]);
+    expect(rangeValues(container)).toEqual(["1100", "1750", "200", "1801"]);
     expect(
       container.querySelectorAll('.claim-fields button[aria-label^="Remove witness"]'),
     ).toHaveLength(2);
     expect(control(container, "Assessment").disabled).toBe(false);
-    await setValue(control(container, "Assessment"), "present");
-    await setValue(control(container, "Salience"), "supporting");
-    const request = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
+    await setSlider(container, "synthetic-a", "1");
+    await settleUnratedDimensions(container);
+    await chooseAssessment(container, "synthetic-a");
+    const request = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, options) => {
+      expect(String(url)).toContain("/decideSection");
       const body = JSON.parse(String(options?.body));
-      return Response.json(await f.directory.decide(f.sourceBytes, body.expectedBase, body.input));
+      return Response.json(
+        await f.directory.decideSection(f.sourceBytes, body.expectedBase, body.input),
+      );
     });
     try {
-      await click(container, "Save modified");
+      await click(container, "Submit section review");
       await vi.waitFor(() => expect(container.textContent).toContain("Human decision history · 2"));
       const final = await f.read();
       expect(final?.document.decisions[0]).toEqual(first.document.decisions[0]);
       expect(final?.document.observations[0]).toEqual(first.document.observations[0]);
-      expect(final?.document.observations.at(-1)?.claim.assessment).toEqual({
-        presence: "present",
-        salience: "supporting",
-      });
+      expect(
+        final?.document.observations.filter((entry) => entry.claim.id === "claim-a").at(-1)?.claim
+          .assessment,
+      ).toEqual({ presence: "present", salience: "supporting" });
       expect(final?.document.handoffs).toEqual(first.document.handoffs);
       const observationList = [...container.querySelectorAll(".review-source details")].find(
         (entry) => entry.querySelector("summary")?.textContent?.startsWith("Human observations"),
@@ -344,23 +348,23 @@ describe("ReviewWorkspace mounted workflow", () => {
       expect(control(container, "Assessment").value).toBe("absent");
       expect(control(container, "Assessment").disabled).toBe(true);
       await click(container, "View current judgment");
-      await click(container, "Revise human judgment");
       expect(control(container, "Assessment").value).toBe("present");
       expect(control(container, "Salience").value).toBe("supporting");
-      expect(container.textContent).not.toContain("Save revised judgment");
-      expect(button(container, "Save modified").disabled).toBe(false);
+      expect(button(container, "Submit section review").disabled).toBe(false);
       observationList?.querySelector<HTMLButtonElement>("button")?.click();
       await nextTick();
       await click(container, "Revise current judgment using this version");
       expect(control(container, "Assessment").value).toBe("absent");
       expect(control(container, "Assessment").disabled).toBe(false);
-      await click(container, "Save modified");
+      await click(container, "Submit section review");
       const restored = await f.read();
-      expect(restored?.document.decisions).toHaveLength(3);
+      expect(restored?.document.decisions).toHaveLength(
+        (final?.document.decisions.length ?? 0) + 1,
+      );
       expect(restored?.document.observations.at(-1)?.claim.assessment).toEqual({
         presence: "absent",
       });
-      expect(restored?.document.observations.slice(0, 2)).toEqual(final?.document.observations);
+      expect(restored?.document.observations.slice(0, -1)).toEqual(final?.document.observations);
     } finally {
       request.mockRestore();
     }
@@ -391,7 +395,7 @@ describe("ReviewWorkspace mounted workflow", () => {
     expect(control(container, "Assessment").disabled).toBe(false);
     await setValue(control(container, "Assessment"), "present");
     await setValue(control(container, "Salience"), "supporting");
-    await click(container, "Save revised judgment");
+    await click(container, "Save revised section");
     const final = await f.read();
     expect(final?.document.observations).toHaveLength(2);
     expect(final?.document.observations[0]).toEqual(first.document.observations[0]);
@@ -416,7 +420,7 @@ describe("ReviewWorkspace mounted workflow", () => {
     await nextTick();
     await click(container, "Revise current judgment using this version");
     expect(control(container, "Assessment").value).toBe("absent");
-    await click(container, "Save revised judgment");
+    await click(container, "Save revised section");
     const restored = await f.read();
     expect(restored?.document.observations).toHaveLength(3);
     expect(restored?.document.observations.at(-1)?.supersedesObservationId).toBe(
@@ -429,7 +433,7 @@ describe("ReviewWorkspace mounted workflow", () => {
     );
   });
 
-  it("shows frozen versions and opens an earlier judgment for the same range", async () => {
+  it("keeps saved judgments and drafts separate when frozen versions reuse claim IDs", async () => {
     const f = await workspaceFixture(true);
     if (!f.task) throw new Error("Missing task.");
     let current = await f.read();
@@ -443,12 +447,21 @@ describe("ReviewWorkspace mounted workflow", () => {
           producerId: `labeler-${hash}`,
           skill: { name: "judgment", version: "same-name", sha256: hash.repeat(64) },
         },
-        proposals: [f.claim],
+        proposals: [
+          { ...f.claim, assessment: hash === "a" ? { presence: "absent" } : f.claim.assessment },
+        ],
         audit: [],
         questions: [],
       });
       current = (await f.directory.importHandoff(f.sourceBytes, current.version, handoff)).stored;
     }
+    current = await f.directory.decide(f.sourceBytes, current.version, {
+      handoffId: "version-a",
+      claimId: f.claim.id,
+      disposition: "accepted",
+      humanId: "fixture-human",
+      rationale: "Saved earlier version A.",
+    });
     const container = document.createElement("div");
     document.body.append(container);
     const app = createApp(ReviewWorkspace, {
@@ -463,15 +476,34 @@ describe("ReviewWorkspace mounted workflow", () => {
         "same-name · bbbbbbbb",
       ),
     );
+    expect(slider(container, "synthetic-a").getAttribute("aria-valuetext")).toBe("Prominent");
+    await setSlider(container, "synthetic-a", "1");
     expect(container.querySelector(".review-related-history")?.textContent).toContain(
       "same-name · aaaaaaaa",
     );
     (container.querySelector(".review-related-history button") as HTMLButtonElement).click();
     await vi.waitFor(() =>
       expect(container.querySelector(".review-audit-result details > p")?.textContent).toContain(
-        "Labeler same-name · aaaaaaaa",
+        "Labeler judgment · same-name · aaaaaaaa",
       ),
     );
+    expect(slider(container, "synthetic-a").getAttribute("aria-valuetext")).toBe("Absent");
+    await setSlider(container, "synthetic-a", "2");
+    (container.querySelector(".review-related-history button") as HTMLButtonElement).click();
+    await vi.waitFor(() =>
+      expect(container.querySelector(".review-audit-result")?.textContent).toContain(
+        "same-name · bbbbbbbb",
+      ),
+    );
+    expect(slider(container, "synthetic-a").getAttribute("aria-valuetext")).toBe("Supporting");
+    (container.querySelector(".review-related-history button") as HTMLButtonElement).click();
+    await vi.waitFor(() =>
+      expect(container.querySelector(".review-audit-result")?.textContent).toContain(
+        "same-name · aaaaaaaa",
+      ),
+    );
+    expect(slider(container, "synthetic-a").getAttribute("aria-valuetext")).toBe("Prominent");
+    expect((await f.read())?.document).toEqual(current.document);
     expect((await f.read())?.version).toEqual(current.version);
   });
 
@@ -692,167 +724,252 @@ describe("ReviewWorkspace mounted workflow", () => {
     expect(control(container, "Source time").value).toBe(playhead);
   });
 
-  it("advances before save confirmation, blocks duplicate writes and restores a failed draft", async () => {
+  it("retains all section drafts during a pending or failed atomic save and permits newer edits without advancing", async () => {
     const f = await workspaceFixture(true);
     if (!f.handoff) throw new Error("Missing handoff.");
     const current = await f.read();
     if (!current) throw new Error("Missing review.");
     const imported = await f.directory.importHandoff(f.sourceBytes, current.version, f.handoff);
-    const container = document.createElement("div");
-    document.body.append(container);
-    const app = createApp(ReviewWorkspace, {
-      remoteSource: { ...imported.stored, sourceBytes: Array.from(f.sourceBytes) },
-      openClaim: { handoffId: f.handoff.handoffId, claimId: "claim-a" },
+    const { container } = mountRemote(f, imported.stored, {
+      handoffId: f.handoff.handoffId,
+      claimId: "claim-a",
     });
-    app.config.errorHandler = (error) => appErrors.push(error);
-    apps.push(app);
-    app.mount(container);
-    const currentTag = () => container.querySelector(".review-proposed-judgment h2")?.textContent;
-    const arrow = async (key: string, target: Element = document.body) => {
-      target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
-      await nextTick();
-    };
-    await vi.waitFor(() => expect(currentTag()).toBe("Synthetic A"));
     await vi.waitFor(() =>
-      expect(container.querySelector(".review-tag-navigation")?.textContent).toContain("1/3"),
+      expect(container.querySelectorAll('.section-sliders input[type="range"]')).toHaveLength(9),
     );
-    expect(container.querySelector(".claim-fields select")).toBeNull();
-    expect(
-      [...container.querySelectorAll("button")].some((node) =>
-        ["Defer", "Reject proposal"].includes(node.textContent ?? ""),
-      ),
-    ).toBe(false);
+    await setValue(control(container, "Human reviewer"), "fixture-human", "input");
+    await settleUnratedDimensions(container);
+    await setSlider(container, "synthetic-b", "1");
+    await setValue(
+      control(container, "Evidence / judgment rationale"),
+      "B remains supporting.",
+      "input",
+    );
+    const beforeSave = sectionAssessments(container);
     const playhead = control(container, "Source time").value;
-    await arrow("ArrowRight");
-    expect(currentTag()).toBe("Synthetic B");
-    await click(container, "Modify judgment");
-    await setValue(control(container, "Salience"), "supporting");
-    await setValue(control(container, "Evidence / judgment rationale"), "", "input");
-    await arrow("ArrowRight", control(container, "Human decision rationale"));
-    expect(container.querySelector(".claim-fields legend")?.textContent).toBe("Synthetic B");
-    await arrow("ArrowLeft");
-    expect(currentTag()).toBe("Synthetic A");
-    await arrow("ArrowRight");
-    expect(control(container, "Salience").value).toBe("supporting");
-    expect(control(container, "Source time").value).toBe(playhead);
+    const range = rangeValues(container);
     let fail = true;
     let releaseSave: () => void = () => {};
     let saveGate = new Promise<void>((resolve) => {
       releaseSave = resolve;
     });
     const request = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, options) => {
-      expect(String(url)).toContain("/decide");
-      await saveGate;
-      if (fail) return new Response(JSON.stringify({ error: "Save interrupted" }), { status: 500 });
+      expect(String(url)).toContain("/decideSection");
       const body = JSON.parse(String(options?.body));
-      return new Response(
-        JSON.stringify(await f.directory.decide(f.sourceBytes, body.expectedBase, body.input)),
-        { status: 200 },
+      expect(body.input.decisions).toHaveLength(3);
+      expect(body.input.observations).toHaveLength(6);
+      await saveGate;
+      if (fail) return Response.json({ error: "Save interrupted" }, { status: 500 });
+      return Response.json(
+        await f.directory.decideSection(f.sourceBytes, body.expectedBase, body.input),
       );
     });
     try {
-      button(container, "Save modified").click();
+      button(container, "Submit section review").click();
       await nextTick();
-      expect(currentTag()).toBe("Synthetic C");
-      expect(container.textContent).toContain("Saving judgment");
-      await arrow("ArrowRight");
-      expect(currentTag()).toBe("Synthetic A");
-      expect(button(container, "Accept original").disabled).toBe(true);
-      button(container, "Accept original").click();
+      expect(container.textContent).toContain("Saving section…");
+      expect(sectionAssessments(container)).toEqual(beforeSave);
+      expect(control(container, "Evidence / judgment rationale").value).toBe(
+        "B remains supporting.",
+      );
+      expect(container.querySelector(".claim-fields legend")?.textContent).toBe("Synthetic B");
+      expect(button(container, "Submit section review").disabled).toBe(true);
+      button(container, "Submit section review").click();
       expect(request).toHaveBeenCalledTimes(1);
+      expect(
+        [...container.querySelectorAll<HTMLInputElement>(".section-sliders input")].every(
+          (input) => !input.disabled,
+        ),
+      ).toBe(true);
+      await setSlider(container, "synthetic-a", "0");
+      const newerDraft = sectionAssessments(container);
+      expect(control(container, "Source time").value).toBe(playhead);
+      expect(rangeValues(container)).toEqual(range);
       expect((await f.read())?.document.decisions).toHaveLength(0);
       releaseSave();
       await vi.waitFor(() => expect(container.textContent).toContain("Save interrupted"));
-      expect(container.querySelector(".claim-fields legend")?.textContent).toBe("Synthetic B");
-      expect((await f.read())?.document.decisions).toHaveLength(0);
+      expect(sectionAssessments(container)).toEqual(newerDraft);
+      expect((await f.read())?.document.observations).toHaveLength(0);
+      expect(button(container, "Submit section review").disabled).toBe(false);
       fail = false;
       saveGate = Promise.resolve();
-      await click(container, "Save modified");
-      await vi.waitFor(() => expect(currentTag()).toBe("Synthetic C"));
-      expect(container.querySelector(".review-tag-navigation")?.textContent).toContain("2/2");
-      await arrow("ArrowLeft");
-      expect(currentTag()).toBe("Synthetic A");
-      await click(container, "Accept original");
-      await vi.waitFor(() => expect(currentTag()).toBe("Synthetic C"));
-      expect(container.querySelector<HTMLButtonElement>('[aria-label="Next tag"]')?.disabled).toBe(
-        true,
-      );
-      await click(container, "Modify judgment");
-      await setValue(control(container, "Assessment"), "absent");
-      await click(container, "Save modified");
-      expect(container.querySelector(".review-proposed-judgment")).toBeNull();
-      await vi.waitFor(() =>
-        expect(container.querySelector(".review-section-complete")?.textContent).toBe(
-          "All section judgments reviewed.",
-        ),
+      await click(container, "Submit section review");
+      expect(request).toHaveBeenCalledTimes(2);
+      expect(sectionAssessments(container)).toEqual(newerDraft);
+      expect(container.querySelector(".claim-fields legend")?.textContent).toBe("Synthetic A");
+      expect(container.querySelector(".review-section-complete")?.textContent).toBe(
+        "Section judgments saved together.",
       );
       const saved = await f.read();
+      expect(saved?.document.revision).toBe(imported.stored.document.revision + 1);
       expect(
         saved?.document.decisions.map((decision) => [decision.claimId, decision.disposition]),
       ).toEqual([
+        ["claim-a", "modified"],
         ["claim-b", "modified"],
-        ["claim-a", "accepted"],
         ["claim-c", "modified"],
       ]);
-      expect(saved?.document.observations[0]?.claim.evidence.rationale).toBe("");
-      expect(saved?.document.decisions[0]?.rationale).toBe("");
+      expect(saved?.document.observations).toHaveLength(9);
+      expect(
+        saved?.document.observations.find((entry) => entry.claim.id === "claim-a")?.claim
+          .assessment,
+      ).toEqual({ presence: "absent" });
+      expect(
+        saved?.document.observations.find((entry) => entry.claim.id === "claim-b")?.claim.evidence
+          .rationale,
+      ).toBe("B remains supporting.");
       expect(saved?.document.handoffs[0]?.handoff).toEqual(f.handoff);
+      await click(container, "Submit section review");
+      expect(request).toHaveBeenCalledTimes(2);
+      expect((await f.read())?.document).toEqual(saved?.document);
     } finally {
       request.mockRestore();
     }
   });
 
-  it("routes an unresolved inbox proposal through an explicit assessment instead of Accept original", async () => {
+  it("submits five sliders in one write and keeps edits made while a successful save is pending", async () => {
+    const f = await workspaceFixture(true, false, undefined, 5);
+    if (!f.task || !f.handoff) throw new Error("Missing task.");
+    const handoff = await sealHandoffV2(f.task, {
+      handoffId: "five-style-section",
+      createdAt: NOW,
+      agent: f.handoff.agent,
+      proposals: f.task.foundation.tags.map((tag, index) => ({
+        ...f.claim,
+        id: `claim-${index}`,
+        tagId: tag.id,
+        assessment:
+          index % 2 ? { presence: "present", salience: "supporting" } : { presence: "absent" },
+      })),
+      audit: [],
+      questions: [],
+    });
+    const initial = await f.read();
+    if (!initial) throw new Error("Missing review.");
+    const imported = await f.directory.importHandoff(f.sourceBytes, initial.version, handoff);
+    const { container } = mountRemote(f, imported.stored, {
+      handoffId: handoff.handoffId,
+      claimId: "claim-0",
+    });
+    await vi.waitFor(() =>
+      expect(container.querySelectorAll('.section-sliders input[type="range"]')).toHaveLength(5),
+    );
+    expect(sectionAssessments(container)).toEqual([
+      "Absent",
+      "Supporting",
+      "Absent",
+      "Supporting",
+      "Absent",
+    ]);
+    await setSlider(container, "synthetic-a", "2");
+    let releaseSave: () => void = () => {};
+    const saveGate = new Promise<void>((resolve) => {
+      releaseSave = resolve;
+    });
+    const request = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, options) => {
+      expect(String(url)).toContain("/decideSection");
+      const body = JSON.parse(String(options?.body));
+      await saveGate;
+      return Response.json(
+        await f.directory.decideSection(f.sourceBytes, body.expectedBase, body.input),
+      );
+    });
+    try {
+      button(container, "Submit section review").click();
+      await nextTick();
+      expect(request).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(String(request.mock.calls[0]?.[1]?.body)).input.decisions).toHaveLength(5);
+      await setSlider(container, "synthetic-b", "2");
+      const newest = sectionAssessments(container);
+      releaseSave();
+      await vi.waitFor(() =>
+        expect(container.textContent).toContain("Your newer edits are ready to submit."),
+      );
+      expect(sectionAssessments(container)).toEqual(newest);
+      expect(container.querySelector(".claim-fields legend")?.textContent).toBe("Synthetic B");
+      expect(button(container, "Submit section review").disabled).toBe(false);
+      const first = await f.read();
+      expect(first?.document.decisions).toHaveLength(5);
+      expect(first?.document.observations).toHaveLength(5);
+      expect(
+        first?.document.observations.find((entry) => entry.claim.tagId === "synthetic-b")?.claim
+          .assessment,
+      ).toEqual({ presence: "present", salience: "supporting" });
+      await click(container, "Submit section review");
+      expect(request).toHaveBeenCalledTimes(2);
+      const retry = JSON.parse(String(request.mock.calls[1]?.[1]?.body));
+      expect(retry.input.decisions).toHaveLength(1);
+      expect(retry.input.decisions[0]).toMatchObject({
+        claimId: "claim-1",
+        disposition: "modified",
+      });
+      const saved = await f.read();
+      expect(saved?.document.observations.slice(0, 5)).toEqual(first?.document.observations);
+      expect(saved?.document.observations.at(-1)?.claim.assessment).toEqual({
+        presence: "present",
+        salience: "prominent",
+      });
+      expect(saved?.document.decisions.slice(0, 5)).toEqual(first?.document.decisions);
+      expect(saved?.document.revision).toBe(imported.stored.document.revision + 2);
+      expect(saved?.document.handoffs[0]?.handoff).toEqual(handoff);
+      expect(sectionAssessments(container)).toEqual(newest);
+    } finally {
+      request.mockRestore();
+    }
+  });
+
+  it("requires explicit judgments for unresolved and missing dimensions before a single section submission", async () => {
     const f = await workspaceFixture(true);
     if (!f.handoff) throw new Error("Missing handoff.");
     const current = await f.read();
     if (!current) throw new Error("Missing review.");
     const imported = await f.directory.importHandoff(f.sourceBytes, current.version, f.handoff);
-    const container = document.createElement("div");
-    document.body.append(container);
-    const app = createApp(ReviewWorkspace, {
-      remoteSource: { ...imported.stored, sourceBytes: Array.from(f.sourceBytes) },
-      openClaim: { handoffId: f.handoff.handoffId, claimId: "claim-c" },
+    const { container } = mountRemote(f, imported.stored, {
+      handoffId: f.handoff.handoffId,
+      claimId: "claim-c",
     });
-    app.config.errorHandler = (error) => appErrors.push(error);
-    apps.push(app);
-    app.mount(container);
     await vi.waitFor(() =>
-      expect(container.textContent).toContain("This proposal does not decide presence"),
+      expect(container.textContent).toContain("Unresolved proposals need an explicit judgment."),
     );
-    expect(
-      [...container.querySelectorAll("button")].some(
-        (node) => node.textContent === "Accept original",
-      ),
-    ).toBe(false);
-    await click(container, "Modify judgment");
+    expect(slider(container, "synthetic-c").getAttribute("aria-valuetext")).toBe("Unresolved");
+    expect(slider(container, "synthetic-d").getAttribute("aria-valuetext")).toBe("Unreviewed");
+    expect(button(container, "Submit section review").disabled).toBe(true);
     expect(control(container, "Human decision rationale").value).toBe("");
-    expect(button(container, "Save modified").disabled).toBe(true);
-    await setValue(control(container, "Assessment"), "present");
-    await setValue(control(container, "Salience"), "supporting");
-    expect(
-      [...container.querySelectorAll("button")].some(
-        (node) => node.textContent === "Accept original",
-      ),
-    ).toBe(false);
-    const requests: unknown[] = [];
-    const request = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
+    await setSlider(container, "synthetic-c", "1");
+    expect(button(container, "Submit section review").disabled).toBe(true);
+    await settleUnratedDimensions(container);
+    expect(button(container, "Submit section review").disabled).toBe(false);
+    const request = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, options) => {
+      expect(String(url)).toContain("/decideSection");
       const body = JSON.parse(String(options?.body));
-      requests.push(body);
-      const saved = await f.directory.decide(f.sourceBytes, body.expectedBase, body.input);
-      return new Response(JSON.stringify(saved), { status: 200 });
+      return Response.json(
+        await f.directory.decideSection(f.sourceBytes, body.expectedBase, body.input),
+      );
     });
     try {
-      await click(container, "Save modified");
-      expect(requests).toHaveLength(1);
-      expect((await f.read())?.document.decisions[0]).toMatchObject({
-        disposition: "modified",
-        rationale: "",
-      });
-      expect((await f.read())?.document.observations[0]?.claim.assessment).toEqual({
-        presence: "present",
-        salience: "supporting",
-      });
+      await click(container, "Submit section review");
+      expect(request).toHaveBeenCalledTimes(1);
+      const saved = await f.read();
+      expect(
+        saved?.document.decisions.map((decision) => [decision.claimId, decision.disposition]),
+      ).toEqual([
+        ["claim-a", "accepted"],
+        ["claim-b", "accepted"],
+        ["claim-c", "modified"],
+      ]);
+      expect(
+        saved?.document.observations.find((entry) => entry.claim.id === "claim-c")?.claim
+          .assessment,
+      ).toEqual({ presence: "present", salience: "supporting" });
+      expect(
+        saved?.document.observations.filter((entry) => entry.origin.kind === "direct-human"),
+      ).toHaveLength(6);
+      expect(
+        saved?.document.observations.every((entry) =>
+          ["present", "absent"].includes(entry.claim.assessment.presence),
+        ),
+      ).toBe(true);
+      expect(saved?.document.handoffs[0]?.handoff).toEqual(f.handoff);
     } finally {
       request.mockRestore();
     }
@@ -898,11 +1015,7 @@ describe("ReviewWorkspace mounted workflow", () => {
     );
     expect(container.textContent).toContain("Later direct human judgment: present · supporting");
     await vi.waitFor(() => expect(container.textContent).toContain("accepted · unresolved"));
-    expect(
-      [...container.querySelectorAll("button")].some((node) =>
-        ["Accept original", "Save modified", "Decide judgment"].includes(node.textContent ?? ""),
-      ),
-    ).toBe(false);
+    expect(button(container, "Submit section review").disabled).toBe(true);
     await click(container, "View human clarification");
     expect(control(container, "Assessment").value).toBe("present");
     expect(control(container, "Salience").value).toBe("supporting");
@@ -1066,17 +1179,17 @@ describe("ReviewWorkspace mounted workflow", () => {
     expect(container.textContent).toContain(
       "Community correspondences do not establish training equivalence.",
     );
-    expect(container.querySelectorAll(".review-assessments button")).toHaveLength(9);
+    expect(container.querySelectorAll('.section-sliders input[type="range"]')).toHaveLength(9);
     expect((await f.read())?.document.observations).toEqual([]);
   });
 
-  it("saves nine independent synthetic assessments, multiple prominent positives and per-claim noncontiguous evidence through the human UI", async () => {
+  it("saves explicitly assessed dimensions together with multiple prominent positives and per-claim noncontiguous evidence", async () => {
     const f = await workspaceFixture();
     const { container, app } = await openWorkspace(f);
     await setValue(control(container, "Human reviewer"), "human-ui", "input");
     await setValue(control(container, "Source time"), "1000", "input");
     await click(container, "New section at playhead");
-    expect(container.querySelectorAll(".review-assessments button")).toHaveLength(9);
+    expect(container.querySelectorAll('.section-sliders input[type="range"]')).toHaveLength(9);
 
     await setValue(control(container, "Assessment"), "present");
     await setValue(
@@ -1116,13 +1229,19 @@ describe("ReviewWorkspace mounted workflow", () => {
     await click(container, "Save section judgments");
     const saved = await f.read();
     const claims = saved?.document.observations.map((observation) => observation.claim) ?? [];
-    expect(claims).toHaveLength(9);
+    expect(claims).toHaveLength(4);
+    expect(sectionAssessments(container)).toEqual([
+      "Prominent",
+      "Prominent",
+      "Absent",
+      "Unresolved",
+      ...Array.from({ length: 5 }, () => "Unreviewed"),
+    ]);
     expect(claims.map((claim) => claim.assessment)).toEqual([
       { presence: "present", salience: "prominent" },
       { presence: "present", salience: "prominent" },
       { presence: "absent" },
       { presence: "unresolved" },
-      ...Array.from({ length: 5 }, () => ({ presence: "unreviewed" })),
     ]);
     expect(new Set(claims.map((claim) => claim.sectionId)).size).toBe(1);
     expect(claims[0]?.evidence.noteRefs.map((ref) => ref.startMs)).toEqual([200, 1000, 1500]);
@@ -1137,12 +1256,150 @@ describe("ReviewWorkspace mounted workflow", () => {
 
     unmount(app);
     const reopened = await openWorkspace(f);
-    expect(reopened.container.textContent).toContain("Human observations · 9");
+    expect(reopened.container.textContent).toContain("Human observations · 4");
     expect((await f.read())?.document.observations).toEqual(saved?.document.observations);
   });
 
-  it("imports source-backed proposals without human decisions, then persists an explicit partial acceptance and deferral across duplicate import", async () => {
+  it("saves and reopens five direct slider judgments with source witnesses and empty optional rationales", async () => {
+    const f = await workspaceFixture(false, false, undefined, 5);
+    const { container, app } = await openWorkspace(f);
+    await setValue(control(container, "Human reviewer"), "human-ui", "input");
+    await setValue(control(container, "Source time"), "1000", "input");
+    await click(container, "New section at playhead");
+    for (const [tag, value] of [
+      ["a", "2"],
+      ["b", "1"],
+      ["c", "0"],
+      ["d", "2"],
+      ["e", "0"],
+    ] as const) {
+      await setSlider(container, `synthetic-${tag}`, value);
+    }
+    const expected = ["Prominent", "Supporting", "Absent", "Prominent", "Absent"];
+    expect(sectionAssessments(container)).toEqual(expected);
+    const initial = await f.read();
+    await click(container, "Save section judgments");
+    const saved = await f.read();
+    expect(saved?.document.revision).toBe((initial?.document.revision ?? 0) + 1);
+    expect(saved?.document.observations).toHaveLength(5);
+    expect(saved?.document.decisions).toHaveLength(0);
+    expect(
+      saved?.document.observations.every((entry) => entry.claim.evidence.rationale === ""),
+    ).toBe(true);
+    expect(
+      saved?.document.observations.every((entry) => entry.claim.evidence.noteRefs.length > 0),
+    ).toBe(true);
+    expect(new Set(saved?.document.observations.map((entry) => entry.claim.sectionId)).size).toBe(
+      1,
+    );
+    expect(new Set(saved?.document.observations.map((entry) => entry.confirmedAt)).size).toBe(1);
+    unmount(app);
+    const reopened = await openWorkspace(f);
+    await openHumanObservation(reopened.container, 2);
+    expect(sectionAssessments(reopened.container)).toEqual(expected);
+    expect(
+      reopened.container.querySelector(".section-sliders .slider-row.active strong")?.textContent,
+    ).toBe("Synthetic C");
+    expect(reopened.container.querySelector(".claim-fields legend")?.textContent).toBe(
+      "Synthetic C",
+    );
+    expect(control(reopened.container, "Evidence / judgment rationale").value).toBe("");
+    expect(control(reopened.container, "Assessment").disabled).toBe(false);
+    await click(reopened.container, "Save revised section");
+    expect((await f.read())?.document).toEqual(saved?.document);
+  });
+
+  it("reopens each handoff's own completed section from its human observation even when section and claim IDs match", async () => {
+    const f = await workspaceFixture(true, false, undefined, 5);
+    if (!f.task || !f.handoff) throw new Error("Missing task.");
+    const secondHandoff = await sealHandoffV2(f.task, {
+      handoffId: "other-partial-handoff",
+      createdAt: NOW,
+      agent: { role: "labeler", producerId: "other-producer" },
+      proposals: f.handoff.proposals.map((claim) => ({
+        ...claim,
+        assessment:
+          claim.tagId === "synthetic-a"
+            ? { presence: "absent" }
+            : claim.tagId === "synthetic-b"
+              ? { presence: "present", salience: "supporting" }
+              : { presence: "unresolved" },
+      })),
+      audit: [],
+      questions: [],
+    });
+    const { container } = await openWorkspace(f);
+    await setValue(control(container, "Human reviewer"), "human-ui", "input");
+    await upload(container, "Import agent handoff", jsonFile(f.handoff, "first-partial.json"));
+    await settleUnratedDimensions(container);
+    await click(container, "Submit section review");
+    const first = await f.read();
+    if (!first) throw new Error("Missing first section review.");
+    const firstCompletion = first.document.observations.find(
+      (entry) => entry.origin.kind === "direct-human" && entry.claim.tagId === "synthetic-d",
+    );
+    if (!firstCompletion) throw new Error("Missing first completion.");
+    const firstAssessments = ["Prominent", "Prominent", "Absent", "Absent", "Absent"];
+    expect(sectionAssessments(container)).toEqual(firstAssessments);
+
+    await upload(container, "Import agent handoff", jsonFile(secondHandoff, "second-partial.json"));
+    expect(sectionAssessments(container)).toEqual([
+      "Absent",
+      "Supporting",
+      "Unresolved",
+      "Unreviewed",
+      "Unreviewed",
+    ]);
+    await setSlider(container, "synthetic-c", "1");
+    await setSlider(container, "synthetic-d", "2");
+    await setSlider(container, "synthetic-e", "1");
+    await click(container, "Submit section review");
+    const saved = await f.read();
+    if (!saved) throw new Error("Missing second section review.");
+    const secondCompletion = saved.document.observations.find(
+      (entry) =>
+        entry.origin.kind === "direct-human" &&
+        entry.claim.tagId === "synthetic-d" &&
+        entry.id !== firstCompletion.id,
+    );
+    if (!secondCompletion) throw new Error("Missing second completion.");
+    expect(secondCompletion.claim.sectionId).toBe(firstCompletion.claim.sectionId);
+    expect(secondCompletion.claim.playbackRate).toBe(firstCompletion.claim.playbackRate);
+    expect(secondCompletion.claim.id).not.toBe(firstCompletion.claim.id);
+    expect(saved.document.observations.slice(0, first.document.observations.length)).toEqual(
+      first.document.observations,
+    );
+    expect(saved.document.decisions.slice(0, first.document.decisions.length)).toEqual(
+      first.document.decisions,
+    );
+    const secondAssessments = ["Absent", "Supporting", "Supporting", "Prominent", "Supporting"];
+    const openCompletion = async (observationId: string, assessments: string[]) => {
+      await openHumanObservation(
+        container,
+        saved.document.observations.findIndex((entry) => entry.id === observationId),
+      );
+      expect(sectionAssessments(container)).toEqual(assessments);
+      expect(
+        container.querySelector(".section-sliders .slider-row.active strong")?.textContent,
+      ).toBe("Synthetic D");
+      expect(container.querySelector(".claim-fields legend")?.textContent).toBe("Synthetic D");
+      expect(container.querySelector(".review-claim-evidence summary")?.textContent).toContain(
+        "Synthetic D",
+      );
+      expect(control(container, "Assessment").disabled).toBe(false);
+      expect(button(container, "Submit section review").disabled).toBe(false);
+    };
+    await openCompletion(firstCompletion.id, firstAssessments);
+    await openCompletion(secondCompletion.id, secondAssessments);
+    await click(container, "Submit section review");
+    expect((await f.read())?.document).toEqual(saved.document);
+    await openCompletion(firstCompletion.id, firstAssessments);
+    expect((await f.read())?.document).toEqual(saved.document);
+  });
+
+  it("recognizes prior partial decisions and submits the remaining section without rewriting accepted history", async () => {
     const f = await workspaceFixture(true);
+    if (!f.handoff) throw new Error("Missing handoff.");
     const { container } = await openWorkspace(f);
     await setValue(control(container, "Human reviewer"), "human-ui", "input");
     await upload(container, "Import agent handoff", jsonFile(f.handoff, "handoff.json"));
@@ -1152,39 +1409,41 @@ describe("ReviewWorkspace mounted workflow", () => {
       container.querySelectorAll('.claim-fields button[aria-label^="Remove witness"]'),
     ).toHaveLength(3);
     expect(container.textContent).toContain("200–1300 ms");
-    expect(button(container, "Accept original").disabled).toBe(false);
-    await click(container, "Accept original");
-    expect((await f.read())?.document.observations).toHaveLength(1);
-    expect((await f.read())?.document.decisions[0]?.rationale).toBe(
-      "Human confirmed the original proposal.",
-    );
-
-    await click(container, "Open synthetic-c");
-    expect(container.querySelector(".claim-fields legend")?.textContent).toBe("Synthetic C");
-    expect(control(container, "Source time").value).toBe("0");
-    await setValue(
-      control(container, "Human decision rationale"),
-      "The question remains open; defer this claim.",
-      "input",
-    );
-    const beforeDeferral = await f.read();
-    if (!beforeDeferral || !f.handoff) throw new Error("Missing review.");
-    await f.directory.decide(f.sourceBytes, beforeDeferral.version, {
+    const initial = await f.read();
+    if (!initial) throw new Error("Missing review.");
+    const accepted = await f.directory.decide(f.sourceBytes, initial.version, {
+      handoffId: f.handoff.handoffId,
+      claimId: "claim-a",
+      disposition: "accepted",
+      humanId: "human-ui",
+      rationale: "Previously confirmed A.",
+    });
+    const partial = await f.directory.decide(f.sourceBytes, accepted.version, {
       handoffId: f.handoff.handoffId,
       claimId: "claim-c",
       disposition: "deferred",
       humanId: "human-ui",
-      rationale: control(container, "Human decision rationale").value,
+      rationale: "Previously deferred C.",
     });
     await click(container, "Reload saved workspace");
+    await chooseProposal(container, "synthetic-a");
+    expect(slider(container, "synthetic-a").getAttribute("aria-valuetext")).toBe("Prominent");
+    expect(button(container, "Submit section review").disabled).toBe(true);
+    await settleUnratedDimensions(container);
+    await click(container, "Submit section review");
     const decided = await f.read();
-    expect(decided?.document.decisions.map((decision) => decision.disposition)).toEqual([
-      "accepted",
-      "deferred",
+    expect(decided?.document.decisions.slice(0, 2)).toEqual(partial.document.decisions);
+    expect(decided?.document.observations[0]).toEqual(partial.document.observations[0]);
+    expect(
+      decided?.document.decisions
+        .slice(2)
+        .map((decision) => [decision.claimId, decision.disposition]),
+    ).toEqual([
+      ["claim-b", "accepted"],
+      ["claim-c", "modified"],
     ]);
-    expect(decided?.document.observations).toHaveLength(1);
+    expect(decided?.document.observations).toHaveLength(9);
     expect(decided?.document.handoffs[0]?.handoff).toEqual(f.handoff);
-
     await upload(container, "Import agent handoff", jsonFile(f.handoff, "handoff-again.json"));
     expect(container.querySelector('[role="status"]')?.textContent).toContain("duplicate");
     expect((await f.read())?.document).toEqual(decided?.document);
@@ -1206,7 +1465,16 @@ describe("ReviewWorkspace mounted workflow", () => {
       "Confirmed original A.",
       "input",
     );
-    await click(container, "Accept original");
+    const imported = await f.read();
+    if (!imported || !f.handoff) throw new Error("Missing review.");
+    await f.directory.decide(f.sourceBytes, imported.version, {
+      handoffId: f.handoff.handoffId,
+      claimId: "claim-a",
+      disposition: "accepted",
+      humanId: "human-ui",
+      rationale: "Confirmed original A.",
+    });
+    await click(container, "Reload saved workspace");
     await chooseProposal(container, "synthetic-b");
     await setValue(
       control(container, "Evidence / judgment rationale"),
@@ -1295,12 +1563,8 @@ describe("ReviewWorkspace mounted workflow", () => {
       "This imported task has no local human approval.",
       "input",
     );
-    expect(
-      [...container.querySelectorAll("button")].some(
-        (node) => node.textContent === "Accept original" && !node.disabled,
-      ),
-    ).toBe(false);
-    expect(button(container, "Save modified").disabled).toBe(true);
+    await settleUnratedDimensions(container);
+    expect(button(container, "Submit section review").disabled).toBe(true);
     expect(container.querySelector(".review-handoff")?.textContent).toContain("Task base: stale");
   });
 });
@@ -1323,13 +1587,14 @@ async function workspaceFixture(
   withTask = false,
   mixedCorrespondences = false,
   calibrationPlaybackRate?: PlaybackRate,
+  tagCount = 9,
 ) {
   const f = await workflowFixture();
   const claim: ClaimV2 = { ...f.claim, id: "claim-a", tagId: "synthetic-a" };
   const foundation: FoundationV2 = {
     ...f.foundation,
     foundationId: "synthetic-ui-test",
-    tags: Array.from({ length: 9 }, (_, index) => {
+    tags: Array.from({ length: tagCount }, (_, index) => {
       const letter = String.fromCharCode(97 + index);
       const alignment = {
         catalogueUrl: "https://example.com/synthetic-catalogue",
@@ -1448,6 +1713,58 @@ function mountWorkspace() {
   return { container, app };
 }
 
+function mountRemote(
+  fixture: Awaited<ReturnType<typeof workspaceFixture>>,
+  stored: Awaited<ReturnType<WorkflowDirectoryV2["initialize"]>>,
+  openClaim: { handoffId: string; claimId: string },
+) {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const app = createApp(ReviewWorkspace, {
+    remoteSource: { ...stored, sourceBytes: Array.from(fixture.sourceBytes) },
+    openClaim,
+  });
+  app.config.errorHandler = (error) => appErrors.push(error);
+  apps.push(app);
+  app.mount(container);
+  return { container, app };
+}
+
+function syntheticName(tagId: string): string {
+  return `Synthetic ${tagId.slice(-1).toUpperCase()}`;
+}
+
+function slider(container: Element, tagId: string): HTMLInputElement {
+  const input = container.querySelector<HTMLInputElement>(
+    `.section-sliders input[aria-label="${syntheticName(tagId)} assessment"]`,
+  );
+  if (!input) throw new Error(`Missing section slider: ${tagId}`);
+  return input;
+}
+
+async function setSlider(container: Element, tagId: string, value: string): Promise<void> {
+  expect(slider(container, tagId).disabled).toBe(false);
+  await setValue(slider(container, tagId), value, "input");
+}
+
+function sectionAssessments(container: Element): string[] {
+  return [...container.querySelectorAll('.section-sliders input[type="range"]')].map(
+    (input) => input.getAttribute("aria-valuetext") ?? "",
+  );
+}
+
+/** Explicit synthetic human judgments, never an implicit missing-to-absent conversion. */
+async function settleUnratedDimensions(container: Element): Promise<void> {
+  for (const input of container.querySelectorAll<HTMLInputElement>(
+    '.section-sliders input[type="range"]',
+  )) {
+    if (["Unreviewed", "Unresolved"].includes(input.getAttribute("aria-valuetext") ?? "")) {
+      expect(input.disabled).toBe(false);
+      await setValue(input, "0", "input");
+    }
+  }
+}
+
 function unmount(app: ReturnType<typeof createApp>): void {
   app.unmount();
   apps.splice(apps.indexOf(app), 1);
@@ -1506,7 +1823,7 @@ async function idle(container: Element): Promise<void> {
   await vi.waitFor(
     () =>
       expect(container.querySelector(".review-status")?.textContent ?? "").not.toMatch(
-        /Working…|Saving judgment/,
+        /Working…|Saving judgment|Saving section/,
       ),
     { interval: 5 },
   );
@@ -1523,10 +1840,20 @@ async function toggleWitness(container: Element, index: number): Promise<void> {
   await nextTick();
 }
 
+async function openHumanObservation(container: Element, index: number): Promise<void> {
+  const list = [...container.querySelectorAll(".review-source details")].find((entry) =>
+    entry.querySelector("summary")?.textContent?.startsWith("Human observations"),
+  );
+  const target = list?.querySelectorAll<HTMLButtonElement>("button")[index];
+  if (!target) throw new Error(`Missing human observation ${index}.`);
+  target.click();
+  await idle(container);
+}
+
 async function chooseAssessment(container: Element, tagId: string): Promise<void> {
   const target = [
-    ...container.querySelectorAll<HTMLButtonElement>(".review-assessments button"),
-  ].find((button) => button.firstElementChild?.textContent === tagId);
+    ...container.querySelectorAll<HTMLButtonElement>(".section-sliders .slider-label"),
+  ].find((button) => button.getAttribute("aria-label") === `${syntheticName(tagId)} evidence`);
   if (!target) throw new Error(`Missing assessment ${tagId}.`);
   target.click();
   await nextTick();

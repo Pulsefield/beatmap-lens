@@ -22,6 +22,7 @@ import { createRemoteReviewStore, type RemoteSourceV2, type ReviewStoreV2 } from
 import { agentVersionLabel, reviewVersionOptions, skillKey } from "./annotation/workflow/review-provenance";
 import FallingNoteViewport from "./FallingNoteViewport.vue";
 import WorkflowClaimEditor from "./WorkflowClaimEditor.vue";
+import WorkflowSectionSliders from "./WorkflowSectionSliders.vue";
 import WorkspaceModeSwitch from "./WorkspaceModeSwitch.vue";
 import type { WorkspaceMode } from "./workspace-mode";
 
@@ -56,11 +57,15 @@ const activeClaimId = ref("");
 const editorOrigin = ref<"direct" | "proposal" | "observation" | "calibration">("direct");
 const activeHandoffId = ref("");
 const activeObservationId = ref("");
+const sectionObservationIds = ref<Record<string, string>>({});
+const savedSectionDrafts = shallowRef<readonly ClaimV2[]>([]);
+const sectionProposals = shallowRef<readonly ClaimV2[]>([]);
 const historicalObservation = shallowRef<HumanObservationV2>();
 const decisionNote = ref("");
 const evidenceMode = ref<"noteRefs" | "contextNoteRefs">("noteRefs");
 const selectionAnchor = ref<number>();
 const gestureClaim = shallowRef<ClaimV2>();
+const gestureDrafts = shallowRef<readonly ClaimV2[]>();
 const gestureEdge = ref("select");
 const notePage = ref(0);
 const restoring = ref(false);
@@ -74,6 +79,7 @@ const calibrationId = ref("");
 const document = computed(() => stored.value?.document);
 const activeFoundation = computed(() => document.value?.foundation ?? foundation.value);
 const activeClaim = computed(() => drafts.value.find(claim => claim.id === activeClaimId.value));
+const sectionReady = computed(() => drafts.value.length > 0 && drafts.value.every(settled));
 const claimRateMatchesPlayback = computed(() => !activeClaim.value || resolvePlaybackRate(activeClaim.value.playbackRate) === playbackRate.value);
 const expertQueue = computed(() => agentReviews.value.filter(review => review.status === "needs-expert"));
 const activeReview = computed(() => agentReviews.value.find(review => review.handoffId === activeHandoffId.value && review.claimId === activeClaimId.value));
@@ -93,17 +99,6 @@ const relatedReviews = computed(() => chartHistory.value.filter(review => active
   && Math.max(review.scope.startMs, activeClaim.value.scope.startMs) < Math.min(review.scope.endMs, activeClaim.value.scope.endMs))
   .sort((a, b) => (b.submittedAt ?? "").localeCompare(a.submittedAt ?? "")));
 const originalProposal = computed(() => document.value?.handoffs.find(entry => entry.handoff.handoffId === activeHandoffId.value)?.handoff.proposals.find(claim => claim.id === activeClaimId.value));
-const sectionReviews = computed(() => {
-  const claim = originalProposal.value;
-  if (editorOrigin.value !== "proposal" || !claim) return [];
-  return agentReviews.value.filter(review => review.handoffId === activeHandoffId.value && resolvePlaybackRate(review.claim.playbackRate) === resolvePlaybackRate(claim.playbackRate) && (claim.sectionId
-    ? review.claim.sectionId === claim.sectionId
-    : !review.claim.sectionId && review.claim.scope.startMs === claim.scope.startMs && review.claim.scope.endMs === claim.scope.endMs));
-});
-const pendingSectionReviews = computed(() => sectionReviews.value.filter(review => !review.supersededBy
-  && !(savingDecision.value?.sourceSha === source.value?.source.sha256 && savingDecision.value?.handoffId === review.handoffId && savingDecision.value?.claimId === review.claimId)
-  && !document.value?.decisions.some(decision => decision.handoffId === review.handoffId && decision.claimId === review.claimId)));
-const sectionPosition = computed(() => pendingSectionReviews.value.findIndex(review => review.claimId === activeClaimId.value));
 const finalDecision = computed(() => decisionsForClaim.value.at(-1));
 const currentObservations = computed(() => document.value ? effectiveHumanObservationsV2(document.value) : []);
 const activeObservation = computed(() => document.value?.observations.find(observation => observation.id === activeObservationId.value));
@@ -291,24 +286,24 @@ function createRateJudgment(): void {
   const original = activeClaim.value;
   if (!original || claimRateMatchesPlayback.value || busy.value || sourceLoading.value || savingDecision.value) return;
   stashDraft();
-  const claim: ClaimV2 = {
-    id: crypto.randomUUID(), sectionId: original.sectionId ?? crypto.randomUUID(),
-    tagId: original.tagId, playbackRate: playbackRate.value,
-    scope: { ...original.scope }, reviewContext: { ...original.reviewContext },
+  const sectionId = crypto.randomUUID();
+  drafts.value = completeSection(drafts.value, original).map(claim => ({
+    ...claim, id: crypto.randomUUID(), sectionId, playbackRate: playbackRate.value,
     assessment: { presence: "unreviewed" },
-    evidence: { noteRefs: [...original.evidence.noteRefs], contextNoteRefs: [...original.evidence.contextNoteRefs], rationale: "" },
-  };
-  drafts.value = [claim];
-  activeClaimId.value = claim.id;
+    evidence: { ...claim.evidence, rationale: "" },
+  }));
+  activeClaimId.value = drafts.value.find(claim => claim.tagId === original.tagId)?.id ?? "";
   editorOrigin.value = "direct";
   activeObservationId.value = "";
+  sectionObservationIds.value = {};
+  savedSectionDrafts.value = [];
   activeHandoffId.value = "";
   historicalObservation.value = undefined;
   calibrationId.value = "";
   decisionNote.value = "";
   editorBase.value = stored.value?.version;
   editorReviewRevision.value = document.value?.reviewRevision;
-  status.value = `New ${playbackRate.value}× judgment. Assess this rate before saving.`;
+  status.value = `New ${playbackRate.value}× section. Assess this rate before saving.`;
 }
 
 function setVisualSpeed(event: Event): void {
@@ -339,7 +334,7 @@ function workspaceKeydown(event: KeyboardEvent): void {
   const target = event.target;
   if (target instanceof Element && target.closest("input, textarea, select, [contenteditable=true]")) return;
   if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
-    if (editorOrigin.value !== "proposal" || calibrationId.value || pendingSectionReviews.value.length < 2) return;
+    if (calibrationId.value || drafts.value.length < 2) return;
     event.preventDefault();
     switchSectionTag(event.key === "ArrowLeft" ? -1 : 1);
     return;
@@ -356,7 +351,30 @@ function workspaceKeydown(event: KeyboardEvent): void {
   }
 }
 
-function draftKey(kind = editorOrigin.value === "proposal" ? `proposal:${activeHandoffId.value}:${activeClaimId.value}` : "direct", rate = resolvePlaybackRate(activeClaim.value?.playbackRate)): string {
+function sectionIdentity(claim: ClaimV2): string {
+  return `${claim.sectionId ?? `${claim.scope.startMs}-${claim.scope.endMs}`}:${resolvePlaybackRate(claim.playbackRate)}x`;
+}
+
+function sameSection(left: ClaimV2, right: ClaimV2): boolean {
+  return resolvePlaybackRate(left.playbackRate) === resolvePlaybackRate(right.playbackRate)
+    && (left.sectionId ? left.sectionId === right.sectionId
+      : !right.sectionId && left.scope.startMs === right.scope.startMs && left.scope.endMs === right.scope.endMs);
+}
+
+function completeSection(claims: readonly ClaimV2[], anchor: ClaimV2): ClaimV2[] {
+  return activeFoundation.value.tags.map(tag => {
+    const existing = claims.find(claim => claim.tagId === tag.id);
+    return existing ? JSON.parse(serializeCanonicalJson(existing)) : {
+      id: crypto.randomUUID(), ...(anchor.sectionId ? { sectionId: anchor.sectionId } : {}),
+      tagId: tag.id, playbackRate: resolvePlaybackRate(anchor.playbackRate),
+      scope: { ...anchor.scope }, reviewContext: { ...anchor.reviewContext },
+      assessment: { presence: "unreviewed" },
+      evidence: { noteRefs: [...anchor.evidence.noteRefs], contextNoteRefs: [...anchor.evidence.contextNoteRefs], rationale: "" },
+    };
+  });
+}
+
+function draftKey(kind = editorOrigin.value === "proposal" && activeClaim.value ? `proposal:${activeHandoffId.value}:section:${sectionIdentity(activeClaim.value)}` : "direct", rate = resolvePlaybackRate(activeClaim.value?.playbackRate)): string {
   if (kind === "direct" && rate !== 1) kind = `direct:${rate}x`;
   return `beatmap-lens-review-draft:${source.value?.source.sha256}:${stored.value?.document.documentId ?? "unbound"}:${activeFoundation.value.foundationId}:${activeFoundation.value.revision}:${kind}`;
 }
@@ -379,6 +397,8 @@ function restoreSection(): void {
   activeClaimId.value = saved.activeClaimId;
   editorOrigin.value = "direct";
   activeObservationId.value = "";
+  sectionObservationIds.value = {};
+  savedSectionDrafts.value = [];
   activeHandoffId.value = "";
   decisionNote.value = saved.decisionNote;
   editorBase.value = saved.base;
@@ -399,6 +419,7 @@ watch(() => props.remoteSource, async (remote, _previous, onCleanup) => {
       restoring.value = true;
       directory.value = createRemoteReviewStore(remote.document.source.sha256);
       directoryName.value = "Connected inbox";
+      chartHistoryVersion.value = "";
       sourceBytes.value = bytes;
       source.value = inspected;
       foundation.value = remote.document.foundation;
@@ -435,7 +456,10 @@ function openRequestedClaim(): void {
 
 watch(humanId, value => localStorage.setItem("beatmap-lens-review-human", value));
 watch([drafts, activeClaimId, editorOrigin, activeHandoffId, decisionNote], stashDraft, { deep: true, flush: "post" });
-watch(activeClaimId, () => { notePage.value = 0; });
+watch(activeClaimId, () => {
+  notePage.value = 0;
+  if (editorOrigin.value === "observation" && !historicalObservation.value) activeObservationId.value = sectionObservationIds.value[activeClaimId.value] ?? "";
+});
 watch(document, async current => {
   if (!current) { handoffStatuses.value = {}; agentReviews.value = []; return; }
   const reviews = await readAgentReviewsV2(current);
@@ -473,6 +497,7 @@ async function loadSource(bytes: Uint8Array, task?: TaskPacketV2): Promise<void>
   activeClaimId.value = "";
   calibrationId.value = "";
   source.value = inspected;
+  chartHistoryVersion.value = "";
   sourceBytes.value = bytes;
   stored.value = undefined;
   pendingTask.value = task;
@@ -604,6 +629,8 @@ function newSection(): void {
   activeClaimId.value = drafts.value[0]?.id ?? "";
   editorOrigin.value = "direct";
   activeObservationId.value = "";
+  sectionObservationIds.value = {};
+  savedSectionDrafts.value = [];
   activeHandoffId.value = "";
   decisionNote.value = "";
   editorBase.value = stored.value?.version;
@@ -611,10 +638,46 @@ function newSection(): void {
   calibrationId.value = "";
 }
 
+function overlapsNote(note: StableNoteRefV1, range: TimeRangeV1): boolean {
+  return note.startMs < range.endMs && (note.kind === "long" ? note.endMs > range.startMs : note.startMs >= range.startMs);
+}
+
+function atSectionRange(claim: ClaimV2, scope: TimeRangeV1, reviewContext: TimeRangeV1): ClaimV2 {
+  const noteRefs = claim.evidence.noteRefs.filter(note => overlapsNote(note, scope));
+  const displaced = claim.evidence.noteRefs.filter(note => !overlapsNote(note, scope));
+  const contextNoteRefs = [...new Map([...claim.evidence.contextNoteRefs, ...displaced].filter(note => overlapsNote(note, reviewContext)).map(note => [stableNoteRefKey(note), note])).values()];
+  const { transition, boundaryUncertainty, ...base } = claim;
+  const start = boundaryUncertainty?.start;
+  const end = boundaryUncertainty?.end;
+  const boundary = {
+    ...(start && scope.startMs >= start.startMs && scope.startMs <= start.endMs ? { start } : {}),
+    ...(end && scope.endMs >= end.startMs && scope.endMs <= end.endMs ? { end } : {}),
+  };
+  return { ...base, scope: { ...scope }, reviewContext: { ...reviewContext }, evidence: { ...claim.evidence, noteRefs, contextNoteRefs },
+    ...(transition && transition.range.startMs >= scope.startMs && transition.range.endMs <= scope.endMs ? { transition } : {}),
+    ...(Object.keys(boundary).length ? { boundaryUncertainty: boundary } : {}),
+  };
+}
+
 function updateClaim(claim: ClaimV2): void {
   if (!canEdit.value) return;
   playback?.pause();
-  drafts.value = drafts.value.map(current => current.id === claim.id ? claim : current);
+  const previous = drafts.value.find(current => current.id === claim.id);
+  const rangeChanged = previous && (serializeCanonicalJson(previous.scope) !== serializeCanonicalJson(claim.scope)
+    || serializeCanonicalJson(previous.reviewContext) !== serializeCanonicalJson(claim.reviewContext));
+  if (previous && serializeCanonicalJson(previous.assessment) !== serializeCanonicalJson(claim.assessment)
+    && previous.evidence.rationale === claim.evidence.rationale) claim = { ...claim, evidence: { ...claim.evidence, rationale: "" } };
+  drafts.value = drafts.value.map(current => {
+    const next = current.id === claim.id ? claim : current;
+    return rangeChanged ? atSectionRange(next, claim.scope, claim.reviewContext) : next;
+  });
+  sectionComplete.value = false;
+}
+
+function updateSectionAssessment(claim: ClaimV2): void {
+  activeClaimId.value = claim.id;
+  const noteRefs = claim.evidence.noteRefs.length ? claim.evidence.noteRefs : noteIndex.value.notesInRange(claim.scope).map(createStableNoteRefV1);
+  updateClaim({ ...claim, evidence: { ...claim.evidence, noteRefs } });
 }
 
 function focus(range: TimeRangeV1): void {
@@ -625,45 +688,59 @@ function focus(range: TimeRangeV1): void {
 }
 
 function openProposal(handoffId: string, claim: ClaimV2, keepViewport = false): void {
+  stashDraft();
   historicalObservation.value = undefined;
   sectionComplete.value = false;
-  stashDraft();
-  const cached = localStorage.getItem(draftKey(`proposal:${handoffId}:${claim.id}`));
+  const proposals = document.value?.handoffs.find(entry => entry.handoff.handoffId === handoffId)?.handoff.proposals.filter(current => sameSection(claim, current)) ?? [claim];
+  sectionProposals.value = proposals;
+  const observations = currentObservations.value;
+  const siblings = proposals.map(proposal => {
+    const decision = document.value?.decisions.filter(entry => entry.handoffId === handoffId && entry.claimId === proposal.id).at(-1);
+    return document.value?.observations.find(entry => entry.id === decision?.observationId)?.claim ?? proposal;
+  });
+  const completionId = (tagId: string) => `section-completion:${handoffId}:${sectionIdentity(claim)}:${tagId}`;
+  const additions = observations.filter(entry => entry.origin.kind === "direct-human" && entry.claim.id === completionId(entry.claim.tagId)
+    && !proposals.some(proposal => proposal.tagId === entry.claim.tagId));
+  const latest = document.value?.decisions.filter(entry => entry.handoffId === handoffId && proposals.some(proposal => proposal.id === entry.claimId) && entry.observationId).at(-1);
+  const anchor = document.value?.observations.find(entry => entry.id === latest?.observationId)?.claim ?? claim;
+  const current = completeSection([...siblings, ...additions.map(entry => entry.claim)], anchor).map(entry => atSectionRange({
+    ...entry, id: proposals.some(proposal => proposal.tagId === entry.tagId) ? entry.id : completionId(entry.tagId),
+  }, anchor.scope, anchor.reviewContext));
+  const key = draftKey(`proposal:${handoffId}:section:${sectionIdentity(claim)}`);
+  const cached = localStorage.getItem(key) ?? localStorage.getItem(draftKey(`proposal:${handoffId}:${claim.id}`));
   const saved = cached ? JSON.parse(cached) : undefined;
-  const decision = document.value?.decisions.filter(entry => entry.handoffId === handoffId && entry.claimId === claim.id).at(-1);
-  const observation = document.value?.observations.find(entry => entry.id === decision?.observationId);
-  const currentClaim = observation?.claim ?? claim;
   const currentDraft = saved?.reviewRevision === document.value?.reviewRevision ? saved : undefined;
-  drafts.value = currentDraft?.drafts ?? [JSON.parse(serializeCanonicalJson(currentClaim))];
-  activeClaimId.value = claim.id;
+  drafts.value = currentDraft ? current.map(entry => currentDraft.drafts.find((draft: ClaimV2) => draft.tagId === entry.tagId) ?? entry) : current;
+  savedSectionDrafts.value = current;
+  activeClaimId.value = drafts.value.find(entry => entry.tagId === claim.tagId)?.id ?? drafts.value[0]?.id ?? "";
   activeHandoffId.value = handoffId;
   editorOrigin.value = "proposal";
   activeObservationId.value = "";
-  proposalEditing.value = currentDraft?.proposalEditing ?? false;
-  decisionNote.value = currentDraft?.decisionNote ?? decision?.rationale ?? "";
+  sectionObservationIds.value = Object.fromEntries(additions.map(entry => [entry.claim.id, entry.id]));
+  proposalEditing.value = true;
+  decisionNote.value = currentDraft?.decisionNote ?? "";
   editorBase.value = currentDraft?.base ?? stored.value?.version;
   editorReviewRevision.value = currentDraft?.reviewRevision ?? document.value?.reviewRevision;
   calibrationId.value = "";
-  if (!keepViewport) focus(activeClaim.value?.reviewContext ?? currentClaim.reviewContext);
+  if (!keepViewport) focus(activeClaim.value?.reviewContext ?? claim.reviewContext);
 }
 
-function beginProposalRevision(): void {
-  if (finalObservation.value) {
-    drafts.value = [JSON.parse(serializeCanonicalJson(finalObservation.value.claim))];
-    decisionNote.value = finalDecision.value?.rationale ?? "";
-    editorBase.value = stored.value?.version;
-    editorReviewRevision.value = document.value?.reviewRevision;
-    focus(finalObservation.value.claim.reviewContext);
-  }
-  proposalEditing.value = true;
-}
 
 function openObservation(observation: HumanObservationV2): void {
-  historicalObservation.value = undefined;
   if (observation.origin.kind === "agent-proposal") {
     openQuestion(observation.origin.handoffId, observation.origin.claimId);
     return;
   }
+  for (const { handoff } of document.value?.handoffs ?? []) {
+    const anchor = handoff.proposals.find(claim => observation.claim.id === `section-completion:${handoff.handoffId}:${sectionIdentity(claim)}:${observation.claim.tagId}`);
+    if (anchor) {
+      openProposal(handoff.handoffId, anchor);
+      activeClaimId.value = drafts.value.find(claim => claim.tagId === observation.claim.tagId)?.id ?? activeClaimId.value;
+      return;
+    }
+  }
+  stashDraft();
+  historicalObservation.value = undefined;
   const current = currentObservations.value.find(entry => {
     let candidate: HumanObservationV2 | undefined = entry;
     while (candidate) {
@@ -673,17 +750,19 @@ function openObservation(observation: HumanObservationV2): void {
     }
     return false;
   }) ?? observation;
-  const claim = current.claim;
-  stashDraft();
-  drafts.value = [JSON.parse(serializeCanonicalJson(claim))];
+  const siblings = currentObservations.value.filter(entry => entry.origin.kind === "direct-human" && sameSection(entry.claim, current.claim));
+  drafts.value = completeSection(siblings.map(entry => entry.claim), current.claim);
+  savedSectionDrafts.value = JSON.parse(serializeCanonicalJson(drafts.value));
+  sectionObservationIds.value = Object.fromEntries(siblings.map(entry => [entry.claim.id, entry.id]));
   activeObservationId.value = current.id;
   editorBase.value = stored.value?.version;
   editorReviewRevision.value = document.value?.reviewRevision;
-  activeClaimId.value = claim.id;
+  activeClaimId.value = current.claim.id;
   editorOrigin.value = "observation";
   activeHandoffId.value = "";
   calibrationId.value = "";
-  focus(claim.reviewContext);
+  sectionComplete.value = false;
+  focus(current.claim.reviewContext);
 }
 
 function openHistoricalObservation(observation: HumanObservationV2 | undefined): void {
@@ -703,7 +782,8 @@ function reviseFromHistoricalObservation(): void {
   const prior = historicalObservation.value;
   if (!prior) return;
   openObservation(prior);
-  drafts.value = [JSON.parse(serializeCanonicalJson(prior.claim))];
+  const current = drafts.value.find(claim => claim.tagId === prior.claim.tagId);
+  if (current) updateClaim({ ...JSON.parse(serializeCanonicalJson(prior.claim)), id: current.id });
   proposalEditing.value = true;
   focus(prior.claim.reviewContext);
 }
@@ -735,12 +815,14 @@ function beginRange(anchorMs: number, kind = "select"): void {
   playback?.pause();
   selectionAnchor.value = anchorMs;
   gestureClaim.value = activeClaim.value;
+  gestureDrafts.value = drafts.value;
   gestureEdge.value = kind;
 }
 
 function cancelRange(): void {
-  if (gestureClaim.value) updateClaim(gestureClaim.value);
+  if (gestureDrafts.value) drafts.value = gestureDrafts.value;
   gestureClaim.value = undefined;
+  gestureDrafts.value = undefined;
   selectionAnchor.value = undefined;
 }
 
@@ -756,97 +838,99 @@ function dragRange(timeMs: number): void {
   } });
 }
 
+
 function saveSection(): void {
-  if (!claimRateMatchesPlayback.value) return;
-  void run(async () => {
-    if (!directory.value || !sourceBytes.value || !stored.value) return;
-    const sourceSha = stored.value.document.source.sha256;
-    const key = editorOrigin.value === "direct" ? draftKey("direct") : undefined;
-    const claimId = activeClaimId.value;
-    const supersedesObservationId = editorOrigin.value === "observation" ? activeObservationId.value : undefined;
-    const saved = await directory.value.addObservations(sourceBytes.value, stored.value.version, { claims: drafts.value, humanId: humanId.value, ...(supersedesObservationId ? { supersedesObservationId } : {}) });
-    if (key) localStorage.removeItem(key);
+  void submitSection(false);
+}
+
+function decideSection(): void {
+  void submitSection(true);
+}
+
+async function submitSection(proposal: boolean): Promise<void> {
+  if (!claimRateMatchesPlayback.value || busy.value || sourceLoading.value || savingDecision.value || !directory.value || !sourceBytes.value || !stored.value || !activeClaim.value || !humanId.value.trim()) return;
+  if (draftIsStale.value || (proposal && !sectionReady.value)) return;
+  const sourceSha = stored.value.document.source.sha256;
+  const anchorId = activeClaim.value.id;
+  const handoffId = activeHandoffId.value;
+  const key = proposal || editorOrigin.value === "direct" ? draftKey() : undefined;
+  const snapshot = JSON.parse(serializeCanonicalJson(drafts.value)) as ClaimV2[];
+  const storedBefore = stored.value;
+  const sameClaim = (left: ClaimV2, right: ClaimV2) => serializeCanonicalJson(left) === serializeCanonicalJson(right);
+  const observations = snapshot.filter(claim => claim.assessment.presence !== "unreviewed"
+    && (!proposal || !sectionProposals.value.some(original => original.id === claim.id))
+    && (!sectionObservationIds.value[claim.id] || !savedSectionDrafts.value.some(saved => saved.id === claim.id && sameClaim(saved, claim))));
+  const supersedesObservationIds = Object.fromEntries(observations.flatMap(claim => {
+    const priorId = sectionObservationIds.value[claim.id];
+    return priorId ? [[claim.id, priorId]] : [];
+  }));
+  const decisions = proposal ? snapshot.flatMap(claim => {
+    const original = sectionProposals.value.find(entry => entry.id === claim.id);
+    if (!original) return [];
+    const prior = storedBefore.document.decisions.filter(entry => entry.handoffId === handoffId && entry.claimId === claim.id).at(-1);
+    const previous = storedBefore.document.observations.find(entry => entry.id === prior?.observationId)?.claim;
+    if (previous && sameClaim(previous, claim)) return [];
+    const accepted = sameClaim(original, claim) && activeTrust.value?.foundation !== "changed";
+    return [{ handoffId, claimId: claim.id, disposition: accepted ? "accepted" as const : "modified" as const,
+      rationale: decisionNote.value.trim() || (accepted ? "Human confirmed the original proposal." : "Human revised the section assessments."),
+      ...(!accepted ? { modifiedClaim: claim } : {}) }];
+  }) : [];
+  if (!observations.length && !decisions.length) { status.value = "All section judgments are already saved."; return; }
+  stashDraft();
+  savingDecision.value = { sourceSha, handoffId, claimId: anchorId };
+  error.value = "";
+  try {
+    const input = { humanId: humanId.value, ...(Object.keys(supersedesObservationIds).length ? { supersedesObservationIds } : {}) };
+    const saved = proposal
+      ? await directory.value.decideSection(sourceBytes.value, storedBefore.version, { ...input, decisions, observations })
+      : await directory.value.addObservations(sourceBytes.value, storedBefore.version, { ...input, claims: observations });
     if (source.value?.source.sha256 === sourceSha) {
-      if (saved.version.revision >= stored.value.version.revision) stored.value = saved;
-      if (activeClaimId.value === claimId) {
-        status.value = "Section judgments saved. Unreviewed dimensions remain unreviewed.";
-        editorOrigin.value = "observation";
-        const observation = saved.document.observations.filter(entry => entry.claim.id === claimId).at(-1);
-        activeObservationId.value = observation?.id ?? "";
-        if (observation) drafts.value = [JSON.parse(serializeCanonicalJson(observation.claim))];
+      if (!stored.value || saved.version.revision >= stored.value.version.revision) stored.value = saved;
+      const sameEditor = activeHandoffId.value === handoffId && drafts.value.some(claim => claim.id === anchorId);
+      if (sameEditor) {
+        const effectiveDirect = effectiveHumanObservationsV2(saved.document).filter(entry => entry.origin.kind === "direct-human");
+        const savedClaims = snapshot.map(claim => {
+          if (proposal && sectionProposals.value.some(entry => entry.id === claim.id)) {
+            const decision = saved.document.decisions.filter(entry => entry.handoffId === handoffId && entry.claimId === claim.id).at(-1);
+            return saved.document.observations.find(entry => entry.id === decision?.observationId)?.claim ?? claim;
+          }
+          return effectiveDirect.find(entry => entry.claim.id === claim.id)?.claim ?? claim;
+        });
+        const unchangedDuringSave = sameClaimList(snapshot, drafts.value);
+        if (unchangedDuringSave) drafts.value = JSON.parse(serializeCanonicalJson(savedClaims));
+        savedSectionDrafts.value = JSON.parse(serializeCanonicalJson(savedClaims));
+        const direct = effectiveHumanObservationsV2(saved.document).filter(entry => entry.origin.kind === "direct-human" && drafts.value.some(claim => claim.id === entry.claim.id));
+        sectionObservationIds.value = Object.fromEntries(direct.map(entry => [entry.claim.id, entry.id]));
+        if (!proposal) {
+          editorOrigin.value = "observation";
+          activeObservationId.value = direct.find(entry => entry.claim.id === activeClaimId.value)?.id ?? "";
+        }
         editorBase.value = saved.version;
         editorReviewRevision.value = saved.document.reviewRevision;
+        sectionComplete.value = unchangedDuringSave;
+        status.value = unchangedDuringSave ? "Section judgments saved together." : "Section saved. Your newer edits are ready to submit.";
+        if (unchangedDuringSave && key) localStorage.removeItem(key);
+        else stashDraft();
       }
     }
     emit("saved");
-  });
+  } catch (cause) {
+    status.value = "Section not saved · all draft judgments retained";
+    error.value = cause instanceof Error ? cause.message : String(cause);
+    stashDraft();
+  } finally {
+    savingDecision.value = undefined;
+  }
 }
 
-function decide(disposition: "accepted" | "modified"): void {
-  if (!claimRateMatchesPlayback.value || busy.value || sourceLoading.value || savingDecision.value || !directory.value || !sourceBytes.value || !stored.value || !activeClaim.value) return;
-  const sourceSha = stored.value.document.source.sha256;
-  const claimId = activeClaim.value.id;
-  const handoffId = activeHandoffId.value;
-  const key = draftKey();
-  const snapshot = { drafts: drafts.value, claimId, handoffId, proposalEditing: proposalEditing.value,
-    note: decisionNote.value, base: editorBase.value, reviewRevision: editorReviewRevision.value };
-  const pending = pendingSectionReviews.value;
-  const position = pending.findIndex(review => review.claimId === claimId);
-  const revising = Boolean(finalDecision.value);
-  const next = revising ? undefined : [...pending.slice(position + 1), ...pending.slice(0, position)][0];
-  const store = directory.value;
-  const bytes = sourceBytes.value;
-  const base = stored.value.version;
-  const input = { handoffId, claimId, disposition, humanId: humanId.value,
-    rationale: decisionNote.value.trim() || (disposition === "accepted" ? "Human confirmed the original proposal." : ""),
-    ...(disposition === "modified" ? { modifiedClaim: activeClaim.value } : {}) };
-  stashDraft();
-  savingDecision.value = { sourceSha, handoffId, claimId };
-  error.value = "";
-  if (next) openProposal(next.handoffId, next.claim, true);
-  else if (!revising) { drafts.value = []; activeClaimId.value = ""; sectionComplete.value = true; }
-  // Advance the presentation immediately; only the canonical response confirms a decision.
-  void (async () => {
-    try {
-      const saved = await store.decide(bytes, base, input);
-      localStorage.removeItem(key);
-      if (source.value?.source.sha256 === sourceSha) {
-        if (!stored.value || saved.version.revision >= stored.value.version.revision) stored.value = saved;
-        status.value = revising ? "Human judgment revised. Earlier decisions remain in history." : next ? `${disposition} · saved. Next tag ready.` : "All section judgments reviewed.";
-        if (revising && activeHandoffId.value === handoffId && activeClaimId.value === claimId) {
-          proposalEditing.value = false;
-          editorBase.value = saved.version;
-          editorReviewRevision.value = saved.document.reviewRevision;
-        }
-      }
-      emit("saved");
-    } catch (cause) {
-      if (source.value?.source.sha256 === sourceSha) {
-        stashDraft();
-        drafts.value = snapshot.drafts;
-        activeClaimId.value = snapshot.claimId;
-        activeHandoffId.value = snapshot.handoffId;
-        proposalEditing.value = snapshot.proposalEditing;
-        decisionNote.value = snapshot.note;
-        editorBase.value = snapshot.base;
-        editorReviewRevision.value = snapshot.reviewRevision;
-        editorOrigin.value = "proposal";
-        sectionComplete.value = false;
-      }
-      status.value = "Judgment not saved · draft retained";
-      error.value = cause instanceof Error ? cause.message : String(cause);
-    } finally {
-      savingDecision.value = undefined;
-    }
-  })();
+function sameClaimList(left: readonly ClaimV2[], right: readonly ClaimV2[]): boolean {
+  return serializeCanonicalJson(left) === serializeCanonicalJson(right);
 }
 
 function switchSectionTag(direction: -1 | 1): void {
-  if (busy.value || sourceLoading.value || pendingSectionReviews.value.length < 2) return;
-  const reviews = pendingSectionReviews.value;
-  const index = sectionPosition.value < 0 ? (direction === 1 ? 0 : reviews.length - 1) : (sectionPosition.value + direction + reviews.length) % reviews.length;
-  const next = reviews[index];
-  if (next) openProposal(next.handoffId, next.claim, true);
+  if (sourceLoading.value || drafts.value.length < 2) return;
+  const index = drafts.value.findIndex(claim => claim.id === activeClaimId.value);
+  activeClaimId.value = drafts.value[(index + direction + drafts.value.length) % drafts.value.length]?.id ?? "";
 }
 
 function latestDecision(handoffId: string, claimId: string): string {
@@ -929,10 +1013,10 @@ onBeforeUnmount(() => { window.removeEventListener("keydown", workspaceKeydown);
         <button type="button" :disabled="busy || sourceLoading || !stored" @click="reload">Reload saved workspace</button>
         </template>
       </template>
-      <section v-if="!remoteSource && document?.handoffs.length" class="review-section">
-        <h2>Expert review · {{ expertQueue.length }}</h2>
-        <p class="review-copy">{{ routineCount }} agent-reviewed · {{ agentActionCount }} awaiting agent work. Machine review is separate from human confirmation.</p>
-        <p v-if="!expertQueue.length" class="review-copy">No open expert cases. All submissions remain available below for inspection.</p>
+      <section v-if="document?.handoffs.length" class="review-section">
+        <h2 v-if="!remoteSource">Expert review · {{ expertQueue.length }}</h2>
+        <p v-if="!remoteSource" class="review-copy">{{ routineCount }} agent-reviewed · {{ agentActionCount }} awaiting agent work. Machine review is separate from human confirmation.</p>
+        <p v-if="!remoteSource && !expertQueue.length" class="review-copy">No open expert cases. All submissions remain available below for inspection.</p>
         <template v-for="entry in document.handoffs" :key="entry.handoff.handoffId">
           <div v-if="!entry.handoff.proposals.length && entry.handoff.questions.length" class="review-question">
             <strong>Legacy questions · curator review</strong>
@@ -946,7 +1030,7 @@ onBeforeUnmount(() => { window.removeEventListener("keydown", workspaceKeydown);
           <button type="button" @click="openProposal(review.handoffId, review.claim)">Review {{ review.claim.tagId }} · {{ review.claim.scope.startMs }}–{{ review.claim.scope.endMs }} ms · {{ resolvePlaybackRate(review.claim.playbackRate) }}×</button>
         </div>
         <button v-if="expertQueue.length > expertLimit" type="button" @click="expertLimit += 5">Show more · {{ expertQueue.length - expertLimit }} remaining</button>
-        <details class="review-all-agent-work"><summary>Review history · {{ agentReviews.length }} claims</summary>
+        <details class="review-all-agent-work" :open="!!remoteSource"><summary>Review history · {{ agentReviews.length }} claims</summary>
         <label>History labeler version<select v-model="chartHistoryVersion"><option value="">All versions</option><option v-for="option in chartVersions" :key="option.key" :value="option.key">{{ option.label }} · {{ option.count }}</option></select></label>
         <div v-for="entry in visibleHandoffs" :key="entry.handoff.handoffId" class="review-handoff">
           <strong>{{ entry.handoff.agent.producerId }} · {{ entry.handoff.agent.role }}</strong>
@@ -982,7 +1066,7 @@ onBeforeUnmount(() => { window.removeEventListener("keydown", workspaceKeydown);
       <div v-for="page in calibrationPages" :key="page.index" v-html="page.svg" />
     </section>
     <aside class="review-details review-rail" :class="{ 'mobile-active': mobilePanel === 'details' }">
-      <div class="review-status" role="status">{{ savingDecision ? (sectionComplete ? 'Saving judgment… · final tag' : 'Saving judgment… · next tag ready') : busy || sourceLoading ? 'Working…' : status }}</div>
+      <div class="review-status" role="status">{{ savingDecision ? 'Saving section…' : busy || sourceLoading ? 'Working…' : status }}</div>
       <p v-if="error" class="review-error" role="alert">{{ error }}</p>
       <template v-if="source">
         <section class="review-transport" aria-label="Playback controls">
@@ -1020,8 +1104,8 @@ onBeforeUnmount(() => { window.removeEventListener("keydown", workspaceKeydown);
             </div>
           </details>
         </section>
-        <p v-if="editorOrigin === 'proposal' && sectionComplete" class="review-section-complete" role="status">{{ savingDecision ? "Saving final judgment…" : "All section judgments reviewed." }}</p>
-        <div v-if="drafts.length > 1" class="review-assessments"><button v-for="claim in drafts" :key="claim.id" type="button" :class="{ 'is-active': activeClaimId === claim.id }" @click="activeClaimId = claim.id"><span>{{ claim.tagId }}</span><span>{{ claim.assessment.presence === 'present' ? claim.assessment.salience : claim.assessment.presence }}</span></button></div>
+        <p v-if="savingDecision" class="review-section-complete" role="status">Saving section…</p>
+        <p v-else-if="sectionComplete" class="review-section-complete" role="status">Section judgments saved together.</p>
         <p v-if="activeClaim" class="review-kicker">{{ editorOrigin === 'proposal' ? 'Agent proposal' : editorOrigin === 'observation' ? 'Saved human observation' : 'Human section draft' }} · {{ resolvePlaybackRate(activeClaim.playbackRate) }}×</p>
         <template v-if="activeClaim">
           <section v-if="!claimRateMatchesPlayback" class="review-rate-comparison" aria-label="Playback rate comparison">
@@ -1029,42 +1113,33 @@ onBeforeUnmount(() => { window.removeEventListener("keydown", workspaceKeydown);
             <div class="review-actions"><button type="button" :disabled="busy || sourceLoading" @click="setPlaybackRate(resolvePlaybackRate(activeClaim.playbackRate))">Return to judgment rate</button><button type="button" :disabled="busy || sourceLoading || !!savingDecision" @click="createRateJudgment">Create judgment at {{ playbackRate }}×</button></div>
           </section>
           <section v-if="editorOrigin === 'proposal' && activeReview" class="review-judgment-status">
-            <p class="review-kicker">{{ latestDecision(activeHandoffId, activeClaim.id) }} · <span :title="activeHandoff ? agentVersionLabel(activeHandoff.agent) : ''">version {{ activeHandoff?.agent.skill?.sha256.slice(0, 8) ?? 'unversioned' }}</span></p>
+            <p class="review-kicker">{{ latestDecision(activeHandoffId, activeClaim.id) }} · <span :title="activeHandoff ? agentVersionLabel(activeHandoff.agent) : ''">{{ activeHandoff ? agentVersionLabel(activeHandoff.agent) : 'Unversioned' }}</span></p>
             <p class="review-copy" v-if="activeTrust">Evidence context · Source {{ activeTrust.source }} · Foundation {{ activeTrust.foundation }} · Human context {{ activeTrust.humanContext }}</p>
             <p v-if="activeTrust?.foundation === 'changed'" class="review-copy">The definitions changed after this proposal. Save your judgment using the current definitions.</p>
             <p v-if="activeReview.question">{{ activeReview.question }}</p>
             <template v-if="activeReview.supersededBy"><p class="review-copy">This proposal has been replaced.</p><button type="button" @click="openQuestion(activeReview.supersededBy.handoffId, activeReview.supersededBy.claimId)">View replacement judgment</button></template>
           </section>
-          <section v-if="remoteSource && editorOrigin === 'proposal'" class="review-section review-proposed-judgment">
-            <header class="review-claim-heading">
-              <h2>{{ activeFoundation.tags.find(tag => tag.id === activeClaim?.tagId)?.displayName }}</h2>
-              <nav v-if="pendingSectionReviews.length && !finalDecision" class="review-tag-navigation" aria-label="Section tags">
-                <span aria-live="polite" :aria-label="`${sectionPosition + 1} of ${pendingSectionReviews.length} remaining tags`">{{ sectionPosition + 1 }}/{{ pendingSectionReviews.length }}</span>
-                <button type="button" aria-label="Next tag" title="Next tag · → (← for previous)" :disabled="sourceLoading || pendingSectionReviews.length < 2" @click="switchSectionTag(1)">→</button>
-              </nav>
-            </header>
-            <template v-if="!proposalEditing">
-            <p>{{ activeClaim.assessment.presence }}{{ activeClaim.assessment.presence === 'present' ? ` · ${activeClaim.assessment.salience}` : '' }}</p>
-            <p class="review-kicker">{{ (activeClaim.scope.startMs / 1000).toFixed(3) }}–{{ (activeClaim.scope.endMs / 1000).toFixed(3) }} s</p>
+          <section class="review-section review-proposed-judgment">
+            <header class="review-claim-heading"><h2>Section judgments</h2><span class="review-kicker">{{ (activeClaim.scope.startMs / 1000).toFixed(3) }}–{{ (activeClaim.scope.endMs / 1000).toFixed(3) }} s</span></header>
+            <WorkflowSectionSliders :claims="drafts" :tags="activeFoundation.tags" :disabled="!canEdit" :active-claim-id="activeClaimId" @update:claim="updateSectionAssessment" @select="activeClaimId = $event" />
+            <p v-if="drafts.some(claim => claim.assessment.presence === 'unreviewed')" class="review-copy">Unreviewed dimensions have no judgment yet.</p>
             <div class="review-actions"><button type="button" @click="focus(activeClaim.scope)">View claim range</button><button type="button" @click="focus(activeClaim.reviewContext)">View context</button></div>
-
-            </template>
           </section>
-          <template v-if="!remoteSource || editorOrigin !== 'proposal' || proposalEditing">
+          <details class="review-section review-claim-evidence"><summary>{{ activeFoundation.tags.find(tag => tag.id === activeClaim?.tagId)?.displayName }} · evidence &amp; section range</summary>
             <WorkflowClaimEditor :model-value="activeClaim" :tags="activeFoundation.tags" :disabled="!canEdit" @update:model-value="updateClaim" @focus="focus" />
             <details class="review-section"><summary>Choose source-backed evidence</summary><label>Click notes to toggle<select v-model="evidenceMode"><option value="noteRefs">Witness for this claim</option><option value="contextNoteRefs">Necessary context</option></select></label><button type="button" :disabled="!canEdit" @click="selectScopeNotes">Use arrangement in claim scope</button><p class="review-copy">Notes crossing the start retain their original LN start and end. Select witnesses independently for each concept.</p><div class="review-note-list"><label v-for="note in visibleNotes" :key="note.id"><input type="checkbox" :checked="activeClaim.evidence[evidenceMode].some(ref => ref.sourceLine === note.sourceLine)" :disabled="!canEdit" @change="toggleNote(note.id)"><span>L{{ note.sourceLine }} · C{{ note.column + 1 }} · {{ note.startMs }}{{ note.kind === 'long' ? `–${note.endMs}` : '' }} ms</span></label></div><div class="review-actions"><button type="button" :disabled="notePage === 0" @click="notePage--">Previous notes</button><button type="button" :disabled="(notePage + 1) * 80 >= candidateNotes.length" @click="notePage++">Next notes</button></div></details>
-          </template>
-          <button v-if="!historicalObservation && (editorOrigin === 'direct' || editorOrigin === 'observation')" class="review-primary" type="button" :disabled="busy || !!savingDecision || sourceLoading || !stored || !approved || !humanId.trim() || draftIsStale || !claimRateMatchesPlayback" @click="saveSection">{{ editorOrigin === 'observation' ? 'Save revised judgment' : 'Save section judgments' }}</button>
+          </details>
+          <button v-if="!historicalObservation && (editorOrigin === 'direct' || editorOrigin === 'observation')" class="review-primary" type="button" :disabled="busy || !!savingDecision || sourceLoading || !stored || !approved || !humanId.trim() || draftIsStale || !claimRateMatchesPlayback" @click="saveSection">{{ editorOrigin === 'observation' ? 'Save revised section' : 'Save section judgments' }}</button>
           <section v-if="historicalObservation" class="review-historical-observation"><h2>Historical human judgment</h2><p>{{ historicalObservation.confirmedAt }} · earlier version</p><button type="button" @click="openObservation(historicalObservation)">View current judgment</button><button type="button" @click="reviseFromHistoricalObservation">Revise current judgment using this version</button></section>
           <details v-if="editorOrigin === 'observation' && observationHistory.length" class="review-observation-history"><summary>Human observation history · {{ observationHistory.length }}</summary><p v-for="entry in observationHistory" :key="entry.id">{{ assessmentLabel(entry.claim) }} · {{ entry.confirmedAt }}<br>{{ entry.claim.scope.startMs }}–{{ entry.claim.scope.endMs }} ms · {{ resolvePlaybackRate(entry.claim.playbackRate) }}×<button type="button" @click="openHistoricalObservation(entry)">View this version</button></p></details>
           <template v-if="editorOrigin === 'proposal'">
             <section v-if="finalDecision" class="review-human-result"><h2>Human judgment · {{ finalDecision.disposition }}</h2><template v-if="finalObservation"><p>{{ finalObservation.claim.tagId }} · {{ assessmentLabel(finalObservation.claim) }}</p><button type="button" @click="openObservation(finalObservation)">View saved human judgment</button></template><p v-if="finalDecision.rationale">{{ finalDecision.rationale }}</p></section>
             <p v-if="uncertainAcceptance" class="review-copy">This historical acceptance kept {{ finalObservation?.claim.assessment.presence }}. It did not decide whether this pattern is present.</p>
             <p v-if="laterClarification" class="review-copy">Later direct human judgment: {{ assessmentLabel(laterClarification.claim) }} · {{ laterClarification.confirmedAt }}.<button type="button" @click="openObservation(laterClarification)">View human clarification</button></p>
-            <p v-else-if="!finalDecision && !settled(originalProposal)" class="review-copy">This proposal does not decide presence. Choose present with salience or absent in the judgment editor.</p>
+            <p v-if="!sectionReady" class="review-copy">Assess every dimension before submitting this section. Unresolved proposals need an explicit judgment.</p>
             <div class="review-decision-controls">
-            <details :key="`${activeHandoffId}:${activeClaim.id}:${proposalEditing}`" class="review-decision-note" :open="proposalEditing"><summary>Decision note (optional)</summary><label>Human decision rationale<textarea v-model="decisionNote" rows="3" placeholder="Optional, including when modifying a judgment."></textarea></label></details>
-            <div class="review-actions"><button v-if="!finalDecision && settled(originalProposal) && activeTrust?.foundation !== 'changed'" type="button" :disabled="busy || !!savingDecision || sourceLoading || !approved || !humanId.trim() || !claimRateMatchesPlayback" class="review-primary" @click="decide('accepted')">Accept original</button><button v-if="remoteSource && !proposalEditing" type="button" :disabled="busy || sourceLoading || !claimRateMatchesPlayback" @click="beginProposalRevision">{{ finalDecision ? 'Revise human judgment' : 'Modify judgment' }}</button><button v-else type="button" :disabled="busy || !!savingDecision || sourceLoading || !approved || !humanId.trim() || !settled(activeClaim) || !claimRateMatchesPlayback" class="review-primary" @click="decide('modified')">Save modified</button></div>
+              <details class="review-decision-note"><summary>Decision note (optional)</summary><label>Human decision rationale<textarea v-model="decisionNote" rows="3" placeholder="Optional, including when modifying a judgment."></textarea></label></details>
+              <button type="button" :disabled="busy || !!savingDecision || sourceLoading || !approved || !humanId.trim() || !sectionReady || draftIsStale || !claimRateMatchesPlayback || !!historicalObservation" class="review-primary" @click="decideSection">Submit section review</button>
             </div>
             <details v-if="decisionsForClaim.length"><summary>Human decision history · {{ decisionsForClaim.length }}</summary><p v-for="decision in decisionsForClaim" :key="decision.id" class="review-decision">{{ decision.disposition }} · {{ decision.humanId }} · {{ decision.decidedAt }}<br>{{ decision.rationale }}<button v-if="decisionObservation(decision.observationId)" type="button" @click="openHistoricalObservation(decisionObservation(decision.observationId))">View this judgment</button></p></details>
           </template>
@@ -1079,7 +1154,7 @@ onBeforeUnmount(() => { window.removeEventListener("keydown", workspaceKeydown);
           </section>
         </template>
         <details class="review-section" :open="!activeClaim"><summary>New section &amp; drafts</summary><div class="review-actions"><button type="button" :disabled="busy || sourceLoading" @click="newSection">New section at playhead</button><button type="button" :disabled="busy || sourceLoading" @click="restoreSection">Restore section draft</button></div></details>
-        <p v-if="draftIsStale && (editorOrigin === 'direct' || editorOrigin === 'observation')" class="review-copy">This draft was based on an earlier saved human review. Compare it with the saved observations before continuing.<button type="button" @click="editorBase = stored?.version; editorReviewRevision = document?.reviewRevision; stashDraft()">I reviewed this draft against the current revision</button></p>
+        <p v-if="draftIsStale && !historicalObservation" class="review-copy">This draft was based on an earlier saved human review. Compare it with the saved observations before continuing.<button type="button" @click="editorBase = stored?.version; editorReviewRevision = document?.reviewRevision; stashDraft()">I reviewed this draft against the current revision</button></p>
         <details class="review-section"><summary>Foundation · {{ activeFoundation.tags.length }} concepts · {{ activeFoundation.calibrationExamples.length }} examples</summary>
           <p class="review-copy">Section judgments use local definitions. Community correspondences do not establish training equivalence.</p>
           <div v-for="tag in activeFoundation.tags" :key="tag.id" class="review-definition">

@@ -7,7 +7,7 @@ import type {
   InboxSourceV2,
   ReviewInboxV2,
 } from "./annotation/workflow/remote-workspace";
-import { reviewVersionOptions } from "./annotation/workflow/review-provenance";
+import { reviewVersionOptions, skillKey } from "./annotation/workflow/review-provenance";
 import {
   drawReviewSample,
   sampleCandidates,
@@ -343,18 +343,18 @@ describe("machine review sampling", () => {
       "reaudited",
     ]);
     expect(
-      sampleCandidates([input], "", "all", { labelerVersion: "b".repeat(64) }).map(
+      sampleCandidates([input], "", "all", { labelerVersion: skillKey(agent("b")) }).map(
         (x) => x.claim.claimId,
       ),
     ).toEqual(["new"]);
     expect(
-      sampleCandidates([input], "", "all", { auditorVersion: "b".repeat(64) }).map(
+      sampleCandidates([input], "", "all", { auditorVersion: skillKey(agent("b")) }).map(
         (x) => x.claim.claimId,
       ),
     ).toEqual(["reaudited"]);
     expect(reviewVersionOptions(input.reviews, "labeler").map((x) => x.label)).toEqual([
-      "same-version-name · aaaaaaaa",
-      "same-version-name · bbbbbbbb",
+      "judgment · same-version-name · aaaaaaaa",
+      "judgment · same-version-name · bbbbbbbb",
     ]);
   });
 
@@ -398,7 +398,7 @@ describe("machine review sampling", () => {
     await click(container, "Browse review history");
     await change(
       container.querySelector('select[name="labelerVersion"]') as HTMLSelectElement,
-      "a".repeat(64),
+      skillKey(agent("a")),
     );
     expect(container.querySelectorAll("#review-history > .inbox-history-list button")).toHaveLength(
       2,
@@ -409,7 +409,7 @@ describe("machine review sampling", () => {
     );
     const button = container.querySelector(".inbox-history-list button") as HTMLButtonElement;
     expect(button.disabled).toBe(false);
-    expect(button.textContent).toContain("version aaaaaaaa");
+    expect(button.textContent).toContain("version judgment · same-name · aaaaaaaa");
     expect(button.textContent).not.toContain("Labeler");
     await click(container, "Show provenance");
     expect(button.textContent).toContain("same-name · aaaaaaaa");
@@ -420,7 +420,7 @@ describe("machine review sampling", () => {
     await click(container, "Inbox");
     await change(
       container.querySelector('select[name="labelerVersion"]') as HTMLSelectElement,
-      "b".repeat(64),
+      skillKey(agent("b")),
     );
     await click(container, "Sample machine-reviewed sections");
     expect(container.querySelector("#review-history")).toBeNull();
@@ -431,15 +431,104 @@ describe("machine review sampling", () => {
     const saved = JSON.parse(
       localStorage.getItem(`beatmap-lens-review-sample:${inbox.workspace}`) ?? "{}",
     );
-    expect(saved.labelerVersion).toBe("b".repeat(64));
+    expect(saved.labelerVersion).toBe(skillKey(agent("b")));
     expect(saved.claims.map((x: { claimId: string }) => x.claimId)).toEqual(["latest"]);
     await change(
       container.querySelector('select[name="labelerVersion"]') as HTMLSelectElement,
-      "a".repeat(64),
+      skillKey(agent("a")),
     );
     expect(container.querySelector(".inbox-sampler")?.textContent).toContain(
-      "labeler same-name · bbbbbbbb",
+      "labeler judgment · same-name · bbbbbbbb",
     );
+  });
+
+  it("shows and filters named revisions that share the same skill content", async () => {
+    const { source, claim, fetcher } = await fixture();
+    const reviews = ["fine-harness-v1", "fine-harness-v2", "fine-harness-v3"].map((version) => {
+      const skill = { name: "judgment", version, sha256: "a".repeat(64) };
+      return claim(version, {
+        agent: { producerId: version, role: "labeler", skill },
+        audits: [
+          {
+            auditId: version,
+            agent: { producerId: `audit-${version}`, role: "auditor", skill },
+            createdAt: "2026-09-09T10:00:00Z",
+            outcome: "supported",
+          },
+        ],
+      });
+    });
+    Object.assign(source, { reviews });
+    expect(sampleCandidates([source], "", "all").map((item) => item.claim.claimId)).toEqual(
+      reviews.map((item) => item.claimId),
+    );
+    vi.stubGlobal("fetch", fetcher);
+    const { container } = mount();
+    await vi.waitFor(() =>
+      expect(
+        container.querySelectorAll("#review-history > .inbox-history-list button"),
+      ).toHaveLength(3),
+    );
+    for (const role of ["labeler", "auditor"] as const) {
+      const select = container.querySelector<HTMLSelectElement>(`select[name="${role}Version"]`);
+      assert(select);
+      expect(select.options).toHaveLength(4);
+      expect([...select.options].slice(1).map((option) => option.textContent)).toEqual(
+        reviews.map((item) => `judgment · ${item.claimId} · aaaaaaaa · 1 claims`),
+      );
+      await change(select, skillKey(reviews[1]?.agent));
+      const rows = container.querySelectorAll("#review-history > .inbox-history-list button");
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.textContent).toContain("fine-harness-v2");
+      await change(select, "");
+    }
+  });
+
+  it("restores saved content-hash filters without hiding their matching revisions", async () => {
+    const { source, inbox, claim, fetcher } = await fixture();
+    const contentHash = "a".repeat(64);
+    const reviews = ["v1", "v2"].map((version) =>
+      claim(version, {
+        agent: {
+          producerId: version,
+          role: "labeler",
+          skill: { name: "judgment", version, sha256: contentHash },
+        },
+      }),
+    );
+    Object.assign(source, { reviews });
+    localStorage.setItem(
+      `beatmap-lens-review-sample:${inbox.workspace}`,
+      JSON.stringify({
+        createdAt: "2026-09-08",
+        tagId: "",
+        strength: "all",
+        labelerVersion: contentHash,
+        claims: reviews.map((item) => ({
+          sourceSha256: source.source.sha256,
+          handoffId: item.handoffId,
+          claimId: item.claimId,
+        })),
+      }),
+    );
+    vi.stubGlobal("fetch", fetcher);
+    const { container } = mount();
+    await vi.waitFor(() =>
+      expect(container.querySelectorAll(".inbox-sample-list button")).toHaveLength(2),
+    );
+    const select = container.querySelector<HTMLSelectElement>('select[name="labelerVersion"]');
+    assert(select);
+    expect(select.value).toBe(contentHash);
+    expect(select.selectedOptions[0]?.textContent).toBe(
+      "Saved content aaaaaaaa · all matching versions",
+    );
+    expect(container.querySelector(".inbox-sampler")?.textContent).toContain("2 matching sections");
+    expect(container.querySelector(".inbox-sampler")?.textContent).toContain(
+      "Sample versions: labeler Saved content aaaaaaaa · all matching versions",
+    );
+    await change(select, skillKey(reviews[0]?.agent));
+    expect(container.querySelector(".inbox-sampler")?.textContent).toContain("1 matching sections");
+    expect(container.querySelectorAll(".inbox-sample-list button")).toHaveLength(2);
   });
 
   it("visits unsaved samples in order and reports failed cross-chart loads in the active view", async () => {

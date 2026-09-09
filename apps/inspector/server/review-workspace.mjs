@@ -784,7 +784,7 @@ export async function startReviewWorkspace(options) {
         const current = await source(sha);
         const operation = parts[4];
         let result;
-        if (operation === "decide" || operation === "addObservations")
+        if (["decide", "decideSection", "addObservations"].includes(operation))
           result = await directory[operation](current.sourceBytes, body.expectedBase, body.input);
         else if (operation === "exportTask")
           result = await directory.exportTask(current.sourceBytes, body.expectedBase, body.input);

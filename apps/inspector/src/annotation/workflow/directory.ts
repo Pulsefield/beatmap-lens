@@ -9,7 +9,9 @@ import {
   createReviewDocumentV2,
   createTaskPacketV2,
   type DecideClaimInputV2,
+  type DecideSectionInputV2,
   decideClaimV2,
+  decideSectionV2,
   hashWorkflowValueV2,
   importAuditV2,
   importHandoffV2,
@@ -170,6 +172,16 @@ export class WorkflowDirectoryV2 {
   ): Promise<StoredReviewV2> {
     return this.#command(sourceBytes, expectedBase, (document) =>
       decideClaimV2(document, input, sourceBytes),
+    );
+  }
+
+  async decideSection(
+    sourceBytes: Uint8Array,
+    expectedBase: ReviewBaseV2,
+    input: DecideSectionInputV2,
+  ): Promise<StoredReviewV2> {
+    return this.#command(sourceBytes, expectedBase, (document) =>
+      decideSectionV2(document, input, sourceBytes),
     );
   }
 

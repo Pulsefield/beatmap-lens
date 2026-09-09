@@ -11,6 +11,7 @@ import {
   assertTaskPacketV2,
   baseForTaskV2,
   decideClaimV2,
+  decideSectionV2,
   effectiveHumanObservationsV2,
   handoffBaseStatusV2,
   handoffTrustV2,
@@ -28,6 +29,333 @@ import { createExperimentalFoundationV2 } from "./experimental-campaign";
 import { historicalAcceptance, NOW, workflowFixture } from "./test-fixtures";
 
 describe("V2 source-backed agent–human domain", () => {
+  it("normalizes differing legacy cuts within one section identity but never combines distinct sections", async () => {
+    const f = await workflowFixture();
+    const proposals: ClaimV2[] = ["tech", "streams"].map((tagId, index) => ({
+      id: `legacy-${tagId}`,
+      sectionId: "legacy-section",
+      tagId,
+      playbackRate: 0.75,
+      scope: index === 0 ? { startMs: 900, endMs: 1800 } : { startMs: 1000, endMs: 1700 },
+      reviewContext: f.claim.reviewContext,
+      assessment: f.claim.assessment,
+      evidence: f.claim.evidence,
+    }));
+    const handoff = await sealHandoffV2(f.task, {
+      handoffId: "legacy-cuts",
+      createdAt: NOW,
+      agent: f.handoff.agent,
+      proposals,
+      questions: [],
+      audit: [],
+    });
+    const imported = await importHandoffV2(f.registered, handoff, f.sourceBytes);
+    const scope = { startMs: 1000, endMs: 1750 };
+    const decisions = proposals.map((claim) => ({
+      handoffId: handoff.handoffId,
+      claimId: claim.id,
+      disposition: "modified" as const,
+      modifiedClaim: { ...claim, scope },
+    }));
+    const reviewed = await decideSectionV2(
+      imported.document,
+      { humanId: "expert", decisions },
+      f.sourceBytes,
+    );
+    expect(reviewed.reviewRevision).toBe(imported.document.reviewRevision + 1);
+    expect(reviewed.observations.map((entry) => entry.claim.scope)).toEqual([scope, scope]);
+    expect(reviewed.handoffs).toEqual(imported.document.handoffs);
+    await expect(assertReviewDocumentV2(reviewed, f.sourceBytes)).resolves.toEqual(reviewed);
+    const distinct = await sealHandoffV2(f.task, {
+      handoffId: "distinct-sections",
+      createdAt: NOW,
+      agent: f.handoff.agent,
+      proposals: proposals.map((claim, index) => ({
+        ...claim,
+        sectionId: `section-${index}`,
+        scope,
+      })),
+      questions: [],
+      audit: [],
+    });
+    const separate = await importHandoffV2(f.registered, distinct, f.sourceBytes);
+    await expect(
+      decideSectionV2(
+        separate.document,
+        {
+          humanId: "expert",
+          decisions: distinct.proposals.map((claim) => ({
+            handoffId: distinct.handoffId,
+            claimId: claim.id,
+            disposition: "accepted",
+          })),
+        },
+        f.sourceBytes,
+      ),
+    ).rejects.toThrow("Original section identity");
+  });
+
+  it("saves and revises direct section dimensions without requiring human prose while agents remain strict", async () => {
+    const f = await workflowFixture();
+    const imported = await importHandoffV2(f.registered, f.handoff, f.sourceBytes);
+    const directClaims: ClaimV2[] = ["jumpstream", "longjack"].map((tagId) => ({
+      ...f.claim,
+      id: `direct-${tagId}`,
+      tagId,
+      evidence: { ...f.claim.evidence, rationale: "" },
+    }));
+    const saved = await decideSectionV2(
+      imported.document,
+      {
+        humanId: "expert",
+        decisions: [
+          { handoffId: f.handoff.handoffId, claimId: f.claim.id, disposition: "accepted" },
+        ],
+        observations: directClaims,
+      },
+      f.sourceBytes,
+    );
+    const direct = saved.observations.filter((entry) => entry.origin.kind === "direct-human");
+    expect(direct.map((entry) => entry.claim.evidence.rationale)).toEqual(["", ""]);
+    await expect(assertReviewDocumentV2(saved, f.sourceBytes)).resolves.toEqual(saved);
+    const revised = await decideSectionV2(
+      saved,
+      {
+        humanId: "expert",
+        decisions: [],
+        observations: directClaims.map((claim) => ({
+          ...claim,
+          assessment: { presence: "absent" },
+        })),
+        supersedesObservationIds: Object.fromEntries(
+          direct.map((entry) => [entry.claim.id, entry.id]),
+        ),
+      },
+      f.sourceBytes,
+    );
+    expect(revised.reviewRevision).toBe(saved.reviewRevision + 1);
+    expect(revised.decisions).toEqual(saved.decisions);
+    expect(
+      effectiveHumanObservationsV2(revised).filter((entry) => entry.origin.kind === "direct-human"),
+    ).toEqual(
+      expect.arrayContaining(
+        directClaims.map((claim) =>
+          expect.objectContaining({
+            claim: { ...claim, assessment: { presence: "absent" } },
+          }),
+        ),
+      ),
+    );
+    await expect(assertReviewDocumentV2(revised, f.sourceBytes)).resolves.toEqual(revised);
+    await expect(
+      validateHandoffV2(
+        { ...f.handoff, proposals: directClaims, questions: [], audit: [] },
+        f.task,
+      ),
+    ).rejects.toThrow("claim.evidence.rationale");
+    await expect(
+      addHumanObservationsV2(
+        saved,
+        {
+          humanId: "expert",
+          claims: directClaims.map((claim) => ({
+            ...claim,
+            evidence: { ...claim.evidence, noteRefs: [] },
+          })),
+        },
+        f.sourceBytes,
+      ),
+    ).rejects.toThrow("source-backed witness notes");
+  });
+
+  it("confirms a whole section once while preserving previous decisions and repeat identities", async () => {
+    const f = await workflowFixture();
+    const imported = await importHandoffV2(f.registered, f.handoff, f.sourceBytes);
+    const repeated = await importHandoffV2(
+      imported.document,
+      { ...f.handoff, handoffId: "another-repeat" },
+      f.sourceBytes,
+    );
+    const partiallyReviewed = await decideClaimV2(
+      repeated.document,
+      {
+        handoffId: f.handoff.handoffId,
+        claimId: f.claim.id,
+        humanId: "expert",
+        disposition: "accepted",
+        id: "prior-tech-decision",
+      },
+      f.sourceBytes,
+    );
+    const before = serializeCanonicalJson(partiallyReviewed);
+    const speedjack = f.handoff.proposals[2];
+    if (!speedjack) throw new Error("Missing speedjack fixture claim.");
+    const reviewed = await decideSectionV2(
+      partiallyReviewed,
+      {
+        id: "section-review",
+        now: () => NOW,
+        humanId: "expert",
+        decisions: [
+          {
+            handoffId: f.handoff.handoffId,
+            claimId: "streams-claim",
+            disposition: "accepted",
+          },
+          {
+            handoffId: f.handoff.handoffId,
+            claimId: "speedjack-claim",
+            disposition: "modified",
+            modifiedClaim: {
+              ...speedjack,
+              assessment: { presence: "absent" },
+            },
+          },
+        ],
+        observations: ["jumpstream", "longjack"].map((tagId) => ({
+          ...f.claim,
+          id: `direct-${tagId}`,
+          tagId,
+          assessment: { presence: "absent" },
+        })),
+      },
+      f.sourceBytes,
+    );
+    expect(serializeCanonicalJson(partiallyReviewed)).toBe(before);
+    expect(reviewed.revision).toBe(partiallyReviewed.revision + 1);
+    expect(reviewed.reviewRevision).toBe(partiallyReviewed.reviewRevision + 1);
+    expect(reviewed.decisions).toHaveLength(3);
+    expect(reviewed.decisions[0]).toEqual(partiallyReviewed.decisions[0]);
+    expect(reviewed.observations[0]).toEqual(partiallyReviewed.observations[0]);
+    expect(effectiveHumanObservationsV2(reviewed)).toHaveLength(5);
+    expect(reviewed.observations.slice(1).every((entry) => entry.confirmedAt === NOW)).toBe(true);
+    expect(
+      (await readAgentReviewsV2(reviewed)).filter((row) => row.handoffId === "another-repeat"),
+    ).toEqual(expect.arrayContaining([expect.objectContaining({ status: "awaiting-audit" })]));
+    await expect(assertReviewDocumentV2(reviewed, f.sourceBytes)).resolves.toEqual(reviewed);
+  });
+
+  it("keeps section submissions within one rate, source scope, tag set, and handoff", async () => {
+    const f = await workflowFixture();
+    const halfRate = {
+      ...f.handoff,
+      proposals: f.handoff.proposals.map((claim) => ({ ...claim, playbackRate: 0.5 as const })),
+    };
+    const imported = await importHandoffV2(f.registered, halfRate, f.sourceBytes);
+    const another = await importHandoffV2(
+      imported.document,
+      { ...halfRate, handoffId: "other-repeat" },
+      f.sourceBytes,
+    );
+    const decisions = halfRate.proposals.slice(0, 2).map((claim) => ({
+      handoffId: halfRate.handoffId,
+      claimId: claim.id,
+      disposition: "accepted" as const,
+    }));
+    const [firstDecision, secondDecision] = decisions;
+    const secondClaim = halfRate.proposals[1];
+    if (!firstDecision || !secondDecision || !secondClaim)
+      throw new Error("Missing section fixture.");
+    const valid = await decideSectionV2(
+      another.document,
+      { humanId: "expert", decisions },
+      f.sourceBytes,
+    );
+    expect(valid.observations.every((entry) => entry.claim.playbackRate === 0.5)).toBe(true);
+    await expect(
+      decideSectionV2(
+        another.document,
+        {
+          humanId: "expert",
+          decisions: [firstDecision, { ...secondDecision, handoffId: "other-repeat" }],
+        },
+        f.sourceBytes,
+      ),
+    ).rejects.toThrow("single handoff");
+    await expect(
+      decideSectionV2(
+        another.document,
+        { humanId: "expert", decisions: [firstDecision, firstDecision] },
+        f.sourceBytes,
+      ),
+    ).rejects.toThrow("each original claim once");
+    for (const changed of [
+      { ...secondClaim, playbackRate: 1.5 as const },
+      { ...secondClaim, scope: { startMs: 1000, endMs: 1700 } },
+    ]) {
+      await expect(
+        decideSectionV2(
+          another.document,
+          {
+            humanId: "expert",
+            decisions: [
+              firstDecision,
+              { ...secondDecision, disposition: "modified", modifiedClaim: changed },
+            ],
+          },
+          f.sourceBytes,
+        ),
+      ).rejects.toThrow(/playback rate|source-time scope/);
+    }
+  });
+
+  it("revises all five direct assessments in one append while retaining unresolved semantics", async () => {
+    const f = await workflowFixture();
+    const claims = f.foundation.tags.map((tag) => ({
+      ...f.claim,
+      id: tag.id,
+      tagId: tag.id,
+      playbackRate: 1.5 as const,
+    }));
+    const original = await addHumanObservationsV2(
+      f.registered,
+      { humanId: "expert", claims, id: "direct-initial" },
+      f.sourceBytes,
+    );
+    const supersedesObservationIds = Object.fromEntries(
+      original.observations.map((entry) => [entry.claim.id, entry.id]),
+    );
+    const revised = await addHumanObservationsV2(
+      original,
+      {
+        humanId: "expert",
+        id: "direct-revision",
+        claims: claims.map((claim, index) => ({
+          ...claim,
+          assessment: { presence: index === 0 ? "unresolved" : "absent" },
+        })),
+        supersedesObservationIds,
+      },
+      f.sourceBytes,
+    );
+    expect(revised.revision).toBe(original.revision + 1);
+    expect(revised.reviewRevision).toBe(original.reviewRevision + 1);
+    expect(revised.observations.slice(0, 5)).toEqual(original.observations);
+    expect(effectiveHumanObservationsV2(revised)).toEqual(revised.observations.slice(5));
+    expect(effectiveHumanObservationsV2(revised)[0]?.claim.assessment).toEqual({
+      presence: "unresolved",
+    });
+    await expect(assertReviewDocumentV2(revised, f.sourceBytes)).resolves.toEqual(revised);
+    await expect(
+      addHumanObservationsV2(
+        revised,
+        { humanId: "expert", claims, supersedesObservationIds },
+        f.sourceBytes,
+      ),
+    ).rejects.toThrow("current direct-human");
+    await expect(
+      addHumanObservationsV2(
+        original,
+        {
+          humanId: "expert",
+          claims: claims.map((claim) => ({ ...claim, playbackRate: 1 })),
+          supersedesObservationIds,
+        },
+        f.sourceBytes,
+      ),
+    ).rejects.toThrow("playback rate");
+  });
+
   it("includes independent auditor evidence in confidence without rerouting audited claims", async () => {
     const f = await workflowFixture();
     const human = await addHumanObservationV2(

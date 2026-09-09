@@ -77,6 +77,13 @@ Neutrals carry a faint cool tint. Signal color is used as status ink, never as a
 - Active-session chrome is redistributed instead of stacked vertically: identity and mode live in
   the source rail, save and transport controls live in a sticky details section, and chart identity
   plus playhead live in passive viewport HUD chips.
+- Section Review keeps five compact horizontal assessment sliders together in the details rail.
+  Each slider has three discrete positions: Absent, Supporting, and Prominent. Unreviewed and
+  Unresolved stay visibly distinct from those positions. One section action submits all assessed
+  dimensions; per-tag evidence is expandable below, and choosing it preserves the whole draft.
+- Connected chart review exposes saved history and its version selector in the source rail.
+  A version identifies skill name, revision, and content hash; identical bytes do not hide named
+  revisions. Earlier human records remain inspectable and editable through append-only revisions.
 
 ## 6. Depth and elevation
 

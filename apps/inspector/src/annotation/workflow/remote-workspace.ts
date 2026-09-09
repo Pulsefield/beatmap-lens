@@ -104,6 +104,7 @@ export function createRemoteReviewStore(sourceSha256: string): ReviewStoreV2 {
     importAudit: unsupported,
     replaceProposedFoundation: unsupported,
     decide: (_bytes, base, input) => command("decide", base, input),
+    decideSection: (_bytes, base, input) => command("decideSection", base, input),
     addObservations: (_bytes, base, input) => command("addObservations", base, input),
     approveFoundation: (_bytes, base, humanId) => command("approveFoundation", base, { humanId }),
     exportTask: (_bytes, base, input) => command("exportTask", base, input ?? {}),

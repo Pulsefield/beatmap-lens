@@ -268,9 +268,12 @@ and any saved human decision; offline `review-status` exposes the same routing. 
 | `accepted`, `modified`, `rejected`, `deferred` | Follow the recorded human disposition. |
 
 The human Review inbox has separate **Labeler version** and **Auditor version**
-filters for requests, sampling, and history. Each option identifies a frozen skill
-by its full content hash; the displayed version name alone can be shared by
-different snapshots. Selecting an auditor finds claims it reviewed without
+filters for requests, sampling, and history. Each option identifies the skill name,
+revision and full content hash. Distinct named revisions remain selectable even
+when their skill bytes are identical; the same revision name can also have different
+content hashes. Historical saved samples with hash-only filters retain their full
+content group. The chart's Review history and version selector are also visible
+when opened from the connected inbox. Selecting an auditor finds claims it reviewed without
 recomputing their recorded status from only that auditor's findings. A current
 task base means source/Foundation compatibility, not the latest skill or unchanged
 workspace-wide human history.
@@ -342,21 +345,37 @@ separately in the service inbox. Awaiting audits and revision work remain with
 agents. Saved human dispositions take precedence; a deferred claim remains
 unsettled in its history even though it is no longer an open queue row.
 
-The human sees the original scope, tag/assessment/salience, evidence, and rationale,
-with **Accept original** and **Modify judgment** as the review actions. All human
-decision notes are optional, including modifications; a modified human claim may
-also leave its rationale empty. Agent proposals and audits still require reasoning.
-Left and right arrow keys (or the previous/next tag buttons) switch pending tags
-within the same handoff and section ID, or identical scopes when section IDs are
-missing. Switching preserves each tag's draft and the current preview position.
-Each successful submission removes that tag from the pending list and opens the
-next one. Failed saves retain the current judgment for retry. Saved judgments
-remain available in history. This uses the existing claim and decision structures, without a
-separate questionnaire or agent framework. Acceptance or modification creates a
-human-provenance observation. Rejection is not an
-`absent` judgment, and deferral neither changes the original assessment to unknown
-nor licenses a guessed label. Deciding one
-claim does not automatically decide its siblings. Original proposals, independent
+The human sees the section's five style assessments together as adjacent horizontal
+sliders: **Absent**, **Supporting**, and **Prominent**. Unreviewed and unresolved
+remain explicit separate states; missing historical dimensions are not initialized
+as absent. The original scope and playback rate stay visible, and per-tag evidence
+and rationale remain available below the sliders. Selecting a tag changes the
+focused evidence without replacing the other drafts or moving the viewport.
+
+**Submit section review** saves the displayed section assessments in one atomic
+command. Unchanged original proposals are accepted; edited proposals create modified
+decisions. Previously settled, unchanged judgments are retained, and missing
+dimensions receive direct human observations after explicit assessment. All proposal
+dimensions must be settled before confirmation. New direct annotation uses
+**Save section judgments**; it can retain explicitly unresolved assessments and
+leave untouched dimensions unreviewed. Reopening a saved section loads its sibling
+judgments together. **Save revised section** appends direct revisions with an
+individual supersession link for each changed dimension.
+
+Grouping retains the handoff and playback rate as well as section identity (or exact
+original scope for legacy claims without section IDs), so repeated model runs do not
+become one proposal. The service checks every submitted decision before one write;
+an invalid or stale command cannot partially save a section. Sliders remain editable
+while that section saves, duplicate submission is blocked, and newer edits or failed
+drafts remain available. A completed save does not silently replace newer edits.
+
+Human decision notes and human-claim rationales are optional. Changing an
+assessment clears its inherited rationale rather than presenting the old explanation
+as support for a new judgment. Agent proposals and audits still require reasoning.
+Saved versions remain in history. Acceptance or modification creates human-provenance
+observations; rejection is not `absent`, and deferral does not license a guessed
+label. The existing single-claim command remains available to current consumers,
+but the human section interface submits the assessments together. Original proposals, independent
 audits, self-checks, questions, and human decisions remain separate records. Agents
 read the inbox and network `dispositions` rather than infer decisions from UI state.
 Structured human feedback is authoritative; consuming it does not require a

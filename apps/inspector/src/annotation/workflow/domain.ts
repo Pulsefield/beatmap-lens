@@ -40,8 +40,18 @@ export interface DecideClaimInputV2 extends OperationOptionsV2 {
 
 export interface AddObservationsInputV2 extends OperationOptionsV2 {
   readonly supersedesObservationId?: string;
+  /** Maps each new claim ID to the current direct-human observation it revises. */
+  readonly supersedesObservationIds?: Readonly<Record<string, string>>;
   readonly claims: readonly ClaimV2[];
   readonly humanId: string;
+}
+
+export interface DecideSectionInputV2 extends OperationOptionsV2 {
+  readonly humanId: string;
+  readonly decisions: readonly Omit<DecideClaimInputV2, "humanId" | "now">[];
+  /** Direct assessments for dimensions missing from a legacy section proposal. */
+  readonly observations?: readonly ClaimV2[];
+  readonly supersedesObservationIds?: Readonly<Record<string, string>>;
 }
 
 export async function hashWorkflowValueV2(value: unknown): Promise<string> {
@@ -640,13 +650,37 @@ export async function decideClaimV2(
   sourceBytes: Uint8Array,
 ): Promise<ReviewDocumentV2> {
   const inspected = await inspectDocumentSource(document, sourceBytes);
+  const additions = prepareHumanDecisionV2(
+    document,
+    input,
+    createStableNoteRefsV1(inspected.chart),
+    await hashWorkflowValueV2(document.foundation),
+  );
+  return changed(
+    document,
+    {
+      decisions: [...document.decisions, additions.decision],
+      observations: additions.observation
+        ? [...document.observations, additions.observation]
+        : document.observations,
+    },
+    true,
+    input,
+  );
+}
+
+function prepareHumanDecisionV2(
+  document: ReviewDocumentV2,
+  input: DecideClaimInputV2,
+  sourceNotes: readonly StableNoteRefV1[],
+  foundationSha256: string,
+): { readonly decision: HumanDecisionV2; readonly observation?: HumanObservationV2 } {
   nonempty(input.humanId, "humanId");
   oneOf(input.disposition, ["accepted", "modified", "rejected", "deferred"], "disposition");
   const imported = document.handoffs.find((entry) => entry.handoff.handoffId === input.handoffId);
   const proposal = imported?.handoff.proposals.find((claim) => claim.id === input.claimId);
   if (!imported || !proposal) throw new Error("Unknown handoff claim.");
   const confirming = input.disposition === "accepted" || input.disposition === "modified";
-  const foundationSha256 = await hashWorkflowValueV2(document.foundation);
   if (confirming) {
     requireApproved(document.foundation);
     if (input.disposition === "accepted" && imported.handoff.foundationSha256 !== foundationSha256)
@@ -660,12 +694,7 @@ export async function decideClaimV2(
     throw new Error("Only a modified human decision may supply a revised claim.");
   const claim = input.modifiedClaim ?? proposal;
   if (confirming)
-    assertClaimV2(
-      claim,
-      createStableNoteRefsV1(inspected.chart),
-      document.foundation,
-      input.disposition !== "modified",
-    );
+    assertClaimV2(claim, sourceNotes, document.foundation, input.disposition !== "modified");
   if (confirming && ["unresolved", "unreviewed"].includes(claim.assessment.presence))
     throw new Error(
       "Choose present with salience or absent before confirming a proposal, or defer this review. Unresolved and unreviewed do not decide presence.",
@@ -700,15 +729,104 @@ export async function decideClaimV2(
       decisionId: id,
     },
   };
-  return changed(
-    document,
-    {
-      decisions: [...document.decisions, decision],
-      observations: confirming ? [...document.observations, observation] : document.observations,
-    },
-    true,
-    input,
+  return { decision, ...(confirming ? { observation } : {}) };
+}
+
+/** Validate every submitted dimension against the same original document and save once. */
+export async function decideSectionV2(
+  document: ReviewDocumentV2,
+  input: DecideSectionInputV2,
+  sourceBytes: Uint8Array,
+): Promise<ReviewDocumentV2> {
+  const inspected = await inspectDocumentSource(document, sourceBytes);
+  nonempty(input.humanId, "humanId");
+  const directClaims = input.observations ?? [];
+  if (!input.decisions.length && !directClaims.length)
+    throw new Error("At least one section assessment is required.");
+  const proposals = input.decisions.map((decision) => {
+    const proposal = document.handoffs
+      .find((entry) => entry.handoff.handoffId === decision.handoffId)
+      ?.handoff.proposals.find((claim) => claim.id === decision.claimId);
+    if (!proposal) throw new Error("Unknown handoff claim.");
+    return proposal;
+  });
+  if (new Set(input.decisions.map((decision) => decision.handoffId)).size > 1)
+    throw new Error("A section review must retain a single handoff version.");
+  if (new Set(input.decisions.map((decision) => decision.claimId)).size !== input.decisions.length)
+    throw new Error("A section review must decide each original claim once.");
+  assertOriginalSectionClaims(proposals);
+  const submittedClaims = [
+    ...proposals.map((proposal, index) => input.decisions[index]?.modifiedClaim ?? proposal),
+    ...directClaims,
+  ];
+  assertSectionClaims(submittedClaims);
+  if (new Set(submittedClaims.map((claim) => claim.tagId)).size !== submittedClaims.length)
+    throw new Error("A section review must assess each submitted tag once.");
+  const sourceNotes = createStableNoteRefsV1(inspected.chart);
+  const foundationSha256 = await hashWorkflowValueV2(document.foundation);
+  const now = timestamp(input);
+  const groupId = input.id ?? crypto.randomUUID();
+  const additions = input.decisions.map((decision, index) =>
+    prepareHumanDecisionV2(
+      document,
+      {
+        ...decision,
+        id: decision.id ?? `${groupId}:decision:${index}`,
+        humanId: input.humanId,
+        now: () => now,
+      },
+      sourceNotes,
+      foundationSha256,
+    ),
   );
+  const directObservations = directClaims.length
+    ? prepareHumanObservationsV2(
+        document,
+        {
+          claims: directClaims,
+          humanId: input.humanId,
+          id: `${groupId}:direct`,
+          now: () => now,
+          ...(input.supersedesObservationIds
+            ? { supersedesObservationIds: input.supersedesObservationIds }
+            : {}),
+        },
+        sourceNotes,
+        foundationSha256,
+      )
+    : [];
+  if (!directClaims.length && Object.keys(input.supersedesObservationIds ?? {}).length)
+    throw new Error("Observation revisions must identify a submitted direct claim.");
+  const decisions = [...document.decisions, ...additions.map((entry) => entry.decision)];
+  const observations = [
+    ...document.observations,
+    ...additions.flatMap((entry) => (entry.observation ? [entry.observation] : [])),
+    ...directObservations,
+  ];
+  uniqueIds(decisions, "decisions");
+  uniqueIds(observations, "observations");
+  return changed(document, { decisions, observations }, true, { now: () => now });
+}
+
+function assertSectionClaims(claims: readonly ClaimV2[]): void {
+  const first = claims[0];
+  if (!first) return;
+  for (const claim of claims.slice(1)) {
+    same(first.scope, claim.scope, "A section review must use one source-time scope.");
+    assertSamePlaybackRate(first, claim);
+  }
+}
+
+function assertOriginalSectionClaims(claims: readonly ClaimV2[]): void {
+  const first = claims[0];
+  if (!first) return;
+  for (const claim of claims.slice(1)) {
+    assertSamePlaybackRate(first, claim);
+    if (first.sectionId || claim.sectionId)
+      equal(first.sectionId, claim.sectionId, "Original section identity");
+    else
+      same(first.scope, claim.scope, "A section review must use one original source-time scope.");
+  }
 }
 
 export async function addHumanObservationsV2(
@@ -717,45 +835,69 @@ export async function addHumanObservationsV2(
   sourceBytes: Uint8Array,
 ): Promise<ReviewDocumentV2> {
   const inspected = await inspectDocumentSource(document, sourceBytes);
-  requireApproved(document.foundation);
-  nonempty(input.humanId, "humanId");
-  if (!input.claims.length) throw new Error("At least one claim is required.");
-  uniqueIds(input.claims, "claims");
-  if (input.supersedesObservationId !== undefined) {
-    if (input.claims.length !== 1)
-      throw new Error("A direct human revision requires exactly one claim.");
-    const prior = effectiveHumanObservationsV2(document).find(
-      (entry) => entry.id === input.supersedesObservationId,
-    );
-    if (prior?.origin.kind !== "direct-human")
-      throw new Error("A direct human revision must target a current direct-human observation.");
-    assertSamePlaybackRate(prior.claim, input.claims[0] as ClaimV2);
-  }
-  const refs = createStableNoteRefsV1(inspected.chart);
-  for (const claim of input.claims) assertClaimV2(claim, refs, document.foundation);
-  const foundationSha256 = await hashWorkflowValueV2(document.foundation);
-  const confirmedAt = timestamp(input);
-  const groupId = input.id ?? crypto.randomUUID();
-  const observations = input.claims.map(
-    (claim): HumanObservationV2 => ({
-      id: `${groupId}:${claim.id}`,
-      claim,
-      foundationSha256,
-      humanId: input.humanId,
-      confirmedAt,
-      origin: { kind: "direct-human" },
-      ...(input.supersedesObservationId
-        ? { supersedesObservationId: input.supersedesObservationId }
-        : {}),
-    }),
+  const observations = prepareHumanObservationsV2(
+    document,
+    input,
+    createStableNoteRefsV1(inspected.chart),
+    await hashWorkflowValueV2(document.foundation),
   );
-  uniqueIds([...document.observations, ...observations], "observations");
   return changed(
     document,
     { observations: [...document.observations, ...observations] },
     true,
     input,
   );
+}
+
+function prepareHumanObservationsV2(
+  document: ReviewDocumentV2,
+  input: AddObservationsInputV2,
+  refs: readonly StableNoteRefV1[],
+  foundationSha256: string,
+): readonly HumanObservationV2[] {
+  requireApproved(document.foundation);
+  nonempty(input.humanId, "humanId");
+  if (!input.claims.length) throw new Error("At least one claim is required.");
+  uniqueIds(input.claims, "claims");
+  const supersedes = new Map(Object.entries(input.supersedesObservationIds ?? {}));
+  if (input.supersedesObservationId !== undefined) {
+    if (input.supersedesObservationIds !== undefined)
+      throw new Error("Choose singular or per-claim observation revision IDs, not both.");
+    const firstClaim = input.claims[0];
+    if (input.claims.length !== 1 || !firstClaim)
+      throw new Error("A direct human revision requires exactly one claim.");
+    supersedes.set(firstClaim.id, input.supersedesObservationId);
+  }
+  const currentObservations = effectiveHumanObservationsV2(document);
+  const revisedIds = new Set<string>();
+  for (const [claimId, observationId] of supersedes) {
+    const claim = input.claims.find((entry) => entry.id === claimId);
+    if (!claim) throw new Error("Observation revisions must identify a submitted direct claim.");
+    if (revisedIds.has(observationId))
+      throw new Error("A direct human observation may be revised only once per submission.");
+    revisedIds.add(observationId);
+    const prior = currentObservations.find((entry) => entry.id === observationId);
+    if (prior?.origin.kind !== "direct-human")
+      throw new Error("A direct human revision must target a current direct-human observation.");
+    assertSamePlaybackRate(prior.claim, claim);
+  }
+  for (const claim of input.claims) assertClaimV2(claim, refs, document.foundation, false);
+  const confirmedAt = timestamp(input);
+  const groupId = input.id ?? crypto.randomUUID();
+  const observations = input.claims.map((claim): HumanObservationV2 => {
+    const supersedesObservationId = supersedes.get(claim.id);
+    return {
+      id: `${groupId}:${claim.id}`,
+      claim,
+      foundationSha256,
+      humanId: input.humanId,
+      confirmedAt,
+      origin: { kind: "direct-human" },
+      ...(supersedesObservationId ? { supersedesObservationId } : {}),
+    };
+  });
+  uniqueIds([...document.observations, ...observations], "observations");
+  return observations;
 }
 
 export async function addHumanObservationV2(
@@ -1364,7 +1506,12 @@ export async function validateReviewDocumentV2(
       document.decisions.some(
         (decision) => decision.id === provenance.decisionId && decision.disposition === "modified",
       );
-    assertClaimV2(observation.claim, createStableNoteRefsV1(inspected.chart), rules, !modified);
+    assertClaimV2(
+      observation.claim,
+      createStableNoteRefsV1(inspected.chart),
+      rules,
+      provenance.kind !== "direct-human" && !modified,
+    );
     const origin = object(observation.origin, "origin");
     if (origin.kind === "direct-human") record(origin, ["kind"], [], "origin");
     else {

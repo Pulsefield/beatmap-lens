@@ -106,6 +106,48 @@ async function get(url: string, pathname: string) {
 }
 
 describe("local Review service exchange", () => {
+  it("submits a section review atomically through the human command endpoint", async () => {
+    const f = await fixture();
+    const service = await start(f.workspace);
+    expect((await post(service.url, "submit", { kind: "handoff", packet: f.handoff })).status).toBe(
+      200,
+    );
+    const current = await get(service.url, `source/${f.sha}`);
+    const decisions = f.handoff.proposals.map((claim) => ({
+      handoffId: f.handoff.handoffId,
+      claimId: claim.id,
+      disposition: "accepted",
+    }));
+    const saved = await post(service.url, `human/${f.sha}/decideSection`, {
+      expectedBase: current.version,
+      input: {
+        id: "service-section",
+        humanId: "expert",
+        decisions,
+        observations: f.foundation.tags
+          .filter((tag) => !f.handoff.proposals.some((claim) => claim.tagId === tag.id))
+          .map((tag) => ({
+            ...f.claim,
+            id: `direct-${tag.id}`,
+            tagId: tag.id,
+            assessment: { presence: "absent" },
+          })),
+      },
+    });
+    expect(saved.status).toBe(200);
+    expect(saved.value.document.revision).toBe(current.document.revision + 1);
+    expect(saved.value.document.reviewRevision).toBe(current.document.reviewRevision + 1);
+    expect(saved.value.document.decisions).toHaveLength(2);
+    expect(saved.value.document.observations).toHaveLength(5);
+    expect((await get(service.url, `source/${f.sha}`)).version).toEqual(saved.value.version);
+    const stale = await post(service.url, `human/${f.sha}/decideSection`, {
+      expectedBase: current.version,
+      input: { humanId: "expert", decisions },
+    });
+    expect(stale.status).toBe(409);
+    expect((await get(service.url, `source/${f.sha}`)).version).toEqual(saved.value.version);
+  });
+
   it("tracks referenced gold revisions across charts without blocking human review or rewriting packets", async () => {
     const f = await fixture();
     const service = await start(f.workspace);
