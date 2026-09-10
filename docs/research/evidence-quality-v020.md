@@ -95,6 +95,11 @@ be established from actual agent results, not from task creation.
 
 ## Concurrent selection run, 2026-09-10
 
+The subsequent [human review and execution diagnosis](selection-run-diagnosis-20260910.md)
+records six new canonical human revisions, 15 retained judgments, historical Tech
+misses and the guide-only comparison. The counts below describe the initial run
+against its pre-review snapshot.
+
 All 39 candidates were annotated in 10 fresh agent contexts, with at most four
 fixed sections per context and three jobs running concurrently. The configured
 labeler was `gpt-6-astra` at medium reasoning effort, using the existing frozen
