@@ -1,10 +1,11 @@
-# v0.2.0 evidence quality and supplemental review
+# v0.2.0 evidence quality and selection repair
 
 The released section labels remain usable under their existing authority rules.
 The release does **not** provide independently selected human note-level gold,
 per-note omission judgments, or evidence certified as minimal or sufficient.
-The main repair is to make evidence provenance and review targets explicit,
-then obtain the missing judgments without rewriting history.
+The repair preserves evidence provenance and revision identity, and supplements
+missing selections through concurrent agent judgment and note selection. It does
+not add retrospective explanation or omitted-note annotation requirements.
 
 This audit pins the v0.2.0 manifest to
 `d662dc74f6171518707f83186521f57786910569ffaa62fbb0dc568eaac336c3`.
@@ -23,8 +24,8 @@ artifact; it does not modify the human review inbox or mark tasks completed.
 | Every attack selected, only entering holds omitted | 6 | 1 | A strict subset does not establish deliberate note contrast. This shape is not an error. |
 | Context equals review-context complement of witnesses | 466 | 2,419 | The packager creates this complement; it is not a set of semantic negatives. |
 | Changed assessment relative to ancestor | 102 | 0 | The human target remains authoritative even if attached prose explains the old target. |
-| Changed scope relative to ancestor | 3 | 0 | Check the explanation against the final interval as well as the label. |
-| Empty evidence rationale | 7 | 0 | A missing explanation is an evidence research gap, not an invalid label. |
+| Changed scope relative to ancestor | 3 | 0 | Preserve final interval and notes from the same observation. |
+| Empty evidence rationale | 7 | 0 | No invalid label or missing selection follows from empty prose. |
 
 All 2,886 main witness/context selections pass the independently repeated source
 note tuple, duplicate-reference, range, and nonempty-witness checks. The upstream
@@ -50,82 +51,102 @@ hash, start, end, tag, and playback rate. A duplicate is not an additional
 independent judgment. Differing labels in one cell fail plan generation for
 explicit resolution rather than being silently averaged or chosen.
 
-## Supplemental tasks and acceptance
+## Corrected scope and selection candidates
 
-The generated plan contains **177 exact-cell tasks**, preserving 178 record
-identities:
+The user rejected the earlier retrospective review extension on 2026-09-10.
+Its **102 explanation/selection review tasks and 75 optional shape studies are
+withdrawn**. The old local artifacts remain historical outputs, not the current
+queue. Agents select notes while making a judgment under the existing skill;
+they are not asked to add retrospective explanations or omitted-note reasons.
+Separate selection or rationale review is not a condition for using a human label.
 
-- **102 current-evidence review tasks**, covering all 103 human-modified records.
-  These are required before treating the inherited or missing explanation as
-  supervision for the final claim. They do not block use or publication of the
-  existing human labels. Ninety-five cells contain unchanged ancestor prose after
-  a label/scope change; seven have empty prose. Those two reasons cover all 102.
-- **75 additional optional shape studies** examine arrangement-level selection or
-  entering-hold omissions. Across both priorities there are 135 full-section and
-  seven entering-hold-omission cells; many also belong to the first group. Shape
-  studies are research questions, not defects or mandatory human label reviews.
+The replacement plan contains **39 exact-cell candidates across 39 human records
+and 39 charts**. All are present human labels whose witnesses are unchanged from
+an absent or unresolved ancestor judgment. This identifies a positive target
+without a corresponding positive agent judgment-and-selection pair; it does not
+prove the inherited notes are unsuitable. There are **zero literal empty witness
+sets** in this release.
 
-No task is inserted into the existing `needs-expert` inbox. The plan describes
-missing work and currently records zero completed semantic reviews. Merely
-creating this plan, adding UI review metadata, or rerunning a machine audit does
-not complete the supplemental human judgments.
+Other human revisions, empty rationale, whole-section selection, and entering-hold
+omissions do not independently create candidates. Old notes may be retained when
+a new concurrent judgment selects the same arrangement. There is no required
+selection size, explanation rewrite, or salience coverage threshold.
 
-Follow the [evidence review procedure](../annotation/evidence-review.md). Each task
-contains its original and final label, scope, context, rationale and witnesses;
-all section/context notes; original long-note endpoints; left-boundary releases;
-unselected section lines; and all record, claim, handoff, decision and observation
-identities. The final label and final evidence are checked against the **same**
-local observation claim before a task is emitted. Ancestor comparison fields and
-rationale semantic status remain separate. The generator never pairs a revised
-label with notes taken from another observation.
+Follow the [selection repair procedure](../annotation/evidence-review.md). Give
+fresh agents short, standalone inputs with at most four fixed sections per job.
+The case file contains the exact source, scope, tag, rate and full notes/context,
+without the prior human/agent label, rationale or selected set. Agents produce
+their style judgments and note selections together. Compare with the human label
+only after the judgment is complete; do not ask agents to fit a selection or
+explanation to a preannounced target.
 
-A supplemental result is acceptable only when it:
+An agreeing result can become an additive agent selection proposal linked to the
+human observation. A disagreement remains distinct and unresolved; the existing
+human label is preserved. No result is independent human note-level gold, and
+no plan item or machine audit proves minimality or sufficiency. No task is
+inserted into the human `needs-expert` inbox merely by generating the plan.
 
-1. Identifies the exact source, scope, tag, rate, observation and every grouped
-   release record. A later observation requires reconciliation before application.
-2. Explicitly records whether the witness selection was inspected and retained
-   or revised, and whether the explanation was checked against the final claim.
-   Selection origin and selection review are different facts.
-3. Explains the selected arrangement under the final target and records
-   uncertainty. Whole-section evidence can be retained with an arrangement-level
-   reason; no coverage threshold determines salience.
-4. Separately records any contrast judgment about omitted note groups. A generic
-   selection-review checkbox does not answer why each other note was omitted.
-   `Not separately assessed` is honest but leaves omission supervision unresolved.
-5. Preserves historical records through an additive, source-bound review. Any
-   changed label requires a new human judgment; an agent evidence proposal cannot
-   override it. A subsequent release must take label and evidence from one
-   effective observation, publish its provenance, and retain supersession links.
+Each supervisor task retains original/final claims, all section/context notes,
+original long-note endpoints, left-boundary releases and record/claim/handoff/
+decision/observation identities. The final label and evidence are verified against
+**one local observation claim**. This lineage artifact is not the worker's case
+input. The plan generator records zero completed re-annotations; completion must
+be established from actual agent results, not from task creation.
 
-Human selection review still does not prove minimality, uniqueness or sufficiency.
-Those properties need an explicitly evaluated removal/replacement experiment.
-Agent follow-up can prepare evidence and rationale proposals, but it cannot
-retroactively become an independent human selection.
+## Concurrent selection run, 2026-09-10
 
-## Implemented safeguards
+All 39 candidates were annotated in 10 fresh agent contexts, with at most four
+fixed sections per context and three jobs running concurrently. The configured
+labeler was `gpt-6-astra` at medium reasoning effort, using the existing frozen
+skill and complete source/context notes. Its output contained only the case,
+tag, assessment and selected source lines. It generated no explanation or
+omitted-note reasons. Historical assessments and selections were withheld from
+the case files. The unchanged calibration guide nevertheless includes four
+exact target tag/scope judgments; this was annotation work, not a held-out
+accuracy evaluation.
 
-Review now records optional evidence-selection provenance and separate explicit
-selection/explanation review. Automatic section filling, explicit whole-arrangement
-selection, manual note edits and range filtering remain distinguishable. Editing
-the assessment, scope or notes invalidates the unchanged draft explanation;
-historical observations are preserved. Existing single-label human sections can
-save evidence review without completing unrelated dimensions, while the exact
-label cell and assessment must remain unchanged for that action.
+| Comparison with the human assessment | Cases | Treatment |
+| --- | ---: | --- |
+| Same presence and salience | 18 | Separate agent selection supplements bound to the human observation |
+| Same positive presence, different salience | 10 | Keep the independent judgment separate |
+| Agent absent, human present | 11 | Keep the independent judgment separate |
 
-Future publication schema v3 retains the current observation hash, a shared exact
-cell identity, explicit evidence-review metadata, cumulative differences from the
-agent proposal, and the immediately preceding human observation ID/hash with its
-claim changes. These are factual revision relations, not semantic alignment
-certificates. Labels and notes always come from the same effective observation.
-Legacy schemas v1/v2 remain readable, and published v0.2.0 bytes remain unchanged.
+Of the 18 agreeing annotations, 15 independently returned the original selection,
+one selected a superset and two selected overlapping but different sets. Thus
+this run does not establish that inherited selections were defective. It supplies
+three changed selection proposals and 15 concurrent positive judgments selecting
+the same notes. Agreement alone is not a semantic audit or a sufficiency claim.
 
-The complete repository check passed 503 TypeScript and 303 Python tests, builds,
-package checks and corpus smokes. Actual Review-page verification used an isolated
-copy of one legacy source: evidence-only save appended one observation with an
-identical claim, retained its predecessor unchanged, kept four other dimensions
-unreviewed, and a repeated save did not append another observation. This verifies
-the workflow rather than the quality of a new human judgment. No supplemental
-semantic review was performed by that UI test.
+Independent verification found all 39 cases, 70 unchanged input hashes, complete
+case-file reads in every job, valid source-backed notes and original LN endpoints.
+There were no structural or provenance errors. Nine jobs made one tool call;
+one made two. Aggregate input-token usage is not a measurement of peak context.
+No human observation or published record was rewritten.
+
+Local outputs are under `.local/selection-supplement-20260910/`:
+`judgments.jsonl` retains all 39 results; `label-compatible-selections.jsonl`
+contains the 18 agreeing agent selections; `disagreements.jsonl` retains the
+other 21. Each result binds source/scope/tag/rate, original human record and
+canonical observation hash, agent assessment, selection, complete review context,
+producer and frozen input/output hashes. `result-summary.json` and
+`independent-qa.json` record verification and calibration exposure. These are
+opt-in additions with agent selection authority, not a replacement human table
+or a new published release.
+
+## Provenance and version safeguards
+
+Selection operation provenance distinguishes inherited notes, automatic section
+filling, explicit whole-arrangement selection, manual edits and range filtering.
+The set shape cannot reconstruct missing historical operation metadata. Historical
+observations are preserved, including their original prose; text inheritance and
+revision changes are factual relations, not semantic alignment certificates.
+
+Publication schema v3 retains the effective observation hash, a shared exact cell
+identity, selection provenance, differences from the agent proposal, and the
+immediately preceding human observation identity/hash and claim changes. Labels
+and attached notes come from the same effective observation. An agent selection
+supplement remains a separately identified proposal until explicitly applied
+through the human revision workflow. The frozen v0.2.0 bytes remain unchanged.
 
 ## Other measured quality limits
 
@@ -170,12 +191,12 @@ control this leakage. This work measures dependencies but does not construct or
 certify an evaluation split.
 
 Rationale often discloses the target class or strength. It is inspection material,
-not a salience-prediction input. Whether prose accurately explains its current
-claim still needs semantic review; textual identity cannot certify it. Compare
+not a salience-prediction input. Textual identity does not certify that prose explains its current
+claim. This limitation does not create retrospective explanation tasks. Compare
 an evidence-based predictor with a full-section baseline, and preserve unselected
-intervening rows and entering holds as available context. The release lacks
-negative selection labels, so omission prediction requires the separate contrast
-judgments above.
+intervening rows and entering holds as available context. The release does not supply
+semantic-negative selection labels. Its complement must not be relabeled as such;
+creating additional omitted-note judgments is outside this annotation procedure.
 
 ## Reproduce the plan
 
@@ -188,14 +209,15 @@ uv run --locked python -m annotation.evidence_review.plan \
   --release .local/releases/mania-pattern-annotations/v0.2.0 \
   --workflow .local/corpus-500-v2/workspace/workflow \
   --hygiene ../Pulsefield-model/artifacts/evidence_hygiene/20260910-v020/valid-data-final \
-  --output .local/evidence-quality-20260910/review-plan-final
+  --output .local/selection-supplement-20260910/candidates
 ```
 
 The output directory must be new. Change the output name for another run. No
 command writes to the release, source charts or workflow. Outputs are:
 
-- `review_tasks.jsonl`: grouped tasks, original/final evidence and full source
-  context, purpose, nonblocking label status, and acceptance criteria.
+- `review_tasks.jsonl`: grouped selection candidates, original/final claims and
+  full source context for the supervisor, nonblocking label status and acceptance
+  criteria. Do not pass this unredacted lineage artifact as a worker case input.
 - `cells.jsonl`: one label weight per exact cell, with every record identity.
 - `record_flags.jsonl`: factual ancestor relations, unrecorded review status,
   purpose limits, and explicit label/evidence same-claim verification.
@@ -213,8 +235,8 @@ workflow records, and independently recalculates ancestor and note-set facts.
 All selected tuples are checked against the complete pinned source note tables.
 It relies on the separately pinned hygiene audit for note parsing and full
 cryptographic handoff/audit-body verification; it does not reimplement those
-canonical engines or perform semantic review. Nine deterministic tests cover
-boundary holds, whole-section and attack-only selections, empty and inherited
-rationales, duplicate weighting and conflicts, separate rates, source tuple
-errors, immutable input checks, and rejection of mismatched final observation
-claims. These tests validate the planning tool, not annotation correctness.
+canonical engines or perform semantic review. Twelve deterministic tests cover
+concurrent re-annotation candidate rules, literal missing selections, rejection of
+shape/rationale/salience-only task triggers, boundary holds, duplicate weighting
+and conflicts, separate rates, source tuple errors, immutable input checks, and
+rejection of mismatched final observation claims. These tests validate the planning tool, not annotation correctness.

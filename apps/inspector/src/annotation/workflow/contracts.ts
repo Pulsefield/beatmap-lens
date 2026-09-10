@@ -276,7 +276,7 @@ export interface HumanObservationV2 {
       };
 }
 
-/** Human review actions, separate from the source-backed claim and generic acceptance. */
+/** Selection provenance recorded during normal human annotation or review. */
 export interface EvidenceReviewV2 {
   readonly selectionOrigin:
     | "inherited-agent"
@@ -296,10 +296,10 @@ export interface EvidenceReviewV2 {
       | "range-filter";
     readonly target: "witness" | "context" | "both";
   }[];
-  /** Explicit review of this claim's selected and unselected notes; never implied by Save. */
-  readonly selectionReviewed: boolean;
-  /** Explicit confirmation that the current explanation supports the current judgment. */
-  readonly rationaleReviewed: boolean;
+  /** Legacy dedicated-review flag; omitted by the normal annotation workflow. */
+  readonly selectionReviewed?: boolean;
+  /** Legacy dedicated-review flag; omitted by the normal annotation workflow. */
+  readonly rationaleReviewed?: boolean;
 }
 
 export interface ReviewDocumentV2 {

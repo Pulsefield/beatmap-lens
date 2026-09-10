@@ -1,4 +1,4 @@
-"""Build a source-bound supplemental review plan without changing annotations.
+"""Find missing human-label selections for concurrent agent re-annotation.
 
 Run with ``uv run --locked python -m annotation.evidence_review.plan --help``.
 Hygiene flags are cross-checks, not semantic judgments or eligibility policy.
@@ -20,14 +20,11 @@ NOTE_KEYS = ("source_line", "column", "kind", "start_ms", "end_ms")
 CAMEL = {"sourceLine": "source_line", "startMs": "start_ms", "endMs": "end_ms",
          "noteRefs": "note_refs", "contextNoteRefs": "context_note_refs"}
 ACCEPTANCE = [
-    "Review the fixed source, interval, tag and playback rate with all section notes and review context visible, including entering holds and intervening unselected rows.",
-    "Preserve the published label and record identities. A disputed label requires a separate human revision; an evidence-only proposal cannot override it.",
-    "Explicitly record whether the inherited witness selection was inspected, retained or revised; retain the original selection and identify the new reviewer and review method.",
-    "Explain how the selected arrangement supports the final presence and, when present, salience. Retaining all scope notes is allowed with an arrangement-level explanation.",
-    "Describe omitted notes by source-linked group or relationship, allowing 'not separately assessed'. Do not call the context complement or every unselected note a negative.",
-    "Record separate outcomes for selection support, rationale alignment, and omission contrast. A not-assessed contrast cannot close an omission-supervision task. Do not mistake a generic selection-review checkbox for contrast judgments.",
-    "Keep minimality and sufficiency as untested unless a separate ablation or comparison was performed; state uncertainty rather than manufacture per-note reasons.",
-    "Store the result as an additive, source-bound supplemental review referencing every record ID in this cell; human evidence gold requires an explicit human selection review, not an agent follow-up.",
+    "Re-annotate the fixed source, interval, tag and playback rate while viewing the full section and review context, including entering holds and intervening rows.",
+    "Make the style judgment and select its source-backed witnesses together under the existing annotation skill. Do not retrofit an explanation to the target label or add omitted-note judgments.",
+    "Compare the resulting assessment with the existing human label. Preserve the human label; a disagreement remains a separate unresolved candidate and must not be forced into agreement.",
+    "Retain whole-section selection when the concurrent judgment selects that arrangement. No coverage threshold or mandatory subset determines correctness or salience.",
+    "Keep the agent judgment and selection together in an additive proposal referencing the exact human observation and every grouped release record. Do not replace published records or represent agent selection as independent human note-level gold.",
 ]
 
 
@@ -147,18 +144,17 @@ def inspect_record(row, notes, proposal):
 
 
 def review_reasons(record):
+    """Select concrete missing-selection candidates, not explanation/shape work."""
+    if not record["origin"].startswith("human-"):
+        return []
     flags = record["flags"]
     reasons = []
-    if record["origin"] == "human-modified":
-        reasons.append("human_modified_evidence_not_separately_reviewed")
-    if flags["rationale_status"] == "inherited_after_claim_change":
-        reasons.append("ancestor_rationale_after_claim_change")
-    if not flags["evidence_rationale_present"]:
-        reasons.append("empty_evidence_rationale")
-    if flags["selection_shape"] == "all_scope":
-        reasons.append("full_scope_arrangement_study_not_an_error")
-    if flags["all_attacks_only_entering_holds_unselected"]:
-        reasons.append("entering_hold_omission_study_not_an_error")
+    if not record["final"]["evidence"]["note_refs"]:
+        reasons.append("missing_witness_selection")
+    elif (record["final"]["presence"] == "present"
+          and record["ancestor"]["presence"] != "present"
+          and not flags["witness_set_changed"]):
+        reasons.append("positive_label_inherits_nonpositive_judgment_selection")
     return reasons
 
 
@@ -181,12 +177,11 @@ def group_plan(rows, inspected):
                 "review_reasons": reasons}
         cells.append(cell)
         if reasons:
-            priority = 1 if "human_modified_evidence_not_separately_reviewed" in reasons else 2 if "empty_evidence_rationale" in reasons else 3
-            tasks.append({**cell, "task_id": "evidence-review-" + cell["cell_id"][5:], "priority": priority,
-                          "status": "pending_supplemental_judgment", "label_revision_requested": False,
-                          "purpose": "current_evidence_explanation_review" if priority < 3 else "optional_selection_shape_study",
+            priority = 1 if "missing_witness_selection" in reasons else 2
+            tasks.append({**cell, "task_id": "selection-reannotation-" + cell["cell_id"][5:], "priority": priority,
+                          "status": "needs_concurrent_reannotation_selection", "label_revision_requested": False,
+                          "purpose": "concurrent_judgment_and_selection",
                           "blocks_label_publication": False,
-                          "required_before_current_explanation_supervision": priority < 3,
                           "human_needs_expert_inbox": "unchanged",
                           "records": members, "acceptance_criteria": ACCEPTANCE})
     return cells, sorted(tasks, key=lambda t: (t["priority"], t["cell_id"]))
@@ -283,7 +278,7 @@ def build(release, workflow, hygiene, output, expected_manifest=PINNED_MANIFEST)
         if any(peer.get(k) != v for k, v in row.items()):
             raise ValueError(f"Hygiene changed published columns: {row['record_id']}")
         result = inspect_record(row, by_source[source], proposal)
-        if result["flags"]["structural_errors"]:
+        if set(result["flags"]["structural_errors"]) - {"empty_witness"}:
             raise ValueError(f"Source reference error: {row['record_id']}: {result['flags']['structural_errors']}")
         for key in ("selection_origin", "witness_set_changed", "context_set_changed", "assessment_changed", "scope_changed",
                     "evidence_rationale_changed", "evidence_rationale_present", "selection_shape",
@@ -301,7 +296,7 @@ def build(release, workflow, hygiene, output, expected_manifest=PINNED_MANIFEST)
                          "selection_shapes": dict(Counter(r["flags"]["selection_shape"] for r in members)),
                          "rationale_statuses": dict(Counter(r["flags"]["rationale_status"] for r in members)),
                          **{k: sum(r["flags"][k] for r in members) for k in ("assessment_changed", "scope_changed", "context_equals_review_complement", "all_attacks_only_entering_holds_unselected")}}
-    summary = {"contract": "beatmap-lens-supplemental-evidence-review-plan", "version": 1,
+    summary = {"contract": "beatmap-lens-selection-reannotation-plan", "version": 2,
                "release_manifest_sha256": expected_manifest, "records": len(rows), "cells": len(cells),
                "exact_source_bytes_verified": len({row["source_sha256"] for row in rows}),
                "counts": counts, "review_tasks": len(tasks),

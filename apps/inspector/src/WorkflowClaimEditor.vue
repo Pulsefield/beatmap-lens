@@ -115,7 +115,7 @@ function copyTransitionNotes(): void {
         <label>End<input type="number" step="any" :disabled="disabled" :value="modelValue[kind].endMs" @change="range(kind, 'endMs', ($event.target as HTMLInputElement).value)"></label>
       </div>
     </div>
-    <label>Evidence / judgment rationale
+    <label>Evidence / judgment rationale · optional
       <textarea rows="3" :disabled="disabled" :value="modelValue.evidence.rationale" @input="update({ evidence: { ...modelValue.evidence, rationale: ($event.target as HTMLTextAreaElement).value } })" />
     </label>
     <div v-for="kind in (['noteRefs', 'contextNoteRefs'] as const)" :key="kind">

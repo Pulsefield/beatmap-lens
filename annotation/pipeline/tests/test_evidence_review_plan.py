@@ -1,4 +1,4 @@
-"""Research review queues preserve authority, geometry, and record identities."""
+"""Selection repair candidates preserve authority, geometry, and record identities."""
 from copy import deepcopy
 import json
 from pathlib import Path
@@ -51,10 +51,9 @@ class EvidenceReviewPlanTests(unittest.TestCase):
         self.assertTrue(result["flags"]["context_equals_review_complement"])
         self.assertFalse(result["flags"]["unselected_as_semantic_negative_allowed"])
         _, tasks = group_plan([row], {row["record_id"]: result})
-        self.assertEqual(tasks[0]["purpose"], "optional_selection_shape_study")
-        self.assertFalse(tasks[0]["required_before_current_explanation_supervision"])
+        self.assertEqual(tasks, [])
 
-    def test_modified_label_keeps_inherited_text_and_gets_urgent_review(self):
+    def test_modified_absence_keeps_inherited_text_without_selection_task(self):
         row, notes, proposal = fixture()
         row.update(origin="human-modified", presence="absent", salience=None)
         before = deepcopy(row)
@@ -64,10 +63,55 @@ class EvidenceReviewPlanTests(unittest.TestCase):
         self.assertEqual(cells[0]["presence"], "absent")
         self.assertEqual(result["ancestor"]["presence"], "present")
         self.assertEqual(result["flags"]["rationale_status"], "inherited_after_claim_change")
+        self.assertEqual(tasks, [])
+
+    def test_positive_label_inheriting_nonpositive_selection_needs_concurrent_judgment(self):
+        for ancestor_presence in ("absent", "unresolved"):
+            with self.subTest(ancestor_presence=ancestor_presence):
+                row, notes, proposal = fixture()
+                row["origin"] = "human-modified"
+                proposal["assessment"] = {"presence": ancestor_presence}
+                before = deepcopy(row)
+                result = inspect_record(row, notes, proposal)
+                _, tasks = group_plan([row], {row["record_id"]: result})
+                self.assertEqual(row, before)
+                self.assertEqual(tasks[0]["review_reasons"], ["positive_label_inherits_nonpositive_judgment_selection"])
+                self.assertEqual(tasks[0]["status"], "needs_concurrent_reannotation_selection")
+                self.assertEqual(tasks[0]["purpose"], "concurrent_judgment_and_selection")
+                self.assertFalse(tasks[0]["label_revision_requested"])
+                self.assertFalse(tasks[0]["blocks_label_publication"])
+
+    def test_revised_selection_and_salience_change_do_not_trigger_reannotation(self):
+        row, notes, proposal = fixture()
+        row["origin"] = "human-modified"
+        row["details"]["evidence"]["note_refs"] = deepcopy(notes[1:3])
+        proposal["assessment"] = {"presence": "absent"}
+        result = inspect_record(row, notes, proposal)
+        _, tasks = group_plan([row], {row["record_id"]: result})
+        self.assertEqual(tasks, [])
+        row, notes, proposal = fixture()
+        row.update(origin="human-modified", salience="prominent")
+        result = inspect_record(row, notes, proposal)
+        _, tasks = group_plan([row], {row["record_id"]: result})
+        self.assertEqual(tasks, [])
+        row, notes, proposal = fixture()
+        row.update(origin="human-modified", start_ms=90)
+        result = inspect_record(row, notes, proposal)
+        _, tasks = group_plan([row], {row["record_id"]: result})
+        self.assertTrue(result["flags"]["scope_changed"])
+        self.assertEqual(tasks, [])
+
+    def test_missing_human_witness_is_candidate_not_machine_reannotation(self):
+        row, notes, proposal = fixture()
+        row["details"]["evidence"]["note_refs"] = []
+        result = inspect_record(row, notes, proposal)
+        _, tasks = group_plan([row], {row["record_id"]: result})
+        self.assertEqual(tasks[0]["review_reasons"], ["missing_witness_selection"])
         self.assertEqual(tasks[0]["priority"], 1)
-        self.assertFalse(tasks[0]["label_revision_requested"])
-        self.assertFalse(tasks[0]["blocks_label_publication"])
-        self.assertTrue(tasks[0]["required_before_current_explanation_supervision"])
+        row["origin"] = "agent-reviewed"
+        result = inspect_record(row, notes, proposal)
+        _, tasks = group_plan([row], {row["record_id"]: result})
+        self.assertEqual(tasks, [])
 
     def test_empty_rationale_does_not_remove_positive_strength_target(self):
         row, notes, proposal = fixture()
@@ -77,6 +121,8 @@ class EvidenceReviewPlanTests(unittest.TestCase):
         self.assertEqual(result["flags"]["rationale_status"], "empty")
         self.assertTrue(result["flags"]["positive_strength_target_available"])
         self.assertFalse(result["flags"]["assessment_changed"])
+        _, tasks = group_plan([row], {row["record_id"]: result})
+        self.assertEqual(tasks, [])
 
     def test_attack_only_subset_is_explicit_and_other_notes_are_preserved(self):
         row, notes, proposal = fixture()
@@ -87,6 +133,8 @@ class EvidenceReviewPlanTests(unittest.TestCase):
         self.assertEqual(result["unselected_scope_lines"], [1])
         self.assertEqual(len(result["review_context_notes"]), 5)
         self.assertEqual(result["flags"]["structural_errors"], [])
+        _, tasks = group_plan([row], {row["record_id"]: result})
+        self.assertEqual(tasks, [])
 
     def test_exact_cells_preserve_duplicate_records_and_separate_rates(self):
         row, notes, proposal = fixture()
@@ -101,7 +149,7 @@ class EvidenceReviewPlanTests(unittest.TestCase):
         duplicate = next(c for c in cells if len(c["record_ids"]) == 2)
         self.assertEqual(duplicate["record_ids"], ["human:one", "human:two"])
         self.assertEqual(duplicate["record_label_weight"], 0.5)
-        self.assertEqual(len(tasks), 2)
+        self.assertEqual(tasks, [])
         self.assertNotEqual(exact_cell(row), exact_cell(fast))
 
     def test_differing_scope_labels_are_a_split_risk_not_auto_error(self):

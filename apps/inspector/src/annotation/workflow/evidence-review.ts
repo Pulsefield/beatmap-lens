@@ -10,8 +10,6 @@ export function newEvidenceReview(
     selectionOrigin: origin,
     ...source,
     operations: [],
-    selectionReviewed: false,
-    rationaleReviewed: false,
   };
 }
 
@@ -28,8 +26,8 @@ export function recordEvidenceOperation(
 ): EvidenceReviewV2 {
   return {
     ...review,
-    selectionReviewed: false,
-    rationaleReviewed: false,
+    ...(review.selectionReviewed === undefined ? {} : { selectionReviewed: false }),
+    ...(review.rationaleReviewed === undefined ? {} : { rationaleReviewed: false }),
     operations: [
       ...review.operations.filter(
         (previous) => previous.kind !== operation.kind || previous.target !== operation.target,
@@ -64,9 +62,16 @@ export function updateEvidenceDraft(
         ? { ...next, evidence: { ...next.evidence, rationale: "" } }
         : next,
     review: changed
-      ? { ...review, selectionReviewed: false, rationaleReviewed: false }
+      ? {
+          ...review,
+          ...(review.selectionReviewed === undefined ? {} : { selectionReviewed: false }),
+          ...(review.rationaleReviewed === undefined ? {} : { rationaleReviewed: false }),
+        }
       : rationaleChanged
-        ? { ...review, rationaleReviewed: false }
+        ? {
+            ...review,
+            ...(review.rationaleReviewed === undefined ? {} : { rationaleReviewed: false }),
+          }
         : review,
   };
 }

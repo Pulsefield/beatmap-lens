@@ -199,17 +199,17 @@ Version 3 preserves these distinctions explicitly:
 | `details.human_revision` | The immediately preceding human observation's ID/hash and `changed_fields`, for both direct revisions and successive decisions on one proposal. This separates the latest revision from cumulative changes against an original machine proposal. Null means no preceding human observation was supplied. |
 | `details.evidence_review.selection_origin` | The recorded starting point: inherited agent/human selection, a new human claim, copied section, or unknown. Source handoff/observation/claim pointers identify that starting point when recorded. |
 | `details.evidence_review.operations` | Saved draft operations distinguish `auto-scope-fill`, `explicit-scope-selection`, `manual-note-edit`, and `range-filter`, with witness/context/both targets. The list is not a full per-note action history. |
-| `details.evidence_review.selection_reviewed` | A separate explicit check of the current selection. A generic label save or unchanged selection does not establish it. |
-| `details.evidence_review.rationale_reviewed` | A separate explicit check of the current evidence explanation. A generic decision comment does not establish it. |
+| `details.evidence_review.selection_reviewed` | Nullable legacy declaration, retained only when recorded. Current saves do not require or manufacture it. |
+| `details.evidence_review.rationale_reviewed` | Nullable legacy declaration about an explanation, retained only when recorded. No separate explanation review is required. |
 | `cell_id` | A deterministic identity for the exact source/scope/tag/rate tuple, independent of record, method, and authority. It groups duplicates without deleting record identities or assigning a universal weight. |
 
 The entire `evidence_review` field is null for older untracked records. No importer
 infers past UI operations or human intent from the resulting note-set shape.
 `proposal_changes` containing `assessment` but neither `witnesses` nor `rationale`
 makes a label revision with inherited notes/explanation visible without revoking
-that human label. A dedicated supplemental review should decide whether the
-selection and explanation support the final assessment, then append a new human
-observation. The common claim comparison covers `tag_id`, `assessment`, `scope`,
+that human label or requiring a post-hoc explanation. Agents select notes while
+making their judgment. A later agent annotation retains its own authority and
+does not rewrite a historical human observation. The common claim comparison covers `tag_id`, `assessment`, `scope`,
 `playback_rate`, `review_context`, `witnesses`, `context_notes`, `rationale`,
 `section_id`, `boundary_uncertainty`, `transition`, and `exemplar_role`. Identity
 and review declarations are metadata, so a metadata-only revision has empty
@@ -227,8 +227,9 @@ its existing review metadata or identity binding under the same record ID.
 `auxiliary_evidence_status` answers whether the referenced human exemplars still
 match their recorded source/observation hashes and Foundation. It does **not**
 answer whether this row's rationale explains its current label. Keep dependency
-freshness, label authority, explicit selection review, and explanation review as
-separate dimensions.
+freshness, label authority, selection origin, and explanation content separate.
+The legacy review declarations describe only what was recorded; they are not
+required stages of annotation.
 
 The section delivery packager constructs `contextNoteRefs` from every note in the
 supplied review context except witnesses. That operation is automatic; it is not
@@ -242,14 +243,15 @@ coverage thresholds into salience or evidence-quality labels.
 Research eligibility depends on the question:
 
 - Section-label learning can retain final human labels while masking unresolved or
-  unreviewed assessments, regardless of whether an explanation needs supplemental
-  review. Select authority/method layers first and weight agreeing exact cells
+  unreviewed assessments, including labels with inherited or empty explanations.
+  Select authority/method layers first and weight agreeing exact cells
   once. Resolve contradictions among selected machine methods explicitly.
-- Selection research must identify inherited versus explicitly reviewed sets and
+- Selection research must preserve the recorded origin of each set and
   keep the complete section and review context available, including unselected
   intervening rows and original start/end times of crossing long notes. Explicit
-  review alone does not establish necessity or sufficiency. Testing why individual
-  notes were omitted requires additional judgments or a declared intervention.
+  review alone does not establish necessity or sufficiency. Existing selections
+  do not supply reasons for individual omissions, and agents are not required to
+  generate those reasons.
 - Salience prediction must exclude evidence rationale, human decision comments,
   and audit explanations from model inputs because they can disclose the target.
   Group related rates, overlapping sections, and source versions during splitting.

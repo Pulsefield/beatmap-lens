@@ -680,8 +680,14 @@ function assertEvidenceReviewV2(
 ): void {
   record(
     review,
-    ["selectionOrigin", "operations", "selectionReviewed", "rationaleReviewed"],
-    ["sourceHandoffId", "sourceObservationId", "sourceClaimId"],
+    ["selectionOrigin", "operations"],
+    [
+      "sourceHandoffId",
+      "sourceObservationId",
+      "sourceClaimId",
+      "selectionReviewed",
+      "rationaleReviewed",
+    ],
     "evidenceReview",
   );
   oneOf(
@@ -689,8 +695,10 @@ function assertEvidenceReviewV2(
     ["inherited-agent", "inherited-human", "new-human", "copied-section", "unknown"],
     "evidenceReview.selectionOrigin",
   );
-  oneOf(review.selectionReviewed, [true, false], "evidenceReview.selectionReviewed");
-  oneOf(review.rationaleReviewed, [true, false], "evidenceReview.rationaleReviewed");
+  if (review.selectionReviewed !== undefined)
+    oneOf(review.selectionReviewed, [true, false], "evidenceReview.selectionReviewed");
+  if (review.rationaleReviewed !== undefined)
+    oneOf(review.rationaleReviewed, [true, false], "evidenceReview.rationaleReviewed");
   for (const key of ["sourceHandoffId", "sourceObservationId", "sourceClaimId"] as const)
     if (review[key] !== undefined) nonempty(review[key], `evidenceReview.${key}`);
   for (const operation of array(review.operations, "evidenceReview.operations")) {

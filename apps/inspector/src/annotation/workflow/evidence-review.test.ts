@@ -14,8 +14,8 @@ import {
 } from "./evidence-review";
 import { historicalAcceptance, workflowFixture } from "./test-fixtures";
 
-describe("human evidence provenance and dedicated review", () => {
-  it("round-trips explicit review separately from generic acceptance and preserves old observations", async () => {
+describe("human selection provenance and legacy review metadata", () => {
+  it("round-trips legacy explicit-review fields while new revisions only record selection provenance", async () => {
     const f = await workflowFixture();
     const imported = await importHandoffV2(f.registered, f.handoff, f.sourceBytes);
     const historical = historicalAcceptance(imported.document, f.handoff.handoffId, f.claim.id);
@@ -52,9 +52,10 @@ describe("human evidence provenance and dedicated review", () => {
     await expect(assertReviewDocumentV2(reviewed, f.sourceBytes)).resolves.toEqual(reviewed);
     const saved = reviewed.observations.at(-1);
     if (!saved) throw new Error("Missing new observation.");
-    expect(inheritedHumanEvidenceReview(saved)).toMatchObject({
-      selectionReviewed: false,
-      rationaleReviewed: false,
+    expect(inheritedHumanEvidenceReview(saved)).toEqual({
+      selectionOrigin: "inherited-human",
+      sourceObservationId: saved.id,
+      sourceClaimId: saved.claim.id,
       operations: [],
     });
     expect(reviewed.handoffs).toEqual(historical.handoffs);
@@ -159,6 +160,23 @@ describe("human evidence provenance and dedicated review", () => {
     ).toEqual(review);
   });
 
+  it("keeps review flags absent when editing ordinary selection metadata", async () => {
+    const { claim } = await workflowFixture();
+    const next = { ...claim, assessment: { presence: "absent" as const } };
+    const updated = updateEvidenceDraft(claim, next, newEvidenceReview("unknown"));
+    expect(updated.claim.evidence.rationale).toBe("");
+    expect(updated.review).toEqual({ selectionOrigin: "unknown", operations: [] });
+    const rewritten = updateEvidenceDraft(
+      claim,
+      {
+        ...claim,
+        evidence: { ...claim.evidence, rationale: "Optional edit." },
+      },
+      updated.review,
+    );
+    expect(rewritten.review).toEqual(updated.review);
+  });
+
   it("retains automatic and explicit selection operations without an unbounded click history", () => {
     let review = newEvidenceReview("new-human");
     for (let index = 0; index < 50; index++) {
@@ -170,6 +188,7 @@ describe("human evidence provenance and dedicated review", () => {
       review = recordEvidenceOperation(review, { kind: "manual-note-edit", target: "context" });
     }
     expect(review.operations).toHaveLength(3);
-    expect(review.selectionReviewed).toBe(false);
+    expect(review).not.toHaveProperty("selectionReviewed");
+    expect(review).not.toHaveProperty("rationaleReviewed");
   });
 });

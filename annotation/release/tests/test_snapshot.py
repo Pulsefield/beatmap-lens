@@ -200,6 +200,19 @@ class SnapshotTests(unittest.TestCase):
         for phrase in ("not a selected negative set", "not independently checked", "does not certify minimal", "disclose the target"):
             self.assertIn(phrase, card)
 
+    def test_selection_operations_do_not_manufacture_review_declarations(self):
+        details = self.projection["human"][0]["details"]
+        details["evidence_review"] = {"selectionOrigin": "new-human", "operations": [
+            {"kind": "explicit-scope-selection", "target": "witness"}]}
+        details["evidence"]["rationale"] = ""
+        path, _ = self.build()
+        row = pq.read_table(path / "data/human.parquet").to_pylist()[0]
+        review = row["details"]["evidence_review"]
+        self.assertEqual(review["operations"], details["evidence_review"]["operations"])
+        self.assertIsNone(review["selection_reviewed"])
+        self.assertIsNone(review["rationale_reviewed"])
+        self.assertEqual(row["details"]["evidence"]["rationale"], "")
+
     def test_cell_identity_groups_records_across_layers_but_separates_scope_tag_and_rate(self):
         add_agent(self.projection, self.config)
         for name, changes in (("scope", {"end_ms": 400}), ("rate", {"playback_rate": 0.75})):

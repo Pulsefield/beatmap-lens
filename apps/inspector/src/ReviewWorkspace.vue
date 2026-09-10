@@ -100,17 +100,6 @@ const expertQueue = computed(() => agentReviews.value.filter(review => review.st
 const activeReview = computed(() => agentReviews.value.find(review => review.handoffId === activeHandoffId.value && review.claimId === activeClaimId.value));
 const activeTrust = computed(() => props.remoteSource?.handoffTrust?.[activeHandoffId.value] ?? activeReview.value?.trust);
 const activeHandoff = computed(() => document.value?.handoffs.find(entry => entry.handoff.handoffId === activeHandoffId.value)?.handoff);
-const evidenceObservation = computed(() => {
-  const observationId = editorOrigin.value === "proposal"
-    ? document.value?.decisions.filter(entry => entry.handoffId === activeHandoffId.value && entry.claimId === activeClaimId.value).at(-1)?.observationId
-    : sectionObservationIds.value[activeClaimId.value];
-  return document.value?.observations.find(entry => entry.id === observationId);
-});
-const canSaveEvidenceReview = computed(() => evidenceObservation.value && activeClaim.value && settled(activeClaim.value)
-  && evidenceObservation.value.claim.tagId === activeClaim.value.tagId
-  && resolvePlaybackRate(evidenceObservation.value.claim.playbackRate) === resolvePlaybackRate(activeClaim.value.playbackRate)
-  && serializeCanonicalJson(evidenceObservation.value.claim.scope) === serializeCanonicalJson(activeClaim.value.scope)
-  && serializeCanonicalJson(evidenceObservation.value.claim.assessment) === serializeCanonicalJson(activeClaim.value.assessment));
 const auditPackets = computed(() => new Map(document.value?.audits?.map(entry => [entry.audit.auditId, entry.audit])));
 const chartHistory = computed(() => agentReviews.value.map(review => {
   const handoff = document.value?.handoffs.find(entry => entry.handoff.handoffId === review.handoffId)?.handoff;
@@ -733,12 +722,6 @@ function recordSelectionOperation(claimId: string, kind: EvidenceReviewV2["opera
   sectionComplete.value = false;
 }
 
-function reviewEvidence(field: "selectionReviewed" | "rationaleReviewed", checked: boolean): void {
-  if (!canEdit.value || !activeClaim.value) return;
-  evidenceReviews.value = { ...evidenceReviews.value, [activeClaimId.value]: { ...activeEvidenceReview.value, [field]: checked } };
-  sectionComplete.value = false;
-}
-
 function focus(range: TimeRangeV1): void {
   if (activeClaim.value) setPlaybackRate(resolvePlaybackRate(activeClaim.value.playbackRate));
   playback?.pause();
@@ -933,31 +916,26 @@ function decideSection(): void {
   void submitSection(true);
 }
 
-function saveEvidenceReview(): void {
-  void submitSection(editorOrigin.value === "proposal", true);
-}
-
-async function submitSection(proposal: boolean, evidenceOnly = false): Promise<void> {
+async function submitSection(proposal: boolean): Promise<void> {
   if (!claimRateMatchesPlayback.value || busy.value || sourceLoading.value || savingDecision.value || !directory.value || !sourceBytes.value || !stored.value || !activeClaim.value || !humanId.value.trim()) return;
-  if (draftIsStale.value || (evidenceOnly ? !canSaveEvidenceReview.value : proposal && !sectionReady.value)) return;
+  if (draftIsStale.value || (proposal && !sectionReady.value)) return;
   const sourceSha = stored.value.document.source.sha256;
   const anchorId = activeClaim.value.id;
   const handoffId = activeHandoffId.value;
   const key = proposal || editorOrigin.value === "direct" ? draftKey() : undefined;
   const snapshot = JSON.parse(serializeCanonicalJson(drafts.value)) as ClaimV2[];
-  const submittedSnapshot = evidenceOnly ? snapshot.filter(claim => claim.id === anchorId) : snapshot;
   const reviewSnapshot = JSON.parse(serializeCanonicalJson(evidenceReviews.value)) as Record<string, EvidenceReviewV2>;
   const reviewChanged = (claimId: string) => serializeCanonicalJson(reviewSnapshot[claimId]) !== serializeCanonicalJson(savedEvidenceReviews.value[claimId]);
   const storedBefore = stored.value;
   const sameClaim = (left: ClaimV2, right: ClaimV2) => serializeCanonicalJson(left) === serializeCanonicalJson(right);
-  const observations = submittedSnapshot.filter(claim => claim.assessment.presence !== "unreviewed"
+  const observations = snapshot.filter(claim => claim.assessment.presence !== "unreviewed"
     && (!proposal || !sectionProposals.value.some(original => original.id === claim.id))
     && (!sectionObservationIds.value[claim.id] || !savedSectionDrafts.value.some(saved => saved.id === claim.id && sameClaim(saved, claim) && !reviewChanged(claim.id))));
   const supersedesObservationIds = Object.fromEntries(observations.flatMap(claim => {
     const priorId = sectionObservationIds.value[claim.id];
     return priorId ? [[claim.id, priorId]] : [];
   }));
-  const decisions = proposal ? submittedSnapshot.flatMap(claim => {
+  const decisions = proposal ? snapshot.flatMap(claim => {
     const original = sectionProposals.value.find(entry => entry.id === claim.id);
     if (!original) return [];
     const prior = storedBefore.document.decisions.filter(entry => entry.handoffId === handoffId && entry.claimId === claim.id).at(-1);
@@ -984,7 +962,6 @@ async function submitSection(proposal: boolean, evidenceOnly = false): Promise<v
       if (sameEditor) {
         const effectiveDirect = effectiveHumanObservationsV2(saved.document).filter(entry => entry.origin.kind === "direct-human");
         const savedClaims = snapshot.map(claim => {
-          if (evidenceOnly && claim.id !== anchorId) return claim;
           if (proposal && sectionProposals.value.some(entry => entry.id === claim.id)) {
             const decision = saved.document.decisions.filter(entry => entry.handoffId === handoffId && entry.claimId === claim.id).at(-1);
             return saved.document.observations.find(entry => entry.id === decision?.observationId)?.claim ?? claim;
@@ -992,11 +969,9 @@ async function submitSection(proposal: boolean, evidenceOnly = false): Promise<v
           return effectiveDirect.find(entry => entry.claim.id === claim.id)?.claim ?? claim;
         });
         const unchangedDuringSave = sameClaimList(snapshot, drafts.value) && serializeCanonicalJson(reviewSnapshot) === serializeCanonicalJson(evidenceReviews.value);
-        savedEvidenceReviews.value = evidenceOnly ? { ...savedEvidenceReviews.value, [anchorId]: reviewSnapshot[anchorId] ?? newEvidenceReview("unknown") } : reviewSnapshot;
+        savedEvidenceReviews.value = reviewSnapshot;
         if (unchangedDuringSave) drafts.value = JSON.parse(serializeCanonicalJson(savedClaims));
-        savedSectionDrafts.value = JSON.parse(serializeCanonicalJson(evidenceOnly
-          ? savedClaims.map(claim => claim.id === anchorId ? claim : savedSectionDrafts.value.find(saved => saved.id === claim.id) ?? claim)
-          : savedClaims));
+        savedSectionDrafts.value = JSON.parse(serializeCanonicalJson(savedClaims));
         const direct = effectiveHumanObservationsV2(saved.document).filter(entry => entry.origin.kind === "direct-human" && drafts.value.some(claim => claim.id === entry.claim.id));
         sectionObservationIds.value = Object.fromEntries(direct.map(entry => [entry.claim.id, entry.id]));
         if (!proposal) {
@@ -1005,9 +980,9 @@ async function submitSection(proposal: boolean, evidenceOnly = false): Promise<v
         }
         editorBase.value = saved.version;
         editorReviewRevision.value = saved.document.reviewRevision;
-        sectionComplete.value = unchangedDuringSave && !evidenceOnly;
-        status.value = unchangedDuringSave ? evidenceOnly ? "Evidence review saved for this judgment." : "Section judgments saved together." : "Section saved. Your newer edits are ready to submit.";
-        if (unchangedDuringSave && key && !evidenceOnly) localStorage.removeItem(key);
+        sectionComplete.value = unchangedDuringSave;
+        status.value = unchangedDuringSave ? "Section judgments saved together." : "Section saved. Your newer edits are ready to submit.";
+        if (unchangedDuringSave && key) localStorage.removeItem(key);
         else stashDraft();
       }
     }
@@ -1225,7 +1200,7 @@ onBeforeUnmount(() => { window.removeEventListener("keydown", workspaceKeydown);
           </section>
           <details class="review-section review-claim-evidence"><summary>{{ activeFoundation.tags.find(tag => tag.id === activeClaim?.tagId)?.displayName }} · evidence &amp; section range</summary>
             <WorkflowClaimEditor :model-value="activeClaim" :tags="activeFoundation.tags" :disabled="!canEdit" @update:model-value="updateEditorClaim" @focus="focus" />
-            <details class="review-section"><summary>Choose source-backed evidence</summary><label>Click notes to toggle<select v-model="evidenceMode"><option value="noteRefs">Witness for this claim</option><option value="contextNoteRefs">Context notes (not negative labels)</option></select></label><button type="button" :disabled="!canEdit" @click="selectScopeNotes">Use arrangement in claim scope</button><p class="review-copy">Notes crossing the start retain their original LN start and end. Context and unselected notes are not negative labels. Review each concept separately.</p><p class="review-copy">Selection source: {{ evidenceOriginLabel[activeEvidenceReview.selectionOrigin] }}. {{ activeEvidenceReview.operations.length ? `This draft: ${activeEvidenceReview.operations.map(evidenceOperationLabel).join("; ")}.` : "No selection operation recorded in this draft." }}</p><label><input type="checkbox" :checked="activeEvidenceReview.selectionReviewed" :disabled="!canEdit" @change="reviewEvidence('selectionReviewed', ($event.target as HTMLInputElement).checked)">I reviewed selected and unselected notes for this judgment</label><label><input type="checkbox" :checked="activeEvidenceReview.rationaleReviewed" :disabled="!canEdit || !activeClaim.evidence.rationale.trim()" @change="reviewEvidence('rationaleReviewed', ($event.target as HTMLInputElement).checked)">I reviewed the explanation for this judgment</label><p class="review-copy">Saving labels does not imply these separate reviews. Changes reset the relevant checks; changing labels, ranges or notes clears the previous explanation.</p><button v-if="evidenceObservation && !historicalObservation" type="button" :disabled="!canEdit || !!savingDecision || !approved || !humanId.trim() || draftIsStale || !canSaveEvidenceReview" @click="saveEvidenceReview">Save evidence review for this judgment</button><p v-if="evidenceObservation && !historicalObservation" class="review-copy">Save this existing judgment's evidence and review checks with its source interval, concept, playback rate and assessment unchanged. Other dimensions keep their drafts.</p><div class="review-note-list"><label v-for="note in visibleNotes" :key="note.id"><input type="checkbox" :checked="activeClaim.evidence[evidenceMode].some(ref => ref.sourceLine === note.sourceLine)" :disabled="!canEdit" @change="toggleNote(note.id)"><span>L{{ note.sourceLine }} · C{{ note.column + 1 }} · {{ note.startMs }}{{ note.kind === 'long' ? `–${note.endMs}` : '' }} ms</span></label></div><div class="review-actions"><button type="button" :disabled="notePage === 0" @click="notePage--">Previous notes</button><button type="button" :disabled="(notePage + 1) * 80 >= candidateNotes.length" @click="notePage++">Next notes</button></div></details>
+            <details class="review-section"><summary>Choose source-backed evidence</summary><label>Click notes to toggle<select v-model="evidenceMode"><option value="noteRefs">Witness for this claim</option><option value="contextNoteRefs">Context notes (not negative labels)</option></select></label><button type="button" :disabled="!canEdit" @click="selectScopeNotes">Use arrangement in claim scope</button><p class="review-copy">Notes crossing the start retain their original LN start and end. Context and unselected notes are not negative labels. Select witnesses independently for each concept.</p><p class="review-copy">Selection source: {{ evidenceOriginLabel[activeEvidenceReview.selectionOrigin] }}. {{ activeEvidenceReview.operations.length ? `This draft: ${activeEvidenceReview.operations.map(evidenceOperationLabel).join("; ")}.` : "No selection operation recorded in this draft." }}</p><div class="review-note-list"><label v-for="note in visibleNotes" :key="note.id"><input type="checkbox" :checked="activeClaim.evidence[evidenceMode].some(ref => ref.sourceLine === note.sourceLine)" :disabled="!canEdit" @change="toggleNote(note.id)"><span>L{{ note.sourceLine }} · C{{ note.column + 1 }} · {{ note.startMs }}{{ note.kind === 'long' ? `–${note.endMs}` : '' }} ms</span></label></div><div class="review-actions"><button type="button" :disabled="notePage === 0" @click="notePage--">Previous notes</button><button type="button" :disabled="(notePage + 1) * 80 >= candidateNotes.length" @click="notePage++">Next notes</button></div></details>
           </details>
           <button v-if="!historicalObservation && (editorOrigin === 'direct' || editorOrigin === 'observation')" class="review-primary" type="button" :disabled="busy || !!savingDecision || sourceLoading || !stored || !approved || !humanId.trim() || draftIsStale || !claimRateMatchesPlayback" @click="saveSection">{{ editorOrigin === 'observation' ? 'Save revised section' : 'Save section judgments' }}</button>
           <section v-if="historicalObservation" class="review-historical-observation"><h2>Historical human judgment</h2><p>{{ historicalObservation.confirmedAt }} · earlier version</p><button type="button" @click="openObservation(historicalObservation)">View current judgment</button><button type="button" @click="reviseFromHistoricalObservation">Revise current judgment using this version</button></section>
