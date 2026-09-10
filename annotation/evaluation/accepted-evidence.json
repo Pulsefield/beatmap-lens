@@ -1,0 +1,1585 @@
+{
+  "kind": "annotation-regression-evidence-v1",
+  "baseline": {
+    "files": {
+      "labeler": {
+        ".agents/skills/mania-pattern-judgment/SKILL.md": "cef9d7270930bd96bfaade00271bf8970542bcbe5d31bd2ce57dcde3b75ddf3a",
+        ".agents/skills/mania-pattern-judgment/agents/openai.yaml": "ccf36cf046af3bb2919a79be0498afbb9a00304fc99e3cee2bb9b404da2be06a",
+        ".agents/skills/mania-pattern-judgment/references/beatmap-lens-exchange.md": "4c11d831416d895ce8ea8bc5507e7de78b9e00f519a2ec1ebe566c74ea00f304",
+        ".agents/skills/mania-pattern-judgment/references/corpus-learning.md": "5654f10fd4b56adc78ea58d7deb9a611e10cd15c820e2a55a06d40bd2fc4d647",
+        ".agents/skills/mania-pattern-judgment/references/expert-review-20260907.json": "a860d4cbf2f654a07c2370156a037a981d093b3081e6c1d20f2e35a10b4a9c0a",
+        ".agents/skills/mania-pattern-judgment/references/feedback-calibration.json": "7556109301f8eb8672d3d44e2ad3086ea5f4e367287b9bd79e6170c7f557d42d",
+        ".agents/skills/mania-pattern-judgment/references/feedback-maintenance.md": "b6c83a1b335a171f864d2bfb3d0f8ada0fd22bc980a35a1a34b1247417a3e561",
+        ".agents/skills/mania-pattern-judgment/references/human-contrast-sets.json": "546df6d4bf26e8489e67c381bb09b6b182411c97b801434c39d638436746fa67",
+        ".agents/skills/mania-pattern-judgment/references/judgment-guide.md": "f3e0a214a3b7bbb60b481b78bb9b680ebdbf54b3059c5b7aa30f52088c23e22a",
+        ".agents/skills/mania-pattern-judgment/references/structural-queries.md": "3a136cdc46cd192c93c0c373508e54b09b2fb41d7177589c0a062ebe43e991c9",
+        ".agents/skills/mania-pattern-judgment/references/tech-pack-20260907.md": "1e1ef39c5c791a8b077f3c66bb577b6efc89f895569261388180af686d4a7280",
+        ".agents/skills/mania-pattern-judgment/scripts/check_budget.py": "eb0eb0e27d59e78eef29f9dbc45caaa4c02a9544741a1be60e33e5b04b41864c",
+        ".python-version": "7a41a41354ab8049091ef1a00253ca00567f5a1d3f9aef5502c0b4b5ce9ae707",
+        "annotation/annotation_runtime.py": "b7f3330d4ca7117af500453aa7efe1fa42cebca7fa85ff85c85f3aee28d2775b",
+        "annotation/evaluation/prepare-harness-benchmark.py": "c8eb76fbe68eaec1632932280a5724826156e39984e218ae21e61337cc8ec72c",
+        "annotation/evaluation/run-section-benchmark.py": "3883420f111754eddf3ba4ec1b0706d7727fa677f82d6de7b9c3f89436b626b6",
+        "annotation/evaluation/run_regression.py": "32e998cb1ebe6e5bd67c4d485ea388b7c3a5ed93de90f8d0796b5d8c86cfe3c4",
+        "annotation/playback_rate.py": "3ae0f1f18d40d1a58ea55e8937f49ba9a84ffe983b6140bcd5daf6ece9aef774",
+        "annotation/roles/harness-labeler.md": "8a7e8ac22cb0d267ff566d01f9c86b3224117bc8cc911dbf215d2b5a66f8458d",
+        "annotation/roles/labeler.md": "b4dca8883968b792f6a9a0f6b6aa0505cd87662259d6c60d4b3b11793ae928aa",
+        "annotation/section_evidence.py": "09b83a7c6590cfce14b86ae07e3b44bd3da089ec26b0427e1d1e1d1f3ee5ff9b",
+        "harness/annotation-facts.py": "e976214446fcbc815dbd5a9e5352cfc14e4c306cb64a2f6f49314b481716f8bf",
+        "harness/annotation-harness.py": "410e9f07ec01d8aee0ce04586a7368aedacbf93136193dc83d206ddf8572bf21",
+        "harness/annotation-queries.py": "70aa572cb360f061465afff61f57455eb3b3cbe0df5fce58565cbec346c4ac59",
+        "harness/harness_examples.py": "e856685d7751563b7ed98c41ef0d57bcd97046712d587f4d7fad4bffd6f8d536",
+        "harness/harness_inspection.py": "c35ec787f2b52258a0921aa3f3d3526129a0b6c56436c5e63f027b576fb0c721",
+        "harness/harness_playback.py": "75308d6dd4825969cfa48b039b6af1f03ce6eee42b8af7f33b7a468e0e990dbd",
+        "harness/harness_render.py": "28ca3b220fe74f742b495b173719e2e94842c3a6a9840df96a57170af5e66e9d",
+        "harness/prepare-annotation-harness.py": "f570680e4d2a7bde00d7f203f2a526ba8c3ef1c69828612486ecf98380cabd72",
+        "pyproject.toml": "9ddc3a59e6ea449fdec079a15c7d89bb80c0c361fb5b5bede3564220b4f7ad81",
+        "uv.lock": "773d09674091b265afb4437aef262b47e7da662fe0cc146d834a07cbc99793d2"
+      },
+      "auditor": {
+        "annotation/pipeline/section_annotation_delivery.py": "a9d1381a5f484f084cadc7180ad2985129f04b8b7904c9f5434763333a0fc40d",
+        "annotation/roles/auditor.md": "6920639746051c4c55312bb7048493d94e77858c8c4507ad9dfb3dbaf14bea09",
+        "annotation/roles/corpus-auditor.md": "d10d0f55530e467fc2248de963a703c90f3fa88343dc33fc03850fa4e59a2808",
+        "annotation/roles/harness-auditor.md": "3734b70acb8b6763707ab7e547b7dac986fe8a02e819daedcfdab50cedc21493",
+        "annotation/roles/query-corpus-auditor.md": "5949a3258ce726189126e36f9f0e9d9a899be95e8c06de0e1547f467ad1af6e0"
+      },
+      "discovery": {
+        "annotation/pipeline/prepare-annotation-corpus.mjs": "aef648a46c7a9a61cb801b55585f116da9b61df9569367387367cc96144c65c5",
+        "annotation/pipeline/prepare-annotation-corpus.py": "6ee54e9c31952a8c82562d3c5a0b369ba2637b31fd5ea90f6a8b25d81338f97a",
+        "annotation/pipeline/prepare-query-campaign-workspace.mjs": "7d85bc69f6f34557b547df7bddbfaaee29b63010d4d5c5a1aa4b1abeb7aadf78",
+        "annotation/pipeline/prepare-query-evidence.py": "dc10e00466ac88387be8887dabafd3958b0848fa9349b01eeb3d03bba9e192a8",
+        "annotation/pipeline/run-annotation-campaign.py": "72f07ecb15f0c7eeca109f35b8ef8d23eabdc174681b58abfc83a00c279df6bf",
+        "annotation/roles/corpus-labeler.md": "0a13b2dd3054bccfe548e5085aef676c7b95de3e955f916e736640127f92d298",
+        "annotation/roles/curator.md": "a5438ccea2cab92cb38d7eaf89d275959bfc63b5a3e64e2ffe0d4465ffde3df9",
+        "annotation/roles/query-corpus-labeler.md": "ebf28bf117adcca2e8851f0f09a73fec77795146cc76bcf336987503f29d078a"
+      },
+      "selected-workflow": {
+        "annotation/pipeline/campaign-exchange.mjs": "349c707215aeb0e444b2485929a99c5195fd2ce7efc0db464f09a489d258b68d",
+        "annotation/pipeline/check-annotation-result.py": "fd692fec081fbd3babf77320d8ae34789084424826dff84d967489c3ec2cf04d",
+        "annotation/pipeline/fine-annotation-campaign.py": "1b79b0e74bf120d0e60b334ea6335b724871638c9acac5802c879c522e626cb0",
+        "annotation/pipeline/prepare-annotation-recovery.py": "075543cfcc846f7913e44f7bd6775827ccabcf8c6064b327904af005b798fb43",
+        "annotation/pipeline/prepare-annotation-revision.py": "61d574564e19e16614493629ba85eb553714c0aa3c00d499a9b3ddb471864400",
+        "annotation/pipeline/run-fine-annotation.py": "d715475a1d2da1089db71c99a64fb54c424d32cc46f4a710cf833e20fd2889ed"
+      },
+      "foundation": {
+        "apps/inspector/src/annotation/foundation.ts": "4470986bbc511caf8d2cc526827c6cd948c0c6b891e123c4f75b7cbd6fac58b6",
+        "apps/inspector/src/annotation/workflow/query-campaign.ts": "0202348a4ed5bb4d604d6f8b4a315ce9f1c0b831592b3eac8e40a6df433ec6ba"
+      }
+    },
+    "suiteSha256": "fe1a9f8f6fe3fa893f5d1c23c8987cd77b79b81ef5408224c0b779d46b4a8d44"
+  },
+  "candidate": {
+    "files": {
+      "labeler": {
+        ".agents/skills/mania-pattern-judgment/SKILL.md": "cef9d7270930bd96bfaade00271bf8970542bcbe5d31bd2ce57dcde3b75ddf3a",
+        ".agents/skills/mania-pattern-judgment/agents/openai.yaml": "ccf36cf046af3bb2919a79be0498afbb9a00304fc99e3cee2bb9b404da2be06a",
+        ".agents/skills/mania-pattern-judgment/references/beatmap-lens-exchange.md": "4c11d831416d895ce8ea8bc5507e7de78b9e00f519a2ec1ebe566c74ea00f304",
+        ".agents/skills/mania-pattern-judgment/references/corpus-learning.md": "5654f10fd4b56adc78ea58d7deb9a611e10cd15c820e2a55a06d40bd2fc4d647",
+        ".agents/skills/mania-pattern-judgment/references/expert-review-20260907.json": "a860d4cbf2f654a07c2370156a037a981d093b3081e6c1d20f2e35a10b4a9c0a",
+        ".agents/skills/mania-pattern-judgment/references/feedback-calibration.json": "2e49404c97f1d0373d10bb2c610b03758f71b6dcbc1b6ae1fae6bd35c4892b6d",
+        ".agents/skills/mania-pattern-judgment/references/feedback-maintenance.md": "b6c83a1b335a171f864d2bfb3d0f8ada0fd22bc980a35a1a34b1247417a3e561",
+        ".agents/skills/mania-pattern-judgment/references/human-contrast-sets.json": "546df6d4bf26e8489e67c381bb09b6b182411c97b801434c39d638436746fa67",
+        ".agents/skills/mania-pattern-judgment/references/judgment-guide.md": "c45a8b9067a25aa9172380b66b7d14ce8f350a34a9e3a74b2eb237d6250cd001",
+        ".agents/skills/mania-pattern-judgment/references/structural-queries.md": "3a136cdc46cd192c93c0c373508e54b09b2fb41d7177589c0a062ebe43e991c9",
+        ".agents/skills/mania-pattern-judgment/references/tech-pack-20260907.md": "1e1ef39c5c791a8b077f3c66bb577b6efc89f895569261388180af686d4a7280",
+        ".agents/skills/mania-pattern-judgment/scripts/check_budget.py": "eb0eb0e27d59e78eef29f9dbc45caaa4c02a9544741a1be60e33e5b04b41864c",
+        ".python-version": "7a41a41354ab8049091ef1a00253ca00567f5a1d3f9aef5502c0b4b5ce9ae707",
+        "annotation/annotation_runtime.py": "b7f3330d4ca7117af500453aa7efe1fa42cebca7fa85ff85c85f3aee28d2775b",
+        "annotation/evaluation/prepare-harness-benchmark.py": "c8eb76fbe68eaec1632932280a5724826156e39984e218ae21e61337cc8ec72c",
+        "annotation/evaluation/run-section-benchmark.py": "3883420f111754eddf3ba4ec1b0706d7727fa677f82d6de7b9c3f89436b626b6",
+        "annotation/evaluation/run_regression.py": "32e998cb1ebe6e5bd67c4d485ea388b7c3a5ed93de90f8d0796b5d8c86cfe3c4",
+        "annotation/playback_rate.py": "3ae0f1f18d40d1a58ea55e8937f49ba9a84ffe983b6140bcd5daf6ece9aef774",
+        "annotation/roles/harness-labeler.md": "8a7e8ac22cb0d267ff566d01f9c86b3224117bc8cc911dbf215d2b5a66f8458d",
+        "annotation/roles/labeler.md": "b4dca8883968b792f6a9a0f6b6aa0505cd87662259d6c60d4b3b11793ae928aa",
+        "annotation/section_evidence.py": "09b83a7c6590cfce14b86ae07e3b44bd3da089ec26b0427e1d1e1d1f3ee5ff9b",
+        "harness/annotation-facts.py": "e976214446fcbc815dbd5a9e5352cfc14e4c306cb64a2f6f49314b481716f8bf",
+        "harness/annotation-harness.py": "410e9f07ec01d8aee0ce04586a7368aedacbf93136193dc83d206ddf8572bf21",
+        "harness/annotation-queries.py": "70aa572cb360f061465afff61f57455eb3b3cbe0df5fce58565cbec346c4ac59",
+        "harness/harness_examples.py": "e856685d7751563b7ed98c41ef0d57bcd97046712d587f4d7fad4bffd6f8d536",
+        "harness/harness_inspection.py": "c35ec787f2b52258a0921aa3f3d3526129a0b6c56436c5e63f027b576fb0c721",
+        "harness/harness_playback.py": "75308d6dd4825969cfa48b039b6af1f03ce6eee42b8af7f33b7a468e0e990dbd",
+        "harness/harness_render.py": "28ca3b220fe74f742b495b173719e2e94842c3a6a9840df96a57170af5e66e9d",
+        "harness/prepare-annotation-harness.py": "f570680e4d2a7bde00d7f203f2a526ba8c3ef1c69828612486ecf98380cabd72",
+        "pyproject.toml": "9ddc3a59e6ea449fdec079a15c7d89bb80c0c361fb5b5bede3564220b4f7ad81",
+        "uv.lock": "773d09674091b265afb4437aef262b47e7da662fe0cc146d834a07cbc99793d2"
+      },
+      "auditor": {
+        "annotation/pipeline/section_annotation_delivery.py": "a9d1381a5f484f084cadc7180ad2985129f04b8b7904c9f5434763333a0fc40d",
+        "annotation/roles/auditor.md": "6920639746051c4c55312bb7048493d94e77858c8c4507ad9dfb3dbaf14bea09",
+        "annotation/roles/corpus-auditor.md": "d10d0f55530e467fc2248de963a703c90f3fa88343dc33fc03850fa4e59a2808",
+        "annotation/roles/harness-auditor.md": "3734b70acb8b6763707ab7e547b7dac986fe8a02e819daedcfdab50cedc21493",
+        "annotation/roles/query-corpus-auditor.md": "5949a3258ce726189126e36f9f0e9d9a899be95e8c06de0e1547f467ad1af6e0"
+      },
+      "discovery": {
+        "annotation/pipeline/prepare-annotation-corpus.mjs": "aef648a46c7a9a61cb801b55585f116da9b61df9569367387367cc96144c65c5",
+        "annotation/pipeline/prepare-annotation-corpus.py": "6ee54e9c31952a8c82562d3c5a0b369ba2637b31fd5ea90f6a8b25d81338f97a",
+        "annotation/pipeline/prepare-query-campaign-workspace.mjs": "7d85bc69f6f34557b547df7bddbfaaee29b63010d4d5c5a1aa4b1abeb7aadf78",
+        "annotation/pipeline/prepare-query-evidence.py": "dc10e00466ac88387be8887dabafd3958b0848fa9349b01eeb3d03bba9e192a8",
+        "annotation/pipeline/run-annotation-campaign.py": "72f07ecb15f0c7eeca109f35b8ef8d23eabdc174681b58abfc83a00c279df6bf",
+        "annotation/roles/corpus-labeler.md": "0a13b2dd3054bccfe548e5085aef676c7b95de3e955f916e736640127f92d298",
+        "annotation/roles/curator.md": "a5438ccea2cab92cb38d7eaf89d275959bfc63b5a3e64e2ffe0d4465ffde3df9",
+        "annotation/roles/query-corpus-labeler.md": "ebf28bf117adcca2e8851f0f09a73fec77795146cc76bcf336987503f29d078a"
+      },
+      "selected-workflow": {
+        "annotation/pipeline/campaign-exchange.mjs": "349c707215aeb0e444b2485929a99c5195fd2ce7efc0db464f09a489d258b68d",
+        "annotation/pipeline/check-annotation-result.py": "fd692fec081fbd3babf77320d8ae34789084424826dff84d967489c3ec2cf04d",
+        "annotation/pipeline/fine-annotation-campaign.py": "1b79b0e74bf120d0e60b334ea6335b724871638c9acac5802c879c522e626cb0",
+        "annotation/pipeline/prepare-annotation-recovery.py": "075543cfcc846f7913e44f7bd6775827ccabcf8c6064b327904af005b798fb43",
+        "annotation/pipeline/prepare-annotation-revision.py": "61d574564e19e16614493629ba85eb553714c0aa3c00d499a9b3ddb471864400",
+        "annotation/pipeline/run-fine-annotation.py": "d715475a1d2da1089db71c99a64fb54c424d32cc46f4a710cf833e20fd2889ed"
+      },
+      "foundation": {
+        "apps/inspector/src/annotation/foundation.ts": "4470986bbc511caf8d2cc526827c6cd948c0c6b891e123c4f75b7cbd6fac58b6",
+        "apps/inspector/src/annotation/workflow/query-campaign.ts": "0202348a4ed5bb4d604d6f8b4a315ce9f1c0b831592b3eac8e40a6df433ec6ba"
+      }
+    },
+    "suiteSha256": "fe1a9f8f6fe3fa893f5d1c23c8987cd77b79b81ef5408224c0b779d46b4a8d44"
+  },
+  "suiteSha256": "fe1a9f8f6fe3fa893f5d1c23c8987cd77b79b81ef5408224c0b779d46b4a8d44",
+  "runs": {
+    "baseline": [
+      {
+        "status": "completed",
+        "sourceSha256": "29fa0b36f64f1ab6153fffcbdc4ef808aca1bd1ea863f67eca0d83073916db48",
+        "producerIds": [
+          "fine-annotation-labeler-27ae0b15-9b9f-456f-8064-a60a0a9fcd60",
+          "fine-annotation-labeler-29a53249-d661-404f-8ab9-c443fe26a860",
+          "fine-annotation-labeler-237c6ccf-6cf7-46a0-b17b-059c03a06f76",
+          "fine-annotation-labeler-4be2be83-5185-46f4-968a-c1a2ff16792e",
+          "fine-annotation-labeler-fe925755-2908-48ee-8294-8eb2386ef14f",
+          "fine-annotation-labeler-6cbf3042-1784-4ddd-ac95-fb4e53679267"
+        ],
+        "responseSha256": "dedd271c137f04f50d69a50b417099cd91a0d73354e026973a10479d93fdcde0",
+        "model": "gpt-6-astra",
+        "reasoningEffort": "medium",
+        "casesSha256": "a1ca190de5cb5bd0dd8a0eb7b7a004b42a96c1d577d4a6515cdd7a9b06bd2185",
+        "evaluationDataSha256": "4775bfe45e572e0d9a734ecd5db2a91329c9e0775fb1d5406c5a9b02da36c3ed",
+        "mechanicalErrors": [],
+        "cells": [
+          {
+            "caseId": "case-04",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "case-05",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "probe-08",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "trill-04",
+            "tagId": "trill-organization",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "case-08",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "case-09",
+            "tagId": "jack-organization",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "case-14",
+            "tagId": "ln-coordination",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "probe-06",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "case-07",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "case-15",
+            "tagId": "ln-coordination",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "probe-05",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "trill-01",
+            "tagId": "trill-organization",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "trill-02",
+            "tagId": "trill-organization",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "case-02",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "case-06",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "probe-02",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "probe-03",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "probe-07",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "case-01",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "case-03",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "case-10",
+            "tagId": "jack-organization",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "case-13",
+            "tagId": "stream-organization",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "probe-04",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "case-11",
+            "tagId": "stream-organization",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "case-12",
+            "tagId": "stream-organization",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "case-16",
+            "tagId": "ln-coordination",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "probe-01",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "trill-03",
+            "tagId": "trill-organization",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          }
+        ]
+      },
+      {
+        "status": "completed",
+        "sourceSha256": "29fa0b36f64f1ab6153fffcbdc4ef808aca1bd1ea863f67eca0d83073916db48",
+        "producerIds": [
+          "fine-annotation-labeler-d009c5de-5fa7-41b5-9878-34d78f7a61df",
+          "fine-annotation-labeler-e8b77fd0-a8bf-4071-8f8c-4ca6ae26cf0e",
+          "fine-annotation-labeler-06fd1b7f-237e-4100-9dfe-1acaa762df7e",
+          "fine-annotation-labeler-a97d8142-82f4-40f9-af44-6c6dad1f562a",
+          "fine-annotation-labeler-f20e0910-1250-4d5a-91a0-b6a5ea41681f",
+          "fine-annotation-labeler-e2ce013c-ac71-46be-91c7-a0423483adc7"
+        ],
+        "responseSha256": "90e5feea8b277d03c08b6fc06059262f2888eac98f961d80578cffc54540fb18",
+        "model": "gpt-6-astra",
+        "reasoningEffort": "medium",
+        "casesSha256": "a1ca190de5cb5bd0dd8a0eb7b7a004b42a96c1d577d4a6515cdd7a9b06bd2185",
+        "evaluationDataSha256": "4775bfe45e572e0d9a734ecd5db2a91329c9e0775fb1d5406c5a9b02da36c3ed",
+        "mechanicalErrors": [],
+        "cells": [
+          {
+            "caseId": "case-04",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "case-05",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "probe-08",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "trill-04",
+            "tagId": "trill-organization",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "case-08",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "case-09",
+            "tagId": "jack-organization",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "case-14",
+            "tagId": "ln-coordination",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "probe-06",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "case-07",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "case-15",
+            "tagId": "ln-coordination",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "probe-05",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "trill-01",
+            "tagId": "trill-organization",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "trill-02",
+            "tagId": "trill-organization",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "case-02",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "case-06",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "probe-02",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "probe-03",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "probe-07",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "case-01",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "case-03",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "case-10",
+            "tagId": "jack-organization",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "case-13",
+            "tagId": "stream-organization",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "probe-04",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "case-11",
+            "tagId": "stream-organization",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "case-12",
+            "tagId": "stream-organization",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "case-16",
+            "tagId": "ln-coordination",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "probe-01",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "trill-03",
+            "tagId": "trill-organization",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          }
+        ]
+      },
+      {
+        "status": "completed",
+        "sourceSha256": "29fa0b36f64f1ab6153fffcbdc4ef808aca1bd1ea863f67eca0d83073916db48",
+        "producerIds": [
+          "fine-annotation-labeler-58d9238d-2f6b-4ed0-ad7d-f27830f4656b",
+          "fine-annotation-labeler-46a53a91-699f-472b-af94-9f87dd2f0828",
+          "fine-annotation-labeler-26abc461-acdc-4040-8332-14098199b28f",
+          "fine-annotation-labeler-65469897-474e-469f-b41f-c4dd02464567",
+          "fine-annotation-labeler-a75c337f-a7af-4546-9a0e-19ba234da59b",
+          "fine-annotation-labeler-c962b0df-9ec7-4596-9c04-57c8a9c7e478"
+        ],
+        "responseSha256": "feaeb1439b343b723f00379eaf9dd6f4336df02d8a464a67799247fcb4480465",
+        "model": "gpt-6-astra",
+        "reasoningEffort": "medium",
+        "casesSha256": "a1ca190de5cb5bd0dd8a0eb7b7a004b42a96c1d577d4a6515cdd7a9b06bd2185",
+        "evaluationDataSha256": "4775bfe45e572e0d9a734ecd5db2a91329c9e0775fb1d5406c5a9b02da36c3ed",
+        "mechanicalErrors": [],
+        "cells": [
+          {
+            "caseId": "case-04",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "case-05",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "probe-08",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "trill-04",
+            "tagId": "trill-organization",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "case-08",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "case-09",
+            "tagId": "jack-organization",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "case-14",
+            "tagId": "ln-coordination",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "probe-06",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "case-07",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "case-15",
+            "tagId": "ln-coordination",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "probe-05",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "trill-01",
+            "tagId": "trill-organization",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "trill-02",
+            "tagId": "trill-organization",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "case-02",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "case-06",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "probe-02",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "probe-03",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "probe-07",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "case-01",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "case-03",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "case-10",
+            "tagId": "jack-organization",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "case-13",
+            "tagId": "stream-organization",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "probe-04",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "case-11",
+            "tagId": "stream-organization",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "case-12",
+            "tagId": "stream-organization",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "case-16",
+            "tagId": "ln-coordination",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "probe-01",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "trill-03",
+            "tagId": "trill-organization",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          }
+        ]
+      }
+    ],
+    "candidate": [
+      {
+        "status": "completed",
+        "sourceSha256": "fb40d0d1191ba7a0f17d4936d15fca0c14c3b30177b774badaf65ad419dd5f60",
+        "producerIds": [
+          "fine-annotation-labeler-b7128be6-ee07-4c23-8afe-c3df8f4368be",
+          "fine-annotation-labeler-8e8c07b7-f342-48ea-b107-53d3755b7839",
+          "fine-annotation-labeler-590ec35f-ecd6-4512-9695-25f2e575fef8",
+          "fine-annotation-labeler-1aa43413-9e69-4e94-822c-d7adab9a958e",
+          "fine-annotation-labeler-62820935-bac4-4c20-a610-fd9c59c76ee9",
+          "fine-annotation-labeler-07cdfe1d-0363-42a8-9105-b29b7eed2daa"
+        ],
+        "responseSha256": "bc2a83fcca6c277074d27ca7b00261902ee8c55f247e5f7cb15d019636fbd7e5",
+        "model": "gpt-6-astra",
+        "reasoningEffort": "medium",
+        "casesSha256": "a1ca190de5cb5bd0dd8a0eb7b7a004b42a96c1d577d4a6515cdd7a9b06bd2185",
+        "evaluationDataSha256": "4775bfe45e572e0d9a734ecd5db2a91329c9e0775fb1d5406c5a9b02da36c3ed",
+        "mechanicalErrors": [],
+        "cells": [
+          {
+            "caseId": "case-04",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "case-05",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "probe-08",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "trill-04",
+            "tagId": "trill-organization",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "case-08",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "case-09",
+            "tagId": "jack-organization",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "case-14",
+            "tagId": "ln-coordination",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "probe-06",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "case-07",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "case-15",
+            "tagId": "ln-coordination",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "probe-05",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "trill-01",
+            "tagId": "trill-organization",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "trill-02",
+            "tagId": "trill-organization",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "case-02",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "case-06",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "probe-02",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "probe-03",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "probe-07",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "case-01",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "case-03",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "case-10",
+            "tagId": "jack-organization",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "case-13",
+            "tagId": "stream-organization",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "probe-04",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "case-11",
+            "tagId": "stream-organization",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "case-12",
+            "tagId": "stream-organization",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "case-16",
+            "tagId": "ln-coordination",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "probe-01",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "trill-03",
+            "tagId": "trill-organization",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          }
+        ]
+      },
+      {
+        "status": "completed",
+        "sourceSha256": "fb40d0d1191ba7a0f17d4936d15fca0c14c3b30177b774badaf65ad419dd5f60",
+        "producerIds": [
+          "fine-annotation-labeler-45eb637f-e4fa-4e58-b990-4374d409c802",
+          "fine-annotation-labeler-1e95e0fb-8c5d-4778-89d8-70aadb7308f3",
+          "fine-annotation-labeler-71240fbd-1487-4fbc-9b8b-19134f1464d6",
+          "fine-annotation-labeler-596d55f5-c92d-4aca-8c27-fbe0365fd318",
+          "fine-annotation-labeler-78853c3c-1669-4657-81ad-7e6958a5425c",
+          "fine-annotation-labeler-a64442d8-e329-4a38-85f7-20d70184c664"
+        ],
+        "responseSha256": "45f6228964b95bf93f7f614b37dff729b3c60e86cb440281ba7de9a7a531d2ac",
+        "model": "gpt-6-astra",
+        "reasoningEffort": "medium",
+        "casesSha256": "a1ca190de5cb5bd0dd8a0eb7b7a004b42a96c1d577d4a6515cdd7a9b06bd2185",
+        "evaluationDataSha256": "4775bfe45e572e0d9a734ecd5db2a91329c9e0775fb1d5406c5a9b02da36c3ed",
+        "mechanicalErrors": [],
+        "cells": [
+          {
+            "caseId": "case-04",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "case-05",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "probe-08",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "trill-04",
+            "tagId": "trill-organization",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "case-08",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "case-09",
+            "tagId": "jack-organization",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "case-14",
+            "tagId": "ln-coordination",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "probe-06",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "case-07",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "case-15",
+            "tagId": "ln-coordination",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "probe-05",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "trill-01",
+            "tagId": "trill-organization",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "trill-02",
+            "tagId": "trill-organization",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "case-02",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "case-06",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "probe-02",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "probe-03",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "probe-07",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "case-01",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "case-03",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "case-10",
+            "tagId": "jack-organization",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "case-13",
+            "tagId": "stream-organization",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "probe-04",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "case-11",
+            "tagId": "stream-organization",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "case-12",
+            "tagId": "stream-organization",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "case-16",
+            "tagId": "ln-coordination",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "probe-01",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "trill-03",
+            "tagId": "trill-organization",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          }
+        ]
+      },
+      {
+        "status": "completed",
+        "sourceSha256": "fb40d0d1191ba7a0f17d4936d15fca0c14c3b30177b774badaf65ad419dd5f60",
+        "producerIds": [
+          "fine-annotation-labeler-5137abe0-5812-4215-9b16-4de9febda97d",
+          "fine-annotation-labeler-788b1996-041f-4e92-90c0-a0cf0c56206e",
+          "fine-annotation-labeler-e0eed00a-2f5f-4d8c-8bcc-564c2b3dea3f",
+          "fine-annotation-labeler-444698af-03c4-4c08-b77c-5c6a1aa88630",
+          "fine-annotation-labeler-4fcfe13b-7186-4e28-a9fa-e88440a1c163",
+          "fine-annotation-labeler-4d2a3bec-3658-4d81-9b9e-b07958bb2952"
+        ],
+        "responseSha256": "8a89d955cac61b3d894d131a684148f637dc856065834cf0ff312b78cd6a5fef",
+        "model": "gpt-6-astra",
+        "reasoningEffort": "medium",
+        "casesSha256": "a1ca190de5cb5bd0dd8a0eb7b7a004b42a96c1d577d4a6515cdd7a9b06bd2185",
+        "evaluationDataSha256": "4775bfe45e572e0d9a734ecd5db2a91329c9e0775fb1d5406c5a9b02da36c3ed",
+        "mechanicalErrors": [],
+        "cells": [
+          {
+            "caseId": "case-04",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "case-05",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "probe-08",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "trill-04",
+            "tagId": "trill-organization",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "case-08",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "case-09",
+            "tagId": "jack-organization",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "case-14",
+            "tagId": "ln-coordination",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "probe-06",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "case-07",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "case-15",
+            "tagId": "ln-coordination",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "probe-05",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "trill-01",
+            "tagId": "trill-organization",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "trill-02",
+            "tagId": "trill-organization",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "case-02",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "case-06",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "probe-02",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "probe-03",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "probe-07",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "case-01",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "case-03",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "case-10",
+            "tagId": "jack-organization",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "case-13",
+            "tagId": "stream-organization",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "probe-04",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "case-11",
+            "tagId": "stream-organization",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "case-12",
+            "tagId": "stream-organization",
+            "predicted": {
+              "presence": "present",
+              "salience": "supporting"
+            }
+          },
+          {
+            "caseId": "case-16",
+            "tagId": "ln-coordination",
+            "predicted": {
+              "presence": "absent"
+            }
+          },
+          {
+            "caseId": "probe-01",
+            "tagId": "tech",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          },
+          {
+            "caseId": "trill-03",
+            "tagId": "trill-organization",
+            "predicted": {
+              "presence": "present",
+              "salience": "prominent"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "review": {
+    "reviewer": "Codex root (adoption decision); v3_protected_review and v3_broader_review (independent source/rationale reviews)",
+    "rationaleReview": "All 28 exact sections and all 84 candidate target rationales were reviewed against complete scoped/context source by two independent reviewers. Protected labels are 42/42 correct; baseline 28/42. Root accepts the narrow guidance revision with one explicitly retained broader ordinal-salience loss below; v3_broader_review recommended rejection of that loss, and its recommendation is preserved rather than represented as unanimous approval. Root distinguishes accepting a bounded noncritical adoption risk from approving the wrong prominent label. The case has correct presence, scope and hold relationships; the guide introduces no new salience threshold, and exact human supporting remains authoritative. All remaining shared Tech errors remain failures. A Fool Moon Night r3 has one low-severity phase attribution error:242923 ms triple is onbeat (beat 556.9979, offset 750 ms / beat length 434.782608695652 ms), while preceding242815 ms LN head is offbeat. The accurate 145/73 ms turn and triple-inside-LN relationship still materially support its supporting Tech judgment. Raw outputs are retained without repair. Eviternity r2/r3 explanations attributing supporting to full releases/rests are unconfirmed model inference, not human-approved causal rules. Named examples make this exposed regression checking, not held-out accuracy or proof every rationale is fact-perfect.",
+    "regressions": {
+      "case-15:ln-coordination": {
+        "decision": "accept",
+        "reason": "Root accepts this one-repeat noncritical ordinal-salience regression as a retained limitation, contrary to the independent broader reviewer’s reject recommendation. Baseline supporting 3/3 becomes candidate supporting 2/3 / prominent 1/3; scope, coordinated presence, anchor switches and secondary-hold endpoints are correct in all candidate repeats. The prominent rationale does not justify its extra strength and remains wrong against human supporting. This does not introduce a new prescriptive LN rule or alter the exact human assessment. Rather than invent a universal sequential-hold ceiling from a generic confirmation, retain this case and its loss for future calibration; canonical human precedence prevents this machine assessment replacing the known human label. This is an explicit bounded adoption-risk decision, not acceptance of the erroneous label, proof of statistical noise, or compensation by aggregate gains."
+      }
+    },
+    "comparisonSha256": "ae2aed9f8ca15f49b764ca29712c110710611a349c6b82ce2123edd3c93dace9",
+    "independentBroaderRecommendation": {
+      "reviewer": "v3_broader_review",
+      "decision": "reject",
+      "cell": "case-15:ln-coordination",
+      "reason": "The repeat 3 explanation establishes coordinated presence and contrasts an absent example, but does not justify increasing supporting to prominent."
+    },
+    "sourceErrata": [
+      {
+        "caseId": "case-04",
+        "repeat": 3,
+        "tagId": "tech",
+        "incorrect": "242923 ms triple is offbeat",
+        "correction": "The triple is onbeat; the preceding242815 ms LN head is offbeat.",
+        "disposition": "Retain raw output and exact erratum; materially correct other relationships support the label. Do not adopt the wrong phase claim as guidance."
+      }
+    ]
+  }
+}

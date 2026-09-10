@@ -5,6 +5,24 @@
   "observationsInspected": 122,
   "selection": "Selected scoped human corrections and contrast cases, including September 7 Tech articulation/strength, pure taps, and tap-like LN versus independent held-control judgments. Generic confirmations and slash-only revisions establish exact labels, not independent reasoning. Historical records remain in expert-review-20260907.json.",
   "provenance": "Stored Foundation pins are copied verbatim from current observations. Historical ledger pins remain unchanged. snapshotObservationSha256 hashes sorted-key compact UTF-8 JSON of the current complete observation, without ASCII escaping. Later snapshotFeedbackSha256 values hash the complete canonical API feedback bytes; they are not observation hashes.",
+  "latestSnapshot": {
+    "source": ".local/release-readiness-20260910/feedback/<sourceSha256>.json",
+    "snapshotDate": "2026-09-10",
+    "observationsInspected": 80,
+    "reviewedSections": 16,
+    "reviewedSourceCharts": 15,
+    "selectedDecisions": 8,
+    "selection": "Eight scoped effective human assessments from seven sections: six Trill assessments, one LN coordination assessment, and one Stream salience assessment. All 80 effective assessments in section-readiness.json were checked against frozen API feedback and the published human table. Shared comments establish only the exact assessments to which they are attached; an LN-only comment supplies no Trill-specific explanation.",
+    "provenance": "The original top-level snapshot metadata and all 29 earlier decisions remain unchanged. New documentCanonicalSha256 values copy feedback.reviewBase.sha256; snapshotFeedbackSha256 hashes the actual complete frozen API feedback file bytes. New observationSha256 values copy effectiveHumanObservations.observationSha256, the canonical observation hash supplied by the API, and are not hashes of the API summary. Human rationale copies the matching decision.rationale and equals effectiveHumanObservations.humanComment. Published record IDs, scopes, contexts, assessments, rationale, origin IDs, handoff hashes, Foundation pins, and playback rates were checked against the local v0.2.0 human table and manifest.",
+    "readinessSha256": "4beb55a27311bfd48ddb300de3faafe66c072dfacbb2690f0b7440ff220f5a49",
+    "publishedSnapshot": {
+      "revision": "v0.2.0",
+      "commit": "a8ee5391b5f9dd68e9b2fb478674a46f354c7375",
+      "humanParquetPath": "data/human.parquet",
+      "humanParquetSha256": "27f1026c4ca13f0d32381e9be57a350e494687a545ded3b429c6ead35e5c2dd5",
+      "humanRecords": 467
+    }
+  },
   "decisions": [
     {
       "sourceSha256": "122e1251a8c1bb923592859630fe58ff6270f048c43e01e494f90d4138185d8a",
@@ -798,6 +816,275 @@
       "handoffId": "corpus-500-labeler-0030e055-1b37-458b-bbbd-f0d439b7f37e-7e7bf6375ac0",
       "handoffSha256": "7286fe8b6db1d2936a01b218a72f8aa95fe45af7b13db516dbf8f40f5bf20664",
       "claimId": "c6-3"
+    },
+    {
+      "caseId": "scale500-057",
+      "sourceSha256": "de51ad8d0aa3ef471527b2662f8e55feb1cd735056ebc205d7f46eed8b638b0c",
+      "title": "Super Nuko ni Narenkatta",
+      "difficulty": "Hyper",
+      "scope": {
+        "endMs": 86063,
+        "startMs": 81010
+      },
+      "reviewContext": {
+        "endMs": 87326,
+        "startMs": 79747
+      },
+      "playbackRate": 1,
+      "tagId": "trill-organization",
+      "assessment": {
+        "presence": "present",
+        "salience": "supporting"
+      },
+      "decisionId": "1ea6564b-2407-4199-a297-cc1c7d7d55eb:decision:0",
+      "disposition": "modified",
+      "observationId": "1ea6564b-2407-4199-a297-cc1c7d7d55eb:decision:0:observation",
+      "storedFoundationSha256": "15fa68913bdb2bf395a189df7ab433f6d5b126fc35c46c1dbc8e607ce2182e97",
+      "documentCanonicalSha256": "fd933f5565f12f70aa523814e75b023c28b6dca9f6090e63a909c7a84d7d2a14",
+      "snapshotFeedbackSha256": "81dee88923a3039f0d1a8d5b8643989f27977b45eaaf9ee9d4706f291ddbd096",
+      "observationSha256": "79def83d843e23021817b58ef3c381f7fc0eb767f2f521d2711178861feb2674",
+      "confirmedAt": "2026-09-10T03:21:05.187Z",
+      "humanRationale": "LN occupancy主要限制的是同手, 这段不存在LN 同手协调需求的痕迹. 末尾的4note形成了手感明显的弱交互",
+      "humanRationaleSource": "decision.rationale",
+      "handoffId": "fine-annotation-labeler-1c580bb4-077d-4fc7-81bc-ed6268fba43d-scale500-057",
+      "handoffSha256": "483a04514842a73b69a4b9d5db08d671f875b396ad6099883de7c0c965ecc048",
+      "claimId": "scale500-057-trill-organization",
+      "publishedRecordId": "human:de51ad8d0aa3ef471527b2662f8e55feb1cd735056ebc205d7f46eed8b638b0c:1ea6564b-2407-4199-a297-cc1c7d7d55eb%3Adecision%3A0%3Aobservation"
+    },
+    {
+      "caseId": "scale500-101",
+      "sourceSha256": "35be7120c34f1000146b63feed7b969850fd4cf4701947a13cb2f47d9b209a0c",
+      "title": "The Worst",
+      "difficulty": "Terrible",
+      "scope": {
+        "endMs": 127696,
+        "startMs": 120016
+      },
+      "reviewContext": {
+        "endMs": 129616,
+        "startMs": 118096
+      },
+      "playbackRate": 1,
+      "tagId": "trill-organization",
+      "assessment": {
+        "presence": "absent"
+      },
+      "decisionId": "8dcf3d66-c1ea-4555-a0e1-ade91bd06b7d:decision:2",
+      "disposition": "modified",
+      "observationId": "8dcf3d66-c1ea-4555-a0e1-ade91bd06b7d:decision:2:observation",
+      "storedFoundationSha256": "15fa68913bdb2bf395a189df7ab433f6d5b126fc35c46c1dbc8e607ce2182e97",
+      "documentCanonicalSha256": "6a69aed6ed275df0c204d85075d752bffa1770fc30ff24c037400995b13d8494",
+      "snapshotFeedbackSha256": "dc022361d3a5a7ee1dbec9970fd5088553677e1283ba89b98d50f6943f766e3d",
+      "observationSha256": "55dab677af878fa9f301cb832b6faa593e3702bf7c8c4d9c5309d3774186a75b",
+      "confirmedAt": "2026-09-10T02:13:41.741Z",
+      "humanRationale": "I think it's not trill, it didn't form a three-note same gap mini trill.",
+      "humanRationaleSource": "decision.rationale",
+      "handoffId": "fine-annotation-labeler-d38f4724-ac6d-482a-8075-009428fc5297-scale500-101",
+      "handoffSha256": "0d6a57e760a5724e1c5779a2a7b571203ba085055dd907cb6b30bf2a9ffefb4f",
+      "claimId": "scale500-101-trill-organization",
+      "publishedRecordId": "human:35be7120c34f1000146b63feed7b969850fd4cf4701947a13cb2f47d9b209a0c:8dcf3d66-c1ea-4555-a0e1-ade91bd06b7d%3Adecision%3A2%3Aobservation"
+    },
+    {
+      "caseId": "scale500-152",
+      "sourceSha256": "7a729e4cf5e5d041dd9d8867354b332ae22a9b14bfca04890f1d6f99a6cfae00",
+      "title": "Catalinesie",
+      "difficulty": "Catalyst of Amnesia",
+      "scope": {
+        "endMs": 117485,
+        "startMs": 113311
+      },
+      "reviewContext": {
+        "endMs": 118528,
+        "startMs": 112268
+      },
+      "playbackRate": 1,
+      "tagId": "trill-organization",
+      "assessment": {
+        "presence": "present",
+        "salience": "supporting"
+      },
+      "decisionId": "4a76a415-4699-4c3a-9045-8c3e43e107ef:decision:2",
+      "disposition": "modified",
+      "observationId": "4a76a415-4699-4c3a-9045-8c3e43e107ef:decision:2:observation",
+      "storedFoundationSha256": "15fa68913bdb2bf395a189df7ab433f6d5b126fc35c46c1dbc8e607ce2182e97",
+      "documentCanonicalSha256": "f732fd8c9441485ee33a5aa5279b988a8cc0d55f49c280c848c2e5419e029988",
+      "snapshotFeedbackSha256": "b3dc116369b0e13adc322cb33249606a66417e81cf4cafc5bf4d58938608baab",
+      "observationSha256": "e492a635477ed89e5c13ad3a769ecfb266819768f2b240e1724795f8cdc8c07d",
+      "confirmedAt": "2026-09-10T03:06:21.695Z",
+      "humanRationale": "before 'trill' part there's bursts and jumpstream, 它标志着stream结束是过渡段, 对拍虽缺了一个note, 但是其间隔小于先前的stream有明显的节奏变快, 我会认为是weak trill.",
+      "humanRationaleSource": "decision.rationale",
+      "handoffId": "fine-annotation-labeler-8708bbac-fe32-4ae6-a5d8-908c91b7a914-scale500-152",
+      "handoffSha256": "08070f468f81555af032bcddbd119e110f3eaf7e85341218d99769858a8d15e9",
+      "claimId": "scale500-152-trill-organization",
+      "publishedRecordId": "human:7a729e4cf5e5d041dd9d8867354b332ae22a9b14bfca04890f1d6f99a6cfae00:4a76a415-4699-4c3a-9045-8c3e43e107ef%3Adecision%3A2%3Aobservation"
+    },
+    {
+      "caseId": "scale500-159",
+      "sourceSha256": "fd9cfe4c0484f7c90f63b4811d43f05e9e39889506506ea5b27a7863e13c553e",
+      "title": "think abt it w/ ppgcasper",
+      "difficulty": "_o_ [1.3x Rate]",
+      "scope": {
+        "endMs": 62626,
+        "startMs": 58010
+      },
+      "reviewContext": {
+        "endMs": 63780,
+        "startMs": 56856
+      },
+      "playbackRate": 1,
+      "tagId": "trill-organization",
+      "assessment": {
+        "presence": "present",
+        "salience": "supporting"
+      },
+      "decisionId": "5c855a7e-05b6-43aa-a427-8f4c35f5091e:decision:2",
+      "disposition": "modified",
+      "observationId": "5c855a7e-05b6-43aa-a427-8f4c35f5091e:decision:2:observation",
+      "storedFoundationSha256": "15fa68913bdb2bf395a189df7ab433f6d5b126fc35c46c1dbc8e607ce2182e97",
+      "documentCanonicalSha256": "93b70d9e441c0b0cc307e2083f08591e783b71e6fd864f8cf27f62f03d75ea0a",
+      "snapshotFeedbackSha256": "1dc252e6137678ae17b39033a869354b64153801f10187dd95697bc053115ce9",
+      "observationSha256": "6b947f8b2aebc93595fcbb1eb4513bf15ffc8cc78a393c9b31f0c221c1922b89",
+      "confirmedAt": "2026-09-10T02:12:05.450Z",
+      "humanRationale": "In this area we see repeated three-note 1-2-1, this can be viewed as fragemented stream and also fragmented trill. Consider its frequency and play experience, I think it's weak trill",
+      "humanRationaleSource": "decision.rationale",
+      "handoffId": "fine-annotation-labeler-b6037555-d1bf-410f-80dd-9e64bd3c49e7-scale500-159",
+      "handoffSha256": "12eb15414b7b9a56b6e405c6f1739677fa417c982c14247e114a91142d29043c",
+      "claimId": "scale500-159-trill-organization",
+      "publishedRecordId": "human:fd9cfe4c0484f7c90f63b4811d43f05e9e39889506506ea5b27a7863e13c553e:5c855a7e-05b6-43aa-a427-8f4c35f5091e%3Adecision%3A2%3Aobservation"
+    },
+    {
+      "caseId": "scale500-439",
+      "sourceSha256": "37d920fbff49a79a94f9fedd9fe4f2970c2bee897c7fd65033b15ef83a7f2da4",
+      "title": "Yolomania Vol. 3A",
+      "difficulty": "Ariana Grande - Baby I [Leo137] 14",
+      "scope": {
+        "endMs": 153372,
+        "startMs": 143960
+      },
+      "reviewContext": {
+        "endMs": 155725,
+        "startMs": 141607
+      },
+      "playbackRate": 1,
+      "tagId": "trill-organization",
+      "assessment": {
+        "presence": "absent"
+      },
+      "decisionId": "65bcf6fb-7f7c-4613-8ba5-d87c72284487:decision:2",
+      "disposition": "accepted",
+      "observationId": "65bcf6fb-7f7c-4613-8ba5-d87c72284487:decision:2:observation",
+      "storedFoundationSha256": "15fa68913bdb2bf395a189df7ab433f6d5b126fc35c46c1dbc8e607ce2182e97",
+      "documentCanonicalSha256": "2006e40a37d421e034f15aaba462f776e54184b98a140cf1368e52e1ae911396",
+      "snapshotFeedbackSha256": "00643ad65abaf1a1b6b87703b39d0f41e60e27dbc04763351762896023ef0560",
+      "observationSha256": "aff35659b89d3e427b591e17fb2622772c2570e35d8846e583c045c72de6a5de",
+      "confirmedAt": "2026-09-10T02:58:44.799Z",
+      "humanRationale": "short LNs are short enough to be played as notes here, I do not think it's LN coordination.",
+      "humanRationaleSource": "decision.rationale",
+      "handoffId": "fine-annotation-labeler-7b3c229c-ea4d-4993-a958-9afad632bd2f-scale500-439",
+      "handoffSha256": "62084d4f14f61da09ee694684986a3f3a09756a56de788e4bda3d3b008bf0dd7",
+      "claimId": "scale500-439-trill-organization",
+      "publishedRecordId": "human:37d920fbff49a79a94f9fedd9fe4f2970c2bee897c7fd65033b15ef83a7f2da4:65bcf6fb-7f7c-4613-8ba5-d87c72284487%3Adecision%3A2%3Aobservation",
+      "selectionReason": "Exact absent Trill assessment from the effective human decision. The shared rationale discusses LN coordination and supplies no Trill-specific explanation."
+    },
+    {
+      "caseId": "scale500-439",
+      "sourceSha256": "37d920fbff49a79a94f9fedd9fe4f2970c2bee897c7fd65033b15ef83a7f2da4",
+      "title": "Yolomania Vol. 3A",
+      "difficulty": "Ariana Grande - Baby I [Leo137] 14",
+      "scope": {
+        "endMs": 153372,
+        "startMs": 143960
+      },
+      "reviewContext": {
+        "endMs": 155725,
+        "startMs": 141607
+      },
+      "playbackRate": 1,
+      "tagId": "ln-coordination",
+      "assessment": {
+        "presence": "absent"
+      },
+      "decisionId": "65bcf6fb-7f7c-4613-8ba5-d87c72284487:decision:4",
+      "disposition": "modified",
+      "observationId": "65bcf6fb-7f7c-4613-8ba5-d87c72284487:decision:4:observation",
+      "storedFoundationSha256": "15fa68913bdb2bf395a189df7ab433f6d5b126fc35c46c1dbc8e607ce2182e97",
+      "documentCanonicalSha256": "2006e40a37d421e034f15aaba462f776e54184b98a140cf1368e52e1ae911396",
+      "snapshotFeedbackSha256": "00643ad65abaf1a1b6b87703b39d0f41e60e27dbc04763351762896023ef0560",
+      "observationSha256": "5a38b79d1a20d4468d83cdbf9fc2142c95a7c819d13e1629b3830635fc6a5adc",
+      "confirmedAt": "2026-09-10T02:58:44.799Z",
+      "humanRationale": "short LNs are short enough to be played as notes here, I do not think it's LN coordination.",
+      "humanRationaleSource": "decision.rationale",
+      "handoffId": "fine-annotation-labeler-7b3c229c-ea4d-4993-a958-9afad632bd2f-scale500-439",
+      "handoffSha256": "62084d4f14f61da09ee694684986a3f3a09756a56de788e4bda3d3b008bf0dd7",
+      "claimId": "scale500-439-ln-coordination",
+      "publishedRecordId": "human:37d920fbff49a79a94f9fedd9fe4f2970c2bee897c7fd65033b15ef83a7f2da4:65bcf6fb-7f7c-4613-8ba5-d87c72284487%3Adecision%3A4%3Aobservation"
+    },
+    {
+      "caseId": "scale500-455",
+      "sourceSha256": "cf1807d071c9ba1eab7277033d231524ac6143e399b2fa61eb0cf334e50b61f7",
+      "title": "Jumpstream Complexes Vol. 2A",
+      "difficulty": "Kakenukeru Anime Song Medley VII [Hylotl & HarKIn]",
+      "scope": {
+        "endMs": 166401,
+        "startMs": 161401
+      },
+      "reviewContext": {
+        "endMs": 167651,
+        "startMs": 160151
+      },
+      "playbackRate": 1,
+      "tagId": "trill-organization",
+      "assessment": {
+        "presence": "absent"
+      },
+      "decisionId": "c79ad608-7ed4-481d-b45f-1c4e3ad1894a:decision:2",
+      "disposition": "accepted",
+      "observationId": "c79ad608-7ed4-481d-b45f-1c4e3ad1894a:decision:2:observation",
+      "storedFoundationSha256": "15fa68913bdb2bf395a189df7ab433f6d5b126fc35c46c1dbc8e607ce2182e97",
+      "documentCanonicalSha256": "6160c647fb4c5d0cf86848c0033b527b011c1b8bba04d928ab9f86d8afc5d935",
+      "snapshotFeedbackSha256": "d0ca25279a907a27ddc7b2eabf1877aabbb1a627469ae696aa67c8884eef57c3",
+      "observationSha256": "c79873640dae3fc74a515fa731b849cfeb50c1d536df2ac8c6bc3533ce21d6ed",
+      "confirmedAt": "2026-09-10T03:14:49.095Z",
+      "humanRationale": "非常typical的jumpstream, trill-like-notes在这里不明显, 可被解释为hand part",
+      "humanRationaleSource": "decision.rationale",
+      "handoffId": "fine-annotation-labeler-2093b8ee-3b37-4f82-b85f-74e68a3fcb1f-scale500-455",
+      "handoffSha256": "9bdce440084f5acda9b357866c0eb6808dcd35a0241cf30bee405d827223cd24",
+      "claimId": "scale500-455-trill-organization",
+      "publishedRecordId": "human:cf1807d071c9ba1eab7277033d231524ac6143e399b2fa61eb0cf334e50b61f7:c79ad608-7ed4-481d-b45f-1c4e3ad1894a%3Adecision%3A2%3Aobservation"
+    },
+    {
+      "caseId": "scale500-476",
+      "sourceSha256": "7aa3a10e0d9e317583389eee0ca07c6e899a24d54d51c7036b987720674a0bee",
+      "title": "Destiny",
+      "difficulty": "Noch's MAXIMUM",
+      "scope": {
+        "endMs": 92030,
+        "startMs": 87706
+      },
+      "reviewContext": {
+        "endMs": 93111,
+        "startMs": 86625
+      },
+      "playbackRate": 1,
+      "tagId": "stream-organization",
+      "assessment": {
+        "presence": "present",
+        "salience": "supporting"
+      },
+      "decisionId": "3a6f4c7c-986e-44d1-9e45-335bfecddb5b:decision:1",
+      "disposition": "modified",
+      "observationId": "3a6f4c7c-986e-44d1-9e45-335bfecddb5b:decision:1:observation",
+      "storedFoundationSha256": "15fa68913bdb2bf395a189df7ab433f6d5b126fc35c46c1dbc8e607ce2182e97",
+      "documentCanonicalSha256": "135c48dc6ba229f3360107e7c7ff493314ad6df9001671b8eef1827f55d278ec",
+      "snapshotFeedbackSha256": "7fb74440deb241928c85c23bf3cae1ee95281c7c2c251c76f6a2ebe00d6a85e0",
+      "observationSha256": "f55031096b1f326fb3be9ccd658005cce4c6ff965d47d25756ee9e2f54f65716",
+      "confirmedAt": "2026-09-10T03:08:32.104Z",
+      "humanRationale": "这一段是jack为主stream为骨架, 节奏有明显变化是tech.",
+      "humanRationaleSource": "decision.rationale",
+      "handoffId": "fine-annotation-labeler-2093b8ee-3b37-4f82-b85f-74e68a3fcb1f-scale500-476",
+      "handoffSha256": "7a1a24f23df2f17a4c056ae3a25d546f9dba8b76b8f421124362270a485bc159",
+      "claimId": "scale500-476-stream-organization",
+      "publishedRecordId": "human:7aa3a10e0d9e317583389eee0ca07c6e899a24d54d51c7036b987720674a0bee:3a6f4c7c-986e-44d1-9e45-335bfecddb5b%3Adecision%3A1%3Aobservation"
     }
   ]
 }

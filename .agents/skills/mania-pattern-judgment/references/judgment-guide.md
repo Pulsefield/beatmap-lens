@@ -1,8 +1,7 @@
 # Judgment guide
 
-These distinctions summarize local human calibration, primarily 4K. Exact scoped
-human decisions take precedence for their examples. They do not define universal
-community terminology or replace the task's frozen Foundation.
+Local calibration, primarily 4K: human decisions govern their
+scoped examples. These do not define universal terminology or replace the frozen Foundation.
 
 ## Style judgments
 
@@ -12,39 +11,34 @@ not decide strength. Confidence, example typicality, numerical gameplay demand,
 and generation-control strength are separate quantities. A certain weak positive
 is possible. Rejecting an example is not an absent label; deferral is not a label.
 
-Use chart actions, causal history, and the declared canonical gameplay profile.
+Use chart actions, causal history and the canonical gameplay profile.
 Chart-only evidence does not establish audio-dependent style, mapper intent,
-presentation, or player-specific response. Community tags convey human experience
-of whole difficulties and guide reading; they do not prove local labels. Natural
-chart organization remains worth studying without labels. Named patterns need not
-become supervised dimensions or independent controls.
+presentation, or player-specific response. Community tags guide reading through
+whole-difficulty experience, without proving local labels. Study natural organization without requiring labels. Named patterns
+need not become supervised dimensions or independent controls.
 
 ## Read the organization
 
-- Inspect simultaneous attack groups, column order, intervals, repetition extent,
-  complete occupancy, and release order together. Explain what the player follows
-  before deciding which detail changes its character.
-- Read overlapping scales: jumps, bursts, stream, and trill can organize local
-  material inside a Tech passage. Explain each range and its role in the larger
-  arrangement. Distinguish coexistence from successive episodes. Preserve
-  approximate human cuts; source-row refinements are separate proposals.
-- Select a repeated core only while retaining extra notes and intervening rows
-  as context. A decorative third key can preserve a two-key jack core. Projecting
-  one side out of disjoint A↔B alternation cannot manufacture a jack.
-- Judge whether inserted rows continue the dominant structure or separate it.
-  Do not delete them to make a pattern fit. Retain related and overlapping crops
-  under their source/episode grouping; they are not independent examples.
-- Preserve exact source milliseconds. Harmless 1 ms osu rounding does not require
-  another human question or perfect timing-grid proof; do not merge attacks or
-  introduce an arbitrary tolerance. Literal equality remains a separate fact.
-- Separate the human verdict, original comment, exact source facts, and reconstructed
-  explanation. Comments can describe the dominant body or perceived grouping;
-  preserve literal exceptions and unresolved causal discrepancies.
+- Inspect attack groups, columns, intervals, repetition, complete occupancy and
+  release order together. Explain what the player follows and what changes its character.
+- Read overlapping scales: jumps, bursts, stream and trill can organize local
+  material inside Tech. Explain each range's role; distinguish coexistence from
+  successive episodes. Preserve approximate human cuts; refinements are separate proposals.
+- Retain extras and intervening rows when selecting a core. A decorative third key
+  can preserve a two-key jack; projecting one side of disjoint A↔B cannot manufacture Jack.
+- Determine whether inserted rows continue or separate the structure; never delete
+  them to fit a pattern. Preserve related/overlapping crops' source/episode grouping; they are not independent evidence.
+- Preserve exact milliseconds. Harmless 1 ms osu rounding needs neither another human
+  question nor perfect-grid proof. Do not merge attacks or invent tolerance;
+  literal equality remains a separate fact.
+- Separate verdict, original comment, source facts and reconstructed explanation.
+  Comments may describe a dominant body or perceived group; preserve exceptions
+  and unresolved causal discrepancies.
 
 ## Jack
 
-Look for same-column repetition on consecutive attack rows and its role in the
-whole arrangement. Broad Jack has **no fast-only requirement**: seven attacks at
+Inspect same-column repetition on consecutive attack rows and its role in the
+arrangement. Broad Jack has **no fast-only requirement**: seven attacks at
 400 ms spacing in *300 Nuts Per Minute* were prominent. Pure fixed disjoint Trill
 without adjacent rows repeating a column is Jack absent despite periodic returns.
 Ordered fast motion alone does not establish Jack.
@@ -64,43 +58,52 @@ Useful descriptions remain distinct:
 
 ## Stream
 
-Flowing tap succession with recurring jumps can express jumpstream; inspect the
-singles and chords together. Short LNs may function as extended taps while retaining
-their source kind and occupancy. Chord movement, note count, and continuing activity
-alone do not establish Stream. The reviewed grouped jumptrill and *Sesshoku*
-changing-chord passage are Stream absent.
+Flowing taps with recurring jumps can express jumpstream. Inspect singles, chords
+and short LNs together; tap-like reading preserves LN source kind and occupancy.
+Chord motion, note count and activity alone do not establish Stream: the reviewed
+grouped jumptrill and *Sesshoku* changing-chord passage are absent.
 
-The approved local Stream meaning includes roll/burst. In the calibrated 4K roll,
-four notes move in one direction with even rhythmic spacing; successive groups
-do not form a jump/chord relation. Check joins and reversals for local minijacks.
-Three consecutive groups establish prominent **roll
-structure**, not automatically prominent Stream: *Cyber Inductance* is supporting
-Stream despite four clear descending groups. Describe direction and flow variation
-instead of converting a group count into Stream strength.
+Local meaning includes roll/burst. In the calibrated 4K roll, four notes move
+one way at even spacing without jump/chord relations between groups. Inspect joins
+and reversals for minijacks. Three consecutive groups establish prominent **roll
+structure**, not necessarily prominent Stream: *Cyber Inductance* is supporting
+despite four descending groups. *Destiny*'s Stream framework is supporting alongside
+prominent Jack. Assess Stream's own expression across the scope; another prominent
+tag imposes no ceiling.
 
 ## Trill
 
-Two fixed, non-overlapping groups continuously exchange A↔B. Each may be a single
-key or chord, within or across hands, including crossed pairs. Inspect coherent
-exchange, rate, extent, articulation, and surrounding flow together. Four
-alternating rows are a query minimum, not sufficient semantic evidence.
+Decide presence and strength separately. Two fixed, non-overlapping groups exchange
+A↔B coherently, continuously or in recurring fragments. Keys/chords can exchange
+within/across hands, including crossed pairs.
+Inspect rate, extent, articulation and surrounding flow. Four alternating rows
+are a query minimum, neither a semantic cutoff nor sufficient evidence.
 
-*Tear Rain* preserves an inner alternating core as outer heads become holds.
-Complete head-group equality is unnecessary; account for every extra event and
-background role. Do not manufacture continuity by deleting intervening rows.
+Read an alternating crop within the continuing flow: entering/leaving its fixed
+pair alone does not establish separate articulation. *Grimoire of Crimson*'s
+reviewed five-attack crop is absent in its Stream context; this does not make
+Stream a veto. *za kazdym razem*'s clearly separated five-row episode is prominent
+despite its brevity. *Lagtrain*'s non-typical regular alternation and *Caravan*'s slow
+Trill are supporting. Coverage alone cannot promote them. Mixed arity imposes no
+supporting ceiling; eligibility does not guarantee typicality or strength.
 
-Slow, progressively slowing, brief, and LN-mixed positives exist. None gives an
-absolute duration, count, or rate cutoff. Uneven timing may preserve an exchange
-or interrupt it; inspect the complete episode. A brief trill at a stream ending
-can be supporting, while selected alternation embedded in stream can be absent.
-Mixed group arity does not impose a supporting ceiling. Trill is not a universal
-veto on Stream or Tech in a larger mixed scope.
+*Tear Rain* retains an inner core as outer heads become holds; full head-group
+equality is unnecessary. Account for extras/background roles. Preserve interruptions;
+never invent continuity.
+
+Slow, slowing, brief and LN-mixed positives establish no cutoff.
+*Super Nuko*'s closing four-tap group, *Catalinesie*'s faster transition with a missing
+note, and *think abt it*'s repeated three-note turns are supporting. Assess exchange
+grouping: *The Worst*, *Jumpstream Complexes* and reviewed *Yolomania* remain absent.
+Yolomania supplies no Trill-specific human reason. Selected alternation need not
+form perceptible exchange; uneven timing may preserve or interrupt it.
+Trill permits Stream and Tech in larger mixed scopes.
 
 ## LN coordination
 
-At some point, LNs must occupy **at least two columns simultaneously**. Preserve
-full endpoints and entering holds. This is necessary, not sufficient: separately
-encoded presses/releases need not be separately organized playing actions.
+LNs must overlap in **at least two columns**. Preserve
+full endpoints and entering holds. This is necessary, not sufficient: encoded
+presses/releases need not be separately organized playing actions.
 
 Explain whether holding and releasing carry their own roles, or short tails mainly
 follow brief attacks. Compare note lengths with surrounding attack rhythm, the
@@ -110,13 +113,14 @@ as LNs even when explaining that reading.
 
 Human contrasts:
 
+*Yolomania* is absent under human tap-like reading; retain its longer holds and split endings.
+
 - *Who?*, 97595–98913 ms, **absent**: brief, similar-length LN cascades read as
-  taps despite real overlap and staggered releases.
-- *Materialize Anything*, 48104–48904 ms, **absent**: ordered short LNs below one
-  long anchor remain tap-like; the anchor does not turn their tails into a second
-  independent hold layer.
+  taps despite overlap and staggered releases.
+- *Materialize Anything*, 48104–48904 ms, **absent**: ordered short LNs below a
+  long anchor remain tap-like; that anchor creates no second independent hold layer.
 - *End Time*, 21425–22592 ms, **prominent**: beneath a long anchor, intermediate
-  holds persist into further mixed attacks, with retained and newly pressed roles.
+  holds persist into mixed attacks, with retained and newly pressed roles.
 - *Your Soulmate*, 1404510–1405260 ms, **supporting**: some short LNs read as taps,
   while another length and staggered release require deliberate control.
 
@@ -127,13 +131,13 @@ settle the label. Static paired holds under taps can be supporting. Sparse align
 holds can be absent. Judge expression separately from confidence or event counts.
 
 LN release describes staggered endings; synchronized endings weaken that role.
-A display edge is not a release. LN inverse describes patterned gaps/renewals in
+Display edges are not releases. LN inverse describes patterned gaps/renewals in
 a sustained hold field, not ordinary handoffs. Neither automatically establishes
 LN coordination or Tech.
 
 *Highscore* has an initial paired onset, then separated tails, yet is absent.
 *Nibelungen*'s single onset and three long staged releases are supporting;
-*Eviternity* repeats grouped starts and split releases. Later attacks during holds
+*Eviternity* is supporting and repeats grouped starts and split releases. Later attacks during holds
 are not necessary. *Overkill* is prominent despite few, slow events: inspect its
 four-head decomposition and reentries under a retained lane. These cases supply
 no duration/count cutoff.
@@ -179,7 +183,7 @@ Do not infer mapper intent or invent difficulty, duration, or irregularity thres
 
 ## Calibration
 
-Retrieve current canonical examples, [recorded judgments](expert-review-20260907.json),
-[corrections](feedback-calibration.json), and [contrast identities](human-contrast-sets.json).
-Reopen positives and counterexamples before generalizing. Check complete scope,
+Retrieve canonical positives and counterexamples, [recorded judgments](expert-review-20260907.json),
+[corrections](feedback-calibration.json), and [contrast identities](human-contrast-sets.json)
+before generalizing. Check complete scope,
 independent salience, and explanatory inference; exposed replay is not held-out accuracy.

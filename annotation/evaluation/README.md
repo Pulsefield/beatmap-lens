@@ -1,5 +1,10 @@
 # Annotation regression gate
 
+The [2026-09-10 skill calibration report](../../docs/research/human-feedback-skill-tuning.md)
+records the adopted comparison, rejected iterations, and explicitly accepted
+noncritical limitations. Its supplemental feedback suite is separate from the
+unchanged protected corpus below.
+
 The gate protects previously learned judgments when the judgment skill, labeler role,
 evidence tools, or selected-section execution inputs change. It does not certify
 whole-chart discovery or independent audit quality.
