@@ -206,7 +206,14 @@ This boundary does not make previously exposed skill examples fresh evaluation
 data. Keep calibration replays separate from held-out results, exclude related
 sources already shown in prompts/skills, and hide evaluator gold outside worker
 inputs. Frozen feedback is a snapshot: refreshing human corrections requires a new
-bundle, not alteration of a running job.
+bundle, not alteration of a running job. Preparation consumes `--feedback-dir` as
+supplied; it does not refresh that directory from the review service. When an
+experiment claims to use the latest human feedback, first fetch the relevant
+`/api/review/feedback/:sourceSha256` responses and verify their `documentVersion`
+against canonical workflow revisions and hashes. Freeze those responses before
+preparing both comparison arms. A historical snapshot remains valid for a declared
+historical comparison, but its internal consistency does not establish freshness.
+Changing the calibration pool requires a matched baseline using that pool.
 
 Compare fixed evidence, optional inspection, and inspection plus example retrieval
 under the same skill, scopes, and model settings. Measure presence and exact

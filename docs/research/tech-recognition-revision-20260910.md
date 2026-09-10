@@ -4,6 +4,12 @@ Date: 2026-09-10. Outcome: both candidates rejected; production guidance unchang
 The proposal and thresholds were fixed before launching candidate workers. Full
 production adoption was not demonstrated. The staged experiment is complete.
 
+A [subsequent freshness audit and new experiment](tech-reference-calibration-20260910.md)
+found that this experiment's shared feedback snapshot omitted recent canonical
+human decisions. The paired results below remain comparisons under that older
+pool; they do not measure learning from all current feedback. The later experiment
+uses a freshly frozen pool and a new matched production baseline.
+
 ## Hypothesis and intervention
 
 The [previous diagnosis](selection-run-diagnosis-20260910.md) found persistent
