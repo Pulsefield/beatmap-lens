@@ -20,6 +20,10 @@ user configuration ignored and no resume operation. A snapshot of 26 completed
 labelers and 24 completed auditors found a distinct single thread ID per worker.
 A separate inspection of 16 completed workers in one shard also found no reuse
 of conversation history between jobs.
+After initial delivery completed, full verification confirmed 254 distinct actual
+producer identities and worker threads across all 127 labeler and 127 auditor
+jobs. This expands the isolation check; the text-size measurements below still
+describe the earlier snapshot.
 
 Grouping targets a 28,000-character source-brief cap, allowing a single dense
 section to exceed it. Prepared labeler briefs have a median of 13,450 characters
@@ -67,8 +71,8 @@ using repeated fresh runs, counterbalanced order and unchanged guidance. Include
 dense evidence and difficult semantic boundaries. Assess correctness against
 protected expert cases separately from model agreement.
 
-A factual repair pass using single-section jobs would not itself be this controlled
-experiment: those sections are selected because an auditor already found a
-problem, and the workers receive the audit feedback. Shorter prompts alone do not
+A [factual repair pass](annotation-scale.md) using single-section jobs is not this
+controlled experiment: those sections are selected because an auditor already
+found a problem, and the workers receive the audit feedback. Shorter prompts alone do not
 pass the repository's semantic regression gate. Prepared campaign jobs must remain
 unchanged while a new candidate is evaluated.

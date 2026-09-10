@@ -36,6 +36,8 @@ lives in the [judgment skill](../.agents/skills/mania-pattern-judgment/SKILL.md)
   behavior and its limits.
 - [Annotation context control](research/annotation-context-control.md): observed
   worker isolation, repeated inputs, and the missing comparison of judgment quality.
+- [Scaling section annotation](research/annotation-scale.md): coverage, independent
+  audit outcomes, and limitations of the 500-section expansion.
 - [Annotation balance](research/annotation-balance.md): human-supervision gaps,
   difficulty coverage, and section-boundary selection biases.
 - [Style across playback rates](research/rate-style-response.md): fixed-section
