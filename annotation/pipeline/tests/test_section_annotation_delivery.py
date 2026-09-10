@@ -488,6 +488,109 @@ class SectionDeliveryTest(unittest.TestCase):
         self.assertEqual((len(selected), links), (4, []))
         self.assertEqual(skipped[0]['reason'], 'original-already-has-replacement')
 
+    def failed_terminal_lineage(self):
+        original = self.add_review('tech', 'needs-revision')
+        terminal = self.add_review('tech', 'needs-revision')
+        original['handoffSha256'], terminal['handoffSha256'] = '0' * 64, '1' * 64
+        self.current['handoffs'][-1]['supersedes'] = [{
+            'handoffId': original['handoffId'], 'handoffSha256': original['handoffSha256'],
+            'claimId': original['claimId'], 'replacementClaimId': terminal['claimId']}]
+        self.case['originalReferences'] = [original, terminal]
+        return original, terminal
+
+    def test_explicit_current_failed_terminal_delivers_one_link_without_rewriting_frozen_work(self):
+        original, terminal = self.failed_terminal_lineage()
+        first = self.label()
+        self.assertEqual(first['skippedCells'][0]['reason'], 'original-already-has-replacement')
+        frozen = {path: path.read_bytes() for path in self.label_job.rglob('*') if path.is_file()}
+        original_packet = Path(first['entries'][0]['handoffPath'])
+        original_hash = delivery.sha(original_packet)
+        original_handoffs = deepcopy(self.current['handoffs'])
+        for tag in delivery.TAGS:
+            if tag != 'tech':
+                self.add_review(tag, 'agent-reviewed')
+        self.batch = self.root / 'current-terminal-repair'
+        manifest = delivery.prepare_handoffs(self.batch, self.label_job, self.config,
+                                             follow_terminal_lineage=True, handoff_suffix='current-terminal')
+        entry = manifest['entries'][0]
+        self.assertEqual(entry['claimIds'], ['episode-1-tech'])
+        self.assertEqual(entry['originalReferences'], [original, terminal])
+        self.assertEqual(entry['supersedes'], [{
+            'handoffId': terminal['handoffId'], 'handoffSha256': terminal['handoffSha256'],
+            'claimId': terminal['claimId'], 'replacementClaimId': 'episode-1-tech'}])
+        self.assertEqual([row['status'] for row in entry['lineageRepairs'][0]['chain']], ['needs-revision'] * 2)
+        self.auditor(manifest)
+        self.assertEqual(delivery.deliver_audits(self.batch, self.audit_job, self.config)['status'], 'complete')
+        self.assertEqual([row['status'] for row in self.current['agentReviews'][:2]], ['superseded'] * 2)
+        self.assertEqual(self.current['agentReviews'][0]['supersededBy'], {
+            'handoffId': terminal['handoffId'], 'claimId': terminal['claimId']})
+        self.assertEqual(self.current['handoffs'][:2], original_handoffs)
+        self.assertEqual(delivery.sha(original_packet), original_hash)
+        for path, contents in frozen.items():
+            self.assertEqual(path.read_bytes(), contents)
+
+    def test_current_terminal_and_anchor_references_work_in_either_order(self):
+        original, terminal = self.failed_terminal_lineage()
+        before = deepcopy(self.current)
+        for refs in ([original], [original, terminal], [terminal, original]):
+            with self.subTest(refs=refs):
+                case = {**self.case, 'originalReferences': refs}
+                selected_case, current, lineages = delivery.terminal_lineage(
+                    case, self.current, self.config['foundationSha256'])
+                selected, links, skipped = delivery.select_cells(
+                    selected_case, self.judgments, current, self.config['foundationSha256'])
+                self.assertEqual((len(selected), len(links), skipped), (5, 1, []))
+                self.assertEqual(links[0]['handoffId'], terminal['handoffId'])
+                self.assertEqual(len(selected_case['originalReferences']), 1)
+                self.assertEqual(selected_case['staleLineageTargets'], [])
+                self.assertEqual(len(lineages), 1)
+        self.assertEqual(self.current, before)
+
+    def test_current_terminal_repair_preserves_protected_statuses_and_bindings(self):
+        self.failed_terminal_lineage()
+        mutations = [
+            ('supported', lambda row, handoff: row.update(status='agent-reviewed')),
+            ('expert', lambda row, handoff: row.update(status='needs-expert')),
+            ('awaiting-audit', lambda row, handoff: row.update(status='awaiting-audit')),
+            ('human', lambda row, handoff: row.update(status='accepted', decision={'humanId': 'actual-human'})),
+            ('stale-base', lambda row, handoff: row.update(baseStatus='stale')),
+            ('stale-source', lambda row, handoff: row.update(trust={'source': 'stale', 'foundation': 'current'})),
+            ('stale-foundation', lambda row, handoff: row.update(trust={'source': 'current', 'foundation': 'stale'})),
+            ('scope', lambda row, handoff: row['summary'].update(scope={'startMs': 1100, 'endMs': 1400})),
+            ('tag', lambda row, handoff: row['summary'].update(tagId='trill-organization')),
+            ('rate', lambda row, handoff: row['summary'].update(playbackRate=1.25)),
+            ('foundation', lambda row, handoff: handoff.update(foundationSha256='other-foundation'))]
+        for name, mutate in mutations:
+            with self.subTest(name=name):
+                current = deepcopy(self.current)
+                mutate(current['agentReviews'][-1], current['handoffs'][-1])
+                before = deepcopy(current)
+                case, view, lineages = delivery.terminal_lineage(self.case, current, self.config['foundationSha256'])
+                selected, links, _ = delivery.select_cells(case, self.judgments, view, self.config['foundationSha256'])
+                self.assertEqual(lineages, [])
+                self.assertEqual(links, [])
+                self.assertNotIn('tech', [judgment['tagId'] for judgment in selected])
+                self.assertEqual(current, before)
+
+    def test_current_terminal_repair_rejects_altered_explicit_references_and_chain_hash(self):
+        original, terminal = self.failed_terminal_lineage()
+        for field, value in [('sourceSha256', 'wrong-source'), ('handoffSha256', 'wrong-hash'),
+                             ('tagId', 'trill-organization'), ('scope', {'startMs': 1100, 'endMs': 1400}),
+                             ('playbackRate', 1.25)]:
+            for refs in ([original, {**terminal, field: value}], [{**terminal, field: value}, original]):
+                with self.subTest(field=field, refs=refs):
+                    with self.assertRaisesRegex(ValueError, 'Conflicting lineage reference binding'):
+                        delivery.terminal_lineage({**self.case, 'originalReferences': refs},
+                                                   self.current, self.config['foundationSha256'])
+        for field, value in [('sourceSha256', 'wrong-source'), ('handoffSha256', 'wrong-hash')]:
+            with self.subTest(anchor=field):
+                with self.assertRaisesRegex(ValueError, 'Lineage anchor binding changed'):
+                    delivery.terminal_lineage({**self.case, 'originalReferences': [{**original, field: value}]},
+                                               self.current, self.config['foundationSha256'])
+        self.current['handoffs'][-1]['supersedes'][0]['handoffSha256'] = 'wrong-hash'
+        with self.assertRaisesRegex(ValueError, 'Immutable lineage handoff hash differs'):
+            delivery.terminal_lineage(self.case, self.current, self.config['foundationSha256'])
+
     def test_explicit_exact_stale_coalescing_retires_the_detached_duplicate_too(self):
         original = self.add_review('tech', 'needs-revision')
         terminal = self.add_review('tech', 'stale')

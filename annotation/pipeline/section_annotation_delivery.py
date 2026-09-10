@@ -233,10 +233,10 @@ def machine_binding_current(row):
 
 
 def terminal_lineage(case, current, foundation_sha, include_exact_stale=False):
-    """Follow an explicit current repair target through its immutable stale tail.
+    """Follow an explicit repair target to its stale or failed current revision.
 
-    A stale successor already owns the original's only revision edge. A fresh
-    revision must target that tail; auditing it then propagates through the chain.
+    A successor already owns the original's only revision edge. A fresh revision
+    must target that tail; auditing it then propagates through the chain.
     Unrelated stale claims and changed crops remain controller conflicts.
     """
     rows = {(row['handoffId'], row['claimId']): row for row in current['agentReviews']}
@@ -251,7 +251,10 @@ def terminal_lineage(case, current, foundation_sha, include_exact_stale=False):
         if anchor and anchor['baseStatus'] == 'current' and anchor['status'] in REVISABLE:
             while chain[-1] in successors:
                 chain.append(successors[chain[-1]])
-        eligible = len(chain) > 1 and rows[chain[-1]]['status'] == 'stale'
+        terminal = rows[chain[-1]] if len(chain) > 1 else None
+        eligible = terminal is not None and (terminal['status'] == 'stale' or (
+            terminal['status'] == 'needs-revision' and terminal['baseStatus'] == 'current'
+            and machine_binding_current(terminal)))
         eligible = eligible and all(
             not rows[key].get('decision') and rows[key]['summary']['scope'] == case['scope']
             and same_playback_rate(rows[key]['summary'], case)
@@ -276,7 +279,8 @@ def terminal_lineage(case, current, foundation_sha, include_exact_stale=False):
             require(edge['handoffSha256'] == left['handoffSha256'], 'Immutable lineage handoff hash differs.')
         references.append({**records[-1], 'sourceSha256': case['sourceSha256']})
         ignored.update(chain[:-1])
-        stale_targets.append(chain[-1])
+        if terminal['status'] == 'stale':
+            stale_targets.append(chain[-1])
         lineages.append({'originalReference': ref, 'chain': records})
     if include_exact_stale:
         repaired_tags = {item['chain'][-1]['tagId'] for item in lineages}
@@ -295,7 +299,18 @@ def terminal_lineage(case, current, foundation_sha, include_exact_stale=False):
             references.append(ref)
             stale_targets.append(identity)
             lineages.append({'originalReference': ref, 'chain': [record], 'reason': 'exact-stale-duplicate'})
-    return ({**case, 'originalReferences': references, 'staleLineageTargets': stale_targets},
+    # An explicit input may name both the anchor and the terminal. Their bindings
+    # must agree before they become one replacement reference, in either order.
+    unique_references = {}
+    for ref in references:
+        identity = (ref['handoffId'], ref['claimId'])
+        previous = unique_references.get(identity, {})
+        require(all(ref.get(key, previous.get(key)) == previous.get(key, ref.get(key))
+                    for key in ('sourceSha256', 'handoffSha256', 'tagId', 'scope'))
+                and (not previous or same_playback_rate(ref, previous)),
+                'Conflicting lineage reference binding.')
+        unique_references[identity] = {**previous, **ref}
+    return ({**case, 'originalReferences': list(unique_references.values()), 'staleLineageTargets': stale_targets},
             {**current, 'agentReviews': [row for key, row in rows.items() if key not in ignored]}, lineages)
 
 
