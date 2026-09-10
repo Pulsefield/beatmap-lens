@@ -25,10 +25,15 @@ so others can reuse the work and understand why the skill changes. Historical
 campaigns, raw datasets, runs, and working notes can remain local. Running every
 past experiment is not a public maintenance commitment.
 
-Human annotations are published on Hugging Face as
+Annotations are published on Hugging Face as
 [sed-i/mania-pattern-annotations](https://huggingface.co/datasets/sed-i/mania-pattern-annotations).
-The first MIT snapshot, `v0.1.0`, contains 156 human judgments across 117 charts.
-Optional agent-reviewed annotations can be selected separately in later versions.
+The MIT snapshot [v0.2.0](https://huggingface.co/datasets/sed-i/mania-pattern-annotations/tree/a8ee5391b5f9dd68e9b2fb478674a46f354c7375) contains 467 human records and
+2,419 independently audited machine judgments across 332 annotated charts.
+The human layer is the default; two machine method layers are separate opt-ins
+and exclude exact cells with effective human judgments. The
+[frozen method](annotation/methods/scale-500-20260910/README.md) and
+[expert review findings](docs/research/annotation-scale.md#expert-review-and-method-freeze)
+are public.
 Dataset releases are independent of the npm package.
 The [publication pipeline](docs/annotation/dataset-publication.md) builds compact
 Parquet snapshots with pinned GitHub artifacts and hash-verified external chart references.

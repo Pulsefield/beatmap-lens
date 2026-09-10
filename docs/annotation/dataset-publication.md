@@ -180,6 +180,59 @@ remain distinct judgments.
 
 ## Published snapshots
 
+### v0.2.0: frozen expansion with separate machine layers
+
+[v0.2.0](https://huggingface.co/datasets/sed-i/mania-pattern-annotations/tree/a8ee5391b5f9dd68e9b2fb478674a46f354c7375) was published on 2026-09-10 under MIT at HF commit
+`a8ee5391b5f9dd68e9b2fb478674a46f354c7375`; the `v0.2.0` tag resolves to that
+commit. The exporter and public
+[frozen method bundle](https://github.com/Pulsefield/beatmap-lens/tree/d0427e9aa3efb79c421964f99883b0d285743772/annotation/methods/scale-500-20260910)
+are pinned to GitHub commit `d0427e9aa3efb79c421964f99883b0d285743772`.
+The skill and Foundation semantics remain unchanged.
+
+| Layer | Records | Annotated charts |
+| --- | ---: | ---: |
+| Default `human` | 467 | 168 |
+| Initial method `a444f6f5…` | 2,388 | 179 |
+| Repair method `46fb9e0f…` | 31 | 25 |
+| Both opt-in machine methods | 2,419 | 179 |
+
+The full method IDs and loadable configuration names are in the Dataset Card and
+manifest. The human layer contains 243 present and 224 absent observations,
+covering 466 distinct source/scope/tag/rate cells. One agreeing pair retains two
+observation identities; deduplicate its training weight. All 156 v0.1.0 records
+are preserved unchanged after normalizing their implicit 1× rate. Of 311 added
+human records, 80 come from the expansion's final review and 231 from earlier
+unpublished human accumulation. See the
+[review findings](../research/annotation-scale.md#expert-review-and-method-freeze).
+
+The 2,419 machine cells are distinct and have complete method provenance,
+current auxiliary evidence and independent supporting audit. The explicit
+human-precedence policy excludes 62 otherwise eligible machine rows, including
+a supported repair on another handoff that conflicts with an effective human
+Trill judgment. No machine label overrides human uncertainty or supplies an
+extra human-gold observation. Historical partial methods remain provenance of
+some human records; they are not selected machine datasets.
+
+Together the layers cover 332 annotated charts. All 336 source references,
+including calibration dependencies, were downloaded and checked against their
+original SHA-256: 335 official osu! files and one exact-byte mirror. The publisher
+also verified 116 public artifact references before its guarded HF commit.
+The seven snapshot files total 5,044,135 bytes, with manifest SHA-256
+`d662dc74f6171518707f83186521f57786910569ffaa62fbb0dc568eaac336c3`.
+All seven files were downloaded anonymously at the published commit, found
+byte-identical to the candidate, and passed snapshot validation. The old
+`v0.1.0` tag and its contents remain unchanged.
+
+All judgments in this release use 1×; the separate playback-rate experiment is
+not included. Eight human judgments on the same six unavailable historical
+source versions remain deferred. The expansion's single fixed-boundary LN cell
+also remains excluded; no crop or canonical judgment was changed to admit it.
+The complete repository check passed 493 TypeScript and 290 Python tests,
+builds, package checks and corpus smokes. These checks and the selected expert
+review do not establish population annotation accuracy.
+
+### v0.1.0: first human release
+
 The first human-only release is
 [v0.1.0](https://huggingface.co/datasets/sed-i/mania-pattern-annotations/tree/892845970a21861b51d7f2c6797ae2cf5784e729),
 published on 2026-09-09 under MIT. Its immutable HF commit is

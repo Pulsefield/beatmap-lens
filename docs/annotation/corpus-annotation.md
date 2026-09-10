@@ -155,9 +155,11 @@ deferral leaves a judgment unsettled. Consume a recorded correction directly,
 then investigate whether its distinction applies elsewhere instead of copying
 that label onto superficially similar sections.
 
-Future Hugging Face releases will distinguish human annotations from optional
-versioned agent-reviewed annotations. Selection and workflow completion alone do
-not establish release quality. No general format adapter is required by this plan.
+[Published Hugging Face snapshots](dataset-publication.md#published-snapshots)
+distinguish human annotations from optional versioned agent-reviewed annotations.
+The default human layer takes precedence at exact matching cells. Selection and
+workflow completion alone do not establish release quality. No general format
+adapter is required by this plan.
 
 ## Workspace storage
 

@@ -47,9 +47,12 @@ Research documents should explain the question, finding, and limitation on their
 own. Small source/section/tag finding tables are useful when they clarify a result.
 Raw charts, intermediate runs, campaign status, and working notes may remain local;
 public documentation does not promise to reconstruct every historical experiment.
-The first human snapshot is published as
-[mania-pattern-annotations v0.1.0](https://huggingface.co/datasets/sed-i/mania-pattern-annotations/tree/892845970a21861b51d7f2c6797ae2cf5784e729).
-Optional versioned agent subsets remain separate from human judgments.
+The current published snapshot is
+[mania-pattern-annotations v0.2.0](https://huggingface.co/datasets/sed-i/mania-pattern-annotations/tree/a8ee5391b5f9dd68e9b2fb478674a46f354c7375):
+467 human records and 2,419 machine judgments. The default human layer and two
+opt-in machine methods remain separate, with exact human precedence. The
+[publication record](annotation/dataset-publication.md#published-snapshots) includes
+immutable version identities and the preserved first release.
 
 ## Decisions
 
