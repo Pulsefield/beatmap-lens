@@ -115,8 +115,11 @@ supporting audit are excluded from the agent subset.
 Validation checks schemas, hashes, counts, identifiers, ranges, assessments,
 references, and the exact file inventory. Unexpected files and symbolic links
 fail validation. It does not claim semantic accuracy or execute a model evaluation.
-New snapshots use manifest version 2 and `judgment-v2`, including a required
-`playback_rate`. Historical version 1 snapshots remain readable as 1×. All source
+New snapshots use manifest version 3 and `judgment-v3`, including a required
+`playback_rate`, a derived `cell_id`, and nullable observation/evidence-review metadata.
+Historical version 1 and 2 Arrow schemas remain readable without rewriting their
+files; version 1 implicitly uses 1×. Missing historical review metadata stays
+unknown. All source
 coordinates stay in original milliseconds; see [playback rates](playback-rate.md).
 Contradictory supervised human judgments for the exact same source/scope/tag/rate block
 release; different overlapping scopes remain distinguishable. Empty configurations
@@ -177,6 +180,85 @@ duplicate training weight. Preserve the original records for traceability. Use
 the human precedence policy when adding machine supervision; missing or masked
 human values do not become machine-provided negatives. Different scopes and rates
 remain distinct judgments.
+
+## Evidence provenance and research use
+
+A human row records the final human assessment and its attached source-backed
+notes. Human authority over the label does not imply that a person independently
+selected, minimized, or specifically reviewed those notes. Independent machine
+audit likewise does not certify a note-level human gold set or minimal/sufficient
+evidence. An inherited explanation can remain attached to a changed assessment;
+an empty human explanation also does not invalidate the label.
+
+Version 3 preserves these distinctions explicitly:
+
+| Field | Meaning and limits |
+| --- | --- |
+| `record_id`, `observation_id`, `observation_sha256` | The immutable record and, when available, canonical human observation hash bind the current assessment and notes. The hash is null for machines and when unavailable. A new human revision receives a new identity; adding explicit review declarations to an existing identity is forbidden. |
+| `details.proposal_changes` | Claim fields differing from the original `handoff_id`/`claim_id`. Sets compare exact source note tuples, ignoring order. `[]` means unchanged; null means no comparison was supplied. Changes are factual lineage, not judgments about explanation correctness. |
+| `details.human_revision` | The immediately preceding human observation's ID/hash and `changed_fields`, for both direct revisions and successive decisions on one proposal. This separates the latest revision from cumulative changes against an original machine proposal. Null means no preceding human observation was supplied. |
+| `details.evidence_review.selection_origin` | The recorded starting point: inherited agent/human selection, a new human claim, copied section, or unknown. Source handoff/observation/claim pointers identify that starting point when recorded. |
+| `details.evidence_review.operations` | Saved draft operations distinguish `auto-scope-fill`, `explicit-scope-selection`, `manual-note-edit`, and `range-filter`, with witness/context/both targets. The list is not a full per-note action history. |
+| `details.evidence_review.selection_reviewed` | A separate explicit check of the current selection. A generic label save or unchanged selection does not establish it. |
+| `details.evidence_review.rationale_reviewed` | A separate explicit check of the current evidence explanation. A generic decision comment does not establish it. |
+| `cell_id` | A deterministic identity for the exact source/scope/tag/rate tuple, independent of record, method, and authority. It groups duplicates without deleting record identities or assigning a universal weight. |
+
+The entire `evidence_review` field is null for older untracked records. No importer
+infers past UI operations or human intent from the resulting note-set shape.
+`proposal_changes` containing `assessment` but neither `witnesses` nor `rationale`
+makes a label revision with inherited notes/explanation visible without revoking
+that human label. A dedicated supplemental review should decide whether the
+selection and explanation support the final assessment, then append a new human
+observation. The common claim comparison covers `tag_id`, `assessment`, `scope`,
+`playback_rate`, `review_context`, `witnesses`, `context_notes`, `rationale`,
+`section_id`, `boundary_uncertainty`, `transition`, and `exemplar_role`. Identity
+and review declarations are metadata, so a metadata-only revision has empty
+`changed_fields`; the observation IDs/hashes still change. If A→B changes a label
+and B→C only edits notes, C's `human_revision.changed_fields` lists `witnesses`,
+while its comparison against the original proposal can still include `assessment`.
+The superseded records remain addressable through lineage; the current table
+contains only effective observations and does not copy private journal bodies.
+
+Version 1/2 predecessors can acquire derived grouping/comparison/hash
+columns in a later snapshot while their original claims remain identical; this
+does not grant missing human review declarations. A version 3 record cannot change
+its existing review metadata or identity binding under the same record ID.
+
+`auxiliary_evidence_status` answers whether the referenced human exemplars still
+match their recorded source/observation hashes and Foundation. It does **not**
+answer whether this row's rationale explains its current label. Keep dependency
+freshness, label authority, explicit selection review, and explanation review as
+separate dimensions.
+
+The section delivery packager constructs `contextNoteRefs` from every note in the
+supplied review context except witnesses. That operation is automatic; it is not
+an agent's active negative-note selection. Unselected notes are not semantic
+negatives, and existing records provide no per-note reason for their omission.
+Full-section selections, partial chords, disconnected sets, and notes crossing
+section boundaries are allowed. A strict subset, including one that only omits
+entering long notes, is not proof of deliberate fine selection. Do not convert
+coverage thresholds into salience or evidence-quality labels.
+
+Research eligibility depends on the question:
+
+- Section-label learning can retain final human labels while masking unresolved or
+  unreviewed assessments, regardless of whether an explanation needs supplemental
+  review. Select authority/method layers first and weight agreeing exact cells
+  once. Resolve contradictions among selected machine methods explicitly.
+- Selection research must identify inherited versus explicitly reviewed sets and
+  keep the complete section and review context available, including unselected
+  intervening rows and original start/end times of crossing long notes. Explicit
+  review alone does not establish necessity or sufficiency. Testing why individual
+  notes were omitted requires additional judgments or a declared intervention.
+- Salience prediction must exclude evidence rationale, human decision comments,
+  and audit explanations from model inputs because they can disclose the target.
+  Group related rates, overlapping sections, and source versions during splitting.
+  Preserve all manifest `human_evidence_refs` edges, including unpublished
+  references with null `record_id`; their exact source and observation hashes are
+  still dependency identities and potential leakage paths.
+
+These are use restrictions and provenance distinctions, not retroactive changes
+to the Foundation or frozen labels. The published v0.2.0 files remain unchanged.
 
 ## Published snapshots
 

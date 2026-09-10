@@ -37,6 +37,8 @@ are public.
 Dataset releases are independent of the npm package.
 The [publication pipeline](docs/annotation/dataset-publication.md) builds compact
 Parquet snapshots with pinned GitHub artifacts and hash-verified external chart references.
+The [evidence review protocol](docs/annotation/evidence-review.md) separates label
+authority, selection provenance, and dedicated review of notes and explanations.
 
 ## Repository map
 

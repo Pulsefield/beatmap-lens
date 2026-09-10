@@ -264,6 +264,8 @@ export interface HumanObservationV2 {
   readonly foundationSha256: string;
   readonly humanId: string;
   readonly confirmedAt: string;
+  /** Absent in historical records: selection origin and dedicated review are unknown. */
+  readonly evidenceReview?: EvidenceReviewV2;
   readonly origin:
     | { readonly kind: "direct-human" }
     | {
@@ -272,6 +274,32 @@ export interface HumanObservationV2 {
         readonly claimId: string;
         readonly decisionId: string;
       };
+}
+
+/** Human review actions, separate from the source-backed claim and generic acceptance. */
+export interface EvidenceReviewV2 {
+  readonly selectionOrigin:
+    | "inherited-agent"
+    | "inherited-human"
+    | "new-human"
+    | "copied-section"
+    | "unknown";
+  readonly sourceHandoffId?: string;
+  readonly sourceObservationId?: string;
+  readonly sourceClaimId?: string;
+  /** Distinct operations since inheritance, ordered by their latest occurrence; not a click log. */
+  readonly operations: readonly {
+    readonly kind:
+      | "auto-scope-fill"
+      | "explicit-scope-selection"
+      | "manual-note-edit"
+      | "range-filter";
+    readonly target: "witness" | "context" | "both";
+  }[];
+  /** Explicit review of this claim's selected and unselected notes; never implied by Save. */
+  readonly selectionReviewed: boolean;
+  /** Explicit confirmation that the current explanation supports the current judgment. */
+  readonly rationaleReviewed: boolean;
 }
 
 export interface ReviewDocumentV2 {

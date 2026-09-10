@@ -19,6 +19,19 @@ import {
 
 type MethodAgent = Omit<AgentProvenanceV2, "producerId">;
 type AuxiliaryStatus = "current" | "changed" | "untracked" | "not-applicable";
+type ClaimChangeField =
+  | "tag_id"
+  | "assessment"
+  | "scope"
+  | "playback_rate"
+  | "review_context"
+  | "witnesses"
+  | "context_notes"
+  | "rationale"
+  | "section_id"
+  | "boundary_uncertainty"
+  | "transition"
+  | "exemplar_role";
 type PublicFoundation = Omit<FoundationV2, "calibrationExamples"> & {
   calibrationExamples: readonly (Omit<
     FoundationV2["calibrationExamples"][number],
@@ -39,7 +52,7 @@ export interface PublicationRowV1 {
   foundation_id: string;
   origin: "human-direct" | "human-confirmed" | "human-modified" | "agent-reviewed";
   observation_id: string | null;
-  /** Internal exact observation identity for qualifying public auxiliary links. */
+  /** Exact observation identity, also qualifying public auxiliary links. */
   observation_sha256?: string;
   decision_id: string | null;
   handoff_id: string | null;
@@ -56,6 +69,13 @@ export interface PublicationRowV1 {
   details: {
     review_context: ClaimV2["reviewContext"];
     evidence: ClaimV2["evidence"];
+    evidence_review: HumanObservationV2["evidenceReview"] | null;
+    proposal_changes: ClaimChangeField[] | null;
+    human_revision: {
+      previous_observation_id: string;
+      previous_observation_sha256: string;
+      changed_fields: ClaimChangeField[];
+    } | null;
     human_rationale: string | null;
     section_id: string | null;
     boundary_uncertainty: ClaimV2["boundaryUncertainty"] | null;
@@ -110,6 +130,42 @@ function uniqueSorted<T>(values: readonly T[]): T[] {
     .map(([, value]) => value);
 }
 
+function claimChanges(ancestor: ClaimV2, current: ClaimV2): ClaimChangeField[] {
+  const comparisons: [ClaimChangeField, unknown, unknown][] = [
+    ["tag_id", ancestor.tagId, current.tagId],
+    ["assessment", ancestor.assessment, current.assessment],
+    ["scope", ancestor.scope, current.scope],
+    [
+      "playback_rate",
+      resolvePlaybackRate(ancestor.playbackRate),
+      resolvePlaybackRate(current.playbackRate),
+    ],
+    ["review_context", ancestor.reviewContext, current.reviewContext],
+    [
+      "witnesses",
+      uniqueSorted(ancestor.evidence.noteRefs),
+      uniqueSorted(current.evidence.noteRefs),
+    ],
+    [
+      "context_notes",
+      uniqueSorted(ancestor.evidence.contextNoteRefs),
+      uniqueSorted(current.evidence.contextNoteRefs),
+    ],
+    ["rationale", ancestor.evidence.rationale, current.evidence.rationale],
+    ["section_id", ancestor.sectionId ?? null, current.sectionId ?? null],
+    [
+      "boundary_uncertainty",
+      ancestor.boundaryUncertainty ?? null,
+      current.boundaryUncertainty ?? null,
+    ],
+    ["transition", ancestor.transition ?? null, current.transition ?? null],
+    ["exemplar_role", ancestor.exemplarRole ?? null, current.exemplarRole ?? null],
+  ];
+  return comparisons
+    .filter(([, before, after]) => serializeCanonicalJson(before) !== serializeCanonicalJson(after))
+    .map(([field]) => field);
+}
+
 function auditStatus(review: AgentReviewV2): PublicationRowV1["audit_status"] {
   const outcomes = new Set(review.audits.map(({ result }) => result.outcome));
   return outcomes.size > 1 ? "conflicting" : ([...outcomes][0] ?? "missing");
@@ -143,6 +199,9 @@ function rowForClaim(source: SourceIdentityV1, claim: ClaimV2): PublicationRowV1
     details: {
       review_context: claim.reviewContext,
       evidence: claim.evidence,
+      evidence_review: null,
+      proposal_changes: null,
+      human_revision: null,
       human_rationale: null,
       section_id: claim.sectionId ?? null,
       boundary_uncertainty: claim.boundaryUncertainty ?? null,
@@ -261,9 +320,22 @@ export async function projectReviewForPublicationV1(
       observation.foundationSha256 === currentFoundation ? "current" : "changed";
     row.origin = "human-direct";
     row.details.human_rationale = observation.claim.evidence.rationale;
-    row.supersedes_record_ids = humanAncestors(document, observation).map((id) =>
+    row.details.evidence_review = observation.evidenceReview ?? null;
+    const ancestors = humanAncestors(document, observation);
+    row.supersedes_record_ids = ancestors.map((id) =>
       humanPublicationRecordIdV1(document.source.sha256, id),
     );
+    const previousId =
+      observation.origin.kind === "agent-proposal" ? ancestors.at(-1) : ancestors[0];
+    if (previousId) {
+      const previous = document.observations.find(({ id }) => id === previousId);
+      if (!previous) throw new Error("Human revision has no preceding observation.");
+      row.details.human_revision = {
+        previous_observation_id: previous.id,
+        previous_observation_sha256: await hashWorkflowValueV2(previous),
+        changed_fields: claimChanges(previous.claim, observation.claim),
+      };
+    }
     if (observation.origin.kind === "agent-proposal") {
       const origin = observation.origin;
       const decision = document.decisions.find((entry) => entry.id === origin.decisionId);
@@ -275,6 +347,12 @@ export async function projectReviewForPublicationV1(
       row.provenance_id = provenanceId ?? null;
       row.method_id = provenanceId ? (result.provenance[provenanceId]?.method_id ?? null) : null;
       row.details.human_rationale = decision?.rationale ?? null;
+      const proposal = document.handoffs
+        .find(({ handoff }) => handoff.handoffId === origin.handoffId)
+        ?.handoff.proposals.find(({ id }) => id === origin.claimId);
+      if (proposal) {
+        row.details.proposal_changes = claimChanges(proposal, observation.claim);
+      }
     }
     result.human.push(row);
     result.effective_evidence.push({

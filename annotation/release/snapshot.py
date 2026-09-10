@@ -29,7 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from playback_rate import normalize_playback_rate
 
 CONTRACT = "beatmap-lens-annotations"
-VERSION = 2
+VERSION = 3
 HEX256 = re.compile(r"^[0-9a-f]{64}$")
 COMMIT = re.compile(r"^[0-9a-f]{40}$")
 REPO_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$")
@@ -76,7 +76,7 @@ EVIDENCE = pa.struct([
     _required("note_refs", _list(NOTE)), _required("context_note_refs", _list(NOTE)),
     _required("rationale", pa.string()),
 ])
-DETAILS = pa.struct([
+DETAILS_V2 = pa.struct([
     _required("review_context", RANGE), _required("evidence", EVIDENCE),
     pa.field("human_rationale", pa.string()),
     pa.field("boundary_uncertainty", pa.struct([pa.field("start", RANGE), pa.field("end", RANGE)])),
@@ -94,6 +94,27 @@ DETAILS = pa.struct([
         ])),
     ]))),
 ])
+EVIDENCE_REVIEW = pa.struct([
+    _required("selection_origin", pa.string()),
+    pa.field("source_handoff_id", pa.string()),
+    pa.field("source_observation_id", pa.string()),
+    pa.field("source_claim_id", pa.string()),
+    _required("operations", _list(pa.struct([
+        _required("kind", pa.string()), _required("target", pa.string()),
+    ]))),
+    _required("selection_reviewed", pa.bool_()),
+    _required("rationale_reviewed", pa.bool_()),
+])
+DETAILS = pa.struct([
+    *DETAILS_V2, pa.field("evidence_review", EVIDENCE_REVIEW),
+    pa.field("proposal_changes", _list(pa.string())),
+    pa.field("human_revision", pa.struct([
+        _required("previous_observation_id", pa.string()),
+        _required("previous_observation_sha256", pa.string()),
+        _required("changed_fields", _list(pa.string())),
+    ])),
+])
+CLAIM_FIELDS = {"tag_id", "assessment", "scope", "playback_rate", "review_context", "witnesses", "context_notes", "rationale", "section_id", "boundary_uncertainty", "transition", "exemplar_role"}
 SOURCE_REF = pa.struct([
     _required("kind", pa.string()), pa.field("repository", pa.string()),
     pa.field("commit", pa.string()), pa.field("path", pa.string()),
@@ -117,9 +138,13 @@ JUDGMENT_SCHEMA_V1 = pa.schema([
     pa.field("decision_id", pa.string()), pa.field("handoff_id", pa.string()),
     pa.field("claim_id", pa.string()), pa.field("provenance_id", pa.string()),
     _required("supersedes_record_ids", _list(pa.string())),
-    _required("auxiliary_evidence_status", pa.string()), _required("details", DETAILS),
+    _required("auxiliary_evidence_status", pa.string()), _required("details", DETAILS_V2),
 ])
-JUDGMENT_SCHEMA = JUDGMENT_SCHEMA_V1.append(_required("playback_rate", pa.float64()))
+JUDGMENT_SCHEMA_V2 = JUDGMENT_SCHEMA_V1.append(_required("playback_rate", pa.float64()))
+JUDGMENT_SCHEMA = JUDGMENT_SCHEMA_V2.set(
+    JUDGMENT_SCHEMA_V2.get_field_index("details"), _required("details", DETAILS),
+).append(_required("cell_id", pa.string())).append(pa.field("observation_sha256", pa.string()))
+JUDGMENT_SCHEMAS = {1: JUDGMENT_SCHEMA_V1, 2: JUDGMENT_SCHEMA_V2, 3: JUDGMENT_SCHEMA}
 
 
 def canonical_json(value: Any) -> bytes:
@@ -243,6 +268,12 @@ def _judgment_cell(row: dict) -> tuple:
             normalize_playback_rate(row.get("playback_rate")))
 
 
+def judgment_cell_id(row: dict) -> str:
+    """Derived grouping identity; independent of record authority and method layer."""
+    source, start, end, tag, rate = _judgment_cell(row)
+    return "cell-" + sha256_bytes(canonical_json([source, float(start), float(end), tag, float(rate)]))
+
+
 def _method(recorded: dict, supplied: dict | None) -> dict:
     supplied = supplied or {}
     value = {"labeler": deepcopy(recorded["labeler"]), "auditors": deepcopy(recorded["auditors"]),
@@ -290,7 +321,11 @@ def _public_row(row: dict, foundation_id: str) -> dict:
     public = {name: deepcopy(row.get(name)) for name in JUDGMENT_SCHEMA.names}
     public["foundation_id"] = foundation_id
     public["playback_rate"] = normalize_playback_rate(row.get("playback_rate"))
+    public["cell_id"] = judgment_cell_id(row)
     public["details"] = _snake(row["details"])
+    public["details"].setdefault("evidence_review", None)
+    public["details"].setdefault("proposal_changes", None)
+    public["details"].setdefault("human_revision", None)
     _fail(not set(public["details"]) - set(DETAILS.names), "Unknown details fields would be lost in publication")
     public["supersedes_record_ids"] = sorted(row.get("supersedes_record_ids", []))
     for field in JUDGMENT_SCHEMA:
@@ -331,7 +366,7 @@ def _normalize_provenance(value: dict, human_rows: list[dict], observation_hashe
 def _read_all_judgments(path: Path, manifest: dict) -> dict[str, dict]:
     result = {}
     for name, entry in manifest["files"].items():
-        if entry.get("schema") in {"judgment-v1", "judgment-v2"}:
+        if entry.get("schema") in {f"judgment-v{version}" for version in JUDGMENT_SCHEMAS}:
             for row in pq.read_table(path / name).to_pylist():
                 result[row["record_id"]] = row
     return result
@@ -340,6 +375,11 @@ def _read_all_judgments(path: Path, manifest: dict) -> dict[str, dict]:
 def _record_content(row: dict, manifest: dict) -> dict:
     value = deepcopy(row)
     value["playback_rate"] = normalize_playback_rate(value.get("playback_rate"))
+    value.pop("cell_id", None)  # Derived grouping metadata, not a changed observation.
+    value.pop("observation_sha256", None)
+    value["details"].pop("proposal_changes", None)
+    value["details"].pop("human_revision", None)
+    value["details"].setdefault("evidence_review", None)
     value["foundation_id"] = manifest["foundations"][row["foundation_id"]]["frozen_sha256"]
     # Review/provenance can progress without changing the immutable underlying claim.
     value.pop("auxiliary_evidence_status")
@@ -368,6 +408,8 @@ def _removals(previous: Path | None, current_rows: list[dict], manifest: dict, c
     for record_id, row in sorted(old_rows.items()):
         if record_id in new_rows:
             _fail(_record_content(row, old) == _record_content(new_rows[record_id], manifest), f"Immutable record {record_id} changed without a new record ID")
+            if old["version"] >= 3:
+                _fail(row["observation_sha256"] == new_rows[record_id]["observation_sha256"] and all(row["details"][field] == new_rows[record_id]["details"][field] for field in ("proposal_changes", "human_revision")), f"Immutable record {record_id} changed publication metadata without a new record ID")
         elif record_id in successors:
             removed.append({"record_id": record_id, "reason": "superseded", "superseded_by": sorted(successors[record_id])})
         else:
@@ -386,7 +428,9 @@ def _dataset_card(manifest: dict) -> str:
     lines = ["---", f"license: {quote(manifest['license'])}", "configs:", "- config_name: human", "  default: true", "  data_files:", "  - split: full", "    path: data/human.parquet", "- config_name: sources", "  data_files:", "  - split: full", "    path: data/sources.parquet"]
     for method_id in manifest["policy"]["agent_methods"]:
         lines += [f"- config_name: agent-{method_id}", "  data_files:", "  - split: full", f"    path: data/agent/{method_id}.parquet"]
-    lines += ["---", "", f"# {manifest['title']}", "", f"Snapshot `{manifest['release_id']}` uses publication schema `{CONTRACT}` version {VERSION}.", "",
+    # Preserve the historical v1/v2 card generator's version-2 wording and bytes.
+    card_version = max(2, manifest["version"])
+    lines += ["---", "", f"# {manifest['title']}", "", f"Snapshot `{manifest['release_id']}` uses publication schema `{CONTRACT}` version {card_version}.", "",
               f"This snapshot contains {manifest['counts']['human']} human judgments, {sum(manifest['counts']['agents'].values())} agent judgments, and {manifest['counts']['sources']} source identities (annotation and required calibration sources).", "",
               f"Export implementation: [GitHub commit {manifest['exporter']['commit'][:12]}]({manifest['exporter']['repository'].removesuffix('.git')}/tree/{manifest['exporter']['commit']}).", "",
               "Normative Foundation definitions:"]
@@ -412,6 +456,15 @@ def _dataset_card(manifest: dict) -> str:
             lines += ["`policy.human_precedence` is `true`: otherwise-eligible machine rows are excluded whenever any effective human projection row has the same exact cell, including `unresolved` or `unreviewed` human assessments and rows from different handoffs or claims. This check uses the full effective human projection, even when a human row is omitted by another release gate. Different source hashes, interval boundaries, tags, or playback rates remain distinct. `exclusions.agents.human-precedence` counts the omitted machine rows. The canonical human table and separate opt-in method tables remain separate; no merged gold table is published.", ""]
         else:
             lines += ["`policy.human_precedence` is `false`: machine tables may contain exact cells also assessed by humans. Consumers selecting machine examples for training must give effective human cells precedence, including masked human uncertainty, and preserve the separate authority and provenance of each layer.", ""]
+    if manifest["version"] >= 3:
+        lines += [
+            "`cell_id` groups the exact `(source_sha256, start_ms, end_ms, tag_id, playback_rate)` independently of record, authority, or method. All original `record_id` values remain. Select authority and method layers first, then give an agreeing cell one training weight; do not count duplicate records or overlapping machine methods as independent examples. The exporter supplies no universal weight. Resolve contradictory selected machine assessments explicitly. Related source versions, overlapping sections, rates, and exemplar dependencies also need split controls beyond exact-cell grouping.", "",
+            "`observation_sha256` binds a human row to its canonical workflow observation when available; it is null when unrecorded and for machine rows. The row binds its current assessment and notes together. `details.proposal_changes` lists actual differences from the original proposal named by `handoff_id`/`claim_id`; witness and context comparisons use exact note-tuple sets. An empty list means unchanged, not independently checked. Null means no comparison is supplied. For example, `assessment` without `witnesses` or `rationale` records a revised label retaining the ancestor selection and explanation; it does not validate that explanation for the new label.", "",
+            "`details.human_revision` separately binds the immediately preceding human observation ID/hash and lists `changed_fields` for the latest revision, including direct-human revisions. Both comparisons cover tag, assessment, scope, rate, review context, witnesses, context notes, rationale, section ID, boundary uncertainty, transition, and exemplar role. A label change followed by a notes-only revision retains the cumulative `assessment` change against the proposal while the latest human delta lists only `witnesses`. Metadata-only revisions have empty `changed_fields` and new observation identities; null means no predecessor comparison is supplied. Only effective human observations are exported, with predecessor identities and hashes rather than private journal bodies.", "",
+            "`details.evidence_review` records selection origin, source pointers, draft operations, and separate explicit `selection_reviewed`/`rationale_reviewed` declarations. Null means unknown historical review provenance, never an inferred human selection. Operations distinguish automatic full-scope filling, explicit arrangement selection, manual edits, and range filtering. Their list describes the saved draft, not a complete note-by-note action log. A generic human label confirmation does not set either review flag. Even an explicit selection review does not certify minimal or sufficient evidence, provide reasons for every omitted note, or establish prediction accuracy.", "",
+            "In the section annotation delivery pipeline, `context_note_refs` is automatically the supplied review-context notes minus witnesses. It is surrounding material, not a selected negative set. Unselected notes have no implied semantic-negative label or per-note omission reason. Whole-scope witnesses, partial chords, disconnected witnesses, and entering long notes may all be valid. Subset size or coverage alone does not establish evidence quality or salience. Recover the complete source section and review context, including unselected intervening rows and long notes crossing its boundary, for evidence research.", "",
+            "`auxiliary_evidence_status` concerns freshness of referenced human exemplars, not whether this row's explanation still supports its current label. Preserve final human labels when an inherited or empty explanation needs review. Independent machine audit is not human note-level gold and does not certify minimal or sufficient evidence. Keep evidence rationale, human decision rationale, and audit explanations out of salience-prediction inputs because they can disclose the target. Preserve manifest `human_evidence_refs`, including references with no published `record_id`, when constructing evaluation splits; exact source and observation hashes remain dependency identities.", "",
+        ]
     return "\n".join(lines)
 
 
@@ -527,9 +580,9 @@ def build_snapshot(projection: dict, config: dict, output: Path, previous: Path 
                 entry["method_id"] = method_id
             manifest["files"][name] = entry
         table_file("data/sources.parquet", source_rows, SOURCE_SCHEMA, "source-v1", "sources")
-        table_file("data/human.parquet", public["human"], JUDGMENT_SCHEMA, "judgment-v2", "human")
+        table_file("data/human.parquet", public["human"], JUDGMENT_SCHEMA, "judgment-v3", "human")
         for method_id in policy["agent_methods"]:
-            table_file(f"data/agent/{method_id}.parquet", public[method_id], JUDGMENT_SCHEMA, "judgment-v2", "agent-" + method_id, method_id)
+            table_file(f"data/agent/{method_id}.parquet", public[method_id], JUDGMENT_SCHEMA, "judgment-v3", "agent-" + method_id, method_id)
         card = _dataset_card(manifest).encode("utf-8")
         (staging / "README.md").write_bytes(card)
         manifest["files"]["README.md"] = {"sha256": sha256_bytes(card)}
@@ -595,6 +648,7 @@ def _validate_judgment(row: dict, subset: str, sources: dict, manifest: dict) ->
     source = sources[row["source_sha256"]]
     _range(row, "Judgment scope")
     normalize_playback_rate(row["playback_rate"])
+    _fail(row["cell_id"] == judgment_cell_id(row), "Judgment cell_id must match its exact source/scope/tag/rate")
     _fail(row["foundation_id"] in manifest["foundations"], "Judgment has unknown Foundation")
     _fail(row["tag_id"] in manifest["foundations"][row["foundation_id"]]["tag_ids"], "Judgment has unknown Foundation tag")
     _fail(row["presence"] in {"present", "absent", "unresolved", "unreviewed"}, "Unknown presence")
@@ -602,6 +656,33 @@ def _validate_judgment(row: dict, subset: str, sources: dict, manifest: dict) ->
     _fail(row["auxiliary_evidence_status"] in {"current", "changed", "untracked", "not-applicable"}, "Unknown auxiliary evidence status")
     _fail(len(row["supersedes_record_ids"]) == len(set(row["supersedes_record_ids"])) and row["record_id"] not in row["supersedes_record_ids"], "Invalid human revision lineage")
     details = row["details"]
+    if row["observation_sha256"] is not None:
+        _fail(subset == "human", "Only human observations have an observation_sha256")
+        _digest(row["observation_sha256"], "Human observation hash")
+    changes = details["proposal_changes"]
+    if changes is not None:
+        _fail(row["origin"] in {"human-confirmed", "human-modified"}, "Proposal comparison requires a human judgment with an agent ancestor")
+        _fail(not set(changes) - CLAIM_FIELDS and len(changes) == len(set(changes)), "Invalid proposal comparison fields")
+    revision = details["human_revision"]
+    if revision is not None:
+        _fail(subset == "human", "Human revision requires a human observation")
+        _text(revision["previous_observation_id"], "Previous human observation identity")
+        _fail(revision["previous_observation_id"] != row["observation_id"], "Human revision cannot name itself as predecessor")
+        _digest(revision["previous_observation_sha256"], "Previous human observation hash")
+        fields = revision["changed_fields"]
+        _fail(not set(fields) - CLAIM_FIELDS and len(fields) == len(set(fields)), "Invalid human revision fields")
+    review = details["evidence_review"]
+    if review is not None:
+        _fail(subset == "human", "Machine row cannot claim human evidence review metadata")
+        _fail(review["selection_origin"] in {"inherited-agent", "inherited-human", "new-human", "copied-section", "unknown"}, "Unknown evidence selection origin")
+        for key in ("source_handoff_id", "source_observation_id", "source_claim_id"):
+            if review[key] is not None:
+                _text(review[key], key)
+        for operation in review["operations"]:
+            _fail(operation["kind"] in {"auto-scope-fill", "explicit-scope-selection", "manual-note-edit", "range-filter"}, "Unknown evidence selection operation")
+            _fail(operation["target"] in {"witness", "context", "both"}, "Unknown evidence selection target")
+        if review["rationale_reviewed"]:
+            _text(details["evidence"]["rationale"], "Reviewed evidence rationale")
     _range(details["review_context"], "Review context")
     _fail(_contains(details["review_context"], row), "Review context must contain the whole claim scope")
     _evidence(details["evidence"], row, details["review_context"], source, "Claim evidence")
@@ -670,7 +751,7 @@ def validate_snapshot(path: Path) -> dict:
             _fail(entry.is_dir(), "Snapshot contains a non-regular file")
     _fail("manifest.json" in actual_files, "Snapshot has no manifest")
     manifest = json.loads((path / "manifest.json").read_text(encoding="utf-8"))
-    _fail(manifest.get("contract") == CONTRACT and manifest.get("version") in {1, VERSION}, "Unsupported publication schema")
+    _fail(manifest.get("contract") == CONTRACT and manifest.get("version") in JUDGMENT_SCHEMAS, "Unsupported publication schema")
     version = manifest["version"]
     _fail(set(manifest) == {"contract", "version", "release_id", "created_at", "repo_id", "title", "license", "exporter", "exporter_files", "previous_snapshot", "previous_manifest_sha256", "scope", "policy", "files", "counts", "exclusions", "foundations", "methods", "provenance", "removed_records"}, "Manifest has missing or unexpected fields")
     for key in ("release_id", "created_at", "title", "license"):
@@ -712,7 +793,7 @@ def validate_snapshot(path: Path) -> dict:
     tables = {}
     for name in sorted(expected_files - {"README.md", "LICENSE"}):
         is_source = name == "data/sources.parquet"
-        schema = SOURCE_SCHEMA if is_source else JUDGMENT_SCHEMA if version == 2 else JUDGMENT_SCHEMA_V1
+        schema = SOURCE_SCHEMA if is_source else JUDGMENT_SCHEMAS[version]
         info = manifest["files"][name]
         expected_config = "sources" if is_source else "human" if name == "data/human.parquet" else "agent-" + Path(name).stem
         _fail(info.get("schema") == ("source-v1" if is_source else f"judgment-v{version}") and info.get("config") == expected_config, f"Incorrect table declaration: {name}")
@@ -725,9 +806,15 @@ def validate_snapshot(path: Path) -> dict:
             for column in range(parquet.metadata.num_columns):
                 _fail(parquet.metadata.row_group(group).column(column).compression == "ZSTD", "Snapshot tables must use Zstandard compression")
         tables[expected_config] = parquet.read().to_pylist()
-        if not is_source and version == 1:
+        if not is_source and version < 3:
             for row in tables[expected_config]:
-                row["playback_rate"] = 1.0
+                if version == 1:
+                    row["playback_rate"] = 1.0
+                row["cell_id"] = judgment_cell_id(row)
+                row["observation_sha256"] = None
+                row["details"]["evidence_review"] = None
+                row["details"]["proposal_changes"] = None
+                row["details"]["human_revision"] = None
     sources = {}
     for source in tables["sources"]:
         for field in SOURCE_SCHEMA:

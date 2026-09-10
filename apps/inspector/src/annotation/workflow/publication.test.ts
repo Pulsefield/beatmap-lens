@@ -8,6 +8,7 @@ import { sha256Hex } from "../canonical-json";
 import { inspectOsuSourceV1 } from "../source-identity";
 import type { AgentProvenanceV2, HumanEvidenceRefV2 } from "./contracts";
 import {
+  addHumanObservationsV2,
   addHumanObservationV2,
   createReviewDocumentV2,
   createTaskPacketV2,
@@ -97,6 +98,167 @@ async function secondSource(f: Awaited<ReturnType<typeof workflowFixture>>) {
 }
 
 describe("dataset publication projection", () => {
+  it("binds a label-only revision to unchanged notes and compares proposal note sets without order", async () => {
+    const f = await reviewedFixture();
+    const input = { handoffId: f.handoff.handoffId, claimId: f.claim.id, humanId: "expert" };
+    const confirmed = await decideClaimV2(
+      f.reviewed,
+      { ...input, id: "before", disposition: "accepted" },
+      f.sourceBytes,
+    );
+    const before = (await projectReviewForPublicationV1(confirmed)).human[0];
+    if (!before) throw new Error("Missing confirmed publication row.");
+    const modified = await decideClaimV2(
+      confirmed,
+      {
+        ...input,
+        id: "after",
+        disposition: "modified",
+        modifiedClaim: {
+          ...f.claim,
+          assessment: { presence: "absent" },
+          evidence: {
+            ...f.claim.evidence,
+            noteRefs: [...f.claim.evidence.noteRefs].reverse(),
+            contextNoteRefs: [...f.claim.evidence.contextNoteRefs].reverse(),
+          },
+        },
+      },
+      f.sourceBytes,
+    );
+    const after = (await projectReviewForPublicationV1(modified)).human[0];
+    if (!after) throw new Error("Missing revised publication row.");
+    expect(after.presence).toBe("absent");
+    expect(after.details.proposal_changes).toEqual(["assessment"]);
+    expect(after.details.evidence.rationale).toBe(before.details.evidence.rationale);
+    expect(after.details.evidence_review).toBeNull();
+    expect(after.record_id).not.toBe(before.record_id);
+    expect(after.observation_sha256).not.toBe(before.observation_sha256);
+    expect(after.observation_sha256).toBe(
+      await hashWorkflowValueV2(
+        modified.observations.find(({ id }) => id === after.observation_id),
+      ),
+    );
+    expect(after.supersedes_record_ids).toContain(before.record_id);
+    expect(after.details.human_revision).toEqual({
+      previous_observation_id: before.observation_id,
+      previous_observation_sha256: before.observation_sha256,
+      changed_fields: ["assessment"],
+    });
+    const notesOnly = await decideClaimV2(
+      modified,
+      {
+        ...input,
+        id: "notes-only",
+        disposition: "modified",
+        modifiedClaim: {
+          ...f.claim,
+          assessment: { presence: "absent" },
+          evidence: { ...f.claim.evidence, noteRefs: f.claim.evidence.noteRefs.slice(1) },
+        },
+      },
+      f.sourceBytes,
+    );
+    const latest = (await projectReviewForPublicationV1(notesOnly)).human[0];
+    expect(latest?.details.proposal_changes).toEqual(["assessment", "witnesses"]);
+    expect(latest?.details.human_revision).toEqual({
+      previous_observation_id: after.observation_id,
+      previous_observation_sha256: after.observation_sha256,
+      changed_fields: ["witnesses"],
+    });
+  });
+
+  it("distinguishes successive direct label, note, and metadata-only human revisions", async () => {
+    const f = await workflowFixture();
+    const input = { humanId: "expert", claim: f.claim };
+    const initial = await addHumanObservationV2(
+      f.registered,
+      { ...input, id: "initial" },
+      f.sourceBytes,
+    );
+    const labelClaim = { ...f.claim, assessment: { presence: "absent" as const } };
+    const label = await addHumanObservationV2(
+      initial,
+      {
+        ...input,
+        id: "label",
+        claim: labelClaim,
+        supersedesObservationId: `initial:${f.claim.id}`,
+      },
+      f.sourceBytes,
+    );
+    expect(
+      (await projectReviewForPublicationV1(label)).human[0]?.details.human_revision?.changed_fields,
+    ).toEqual(["assessment"]);
+    const noteClaim = {
+      ...labelClaim,
+      evidence: { ...f.claim.evidence, noteRefs: f.claim.evidence.noteRefs.slice(1) },
+    };
+    const notes = await addHumanObservationV2(
+      label,
+      {
+        ...input,
+        id: "notes",
+        claim: noteClaim,
+        supersedesObservationId: `label:${f.claim.id}`,
+      },
+      f.sourceBytes,
+    );
+    const projected = await projectReviewForPublicationV1(notes);
+    expect(projected.human).toHaveLength(1);
+    const previous = label.observations.find(({ id }) => id === `label:${f.claim.id}`);
+    expect(projected.human[0]?.details.human_revision).toEqual({
+      previous_observation_id: `label:${f.claim.id}`,
+      previous_observation_sha256: await hashWorkflowValueV2(previous),
+      changed_fields: ["witnesses"],
+    });
+    expect(projected.human[0]?.details.proposal_changes).toBeNull();
+    const metadata = await addHumanObservationsV2(
+      notes,
+      {
+        humanId: input.humanId,
+        id: "metadata",
+        claims: [noteClaim],
+        supersedesObservationId: `notes:${f.claim.id}`,
+        evidenceReviews: {
+          [f.claim.id]: {
+            selectionOrigin: "inherited-human",
+            sourceObservationId: `notes:${f.claim.id}`,
+            sourceClaimId: f.claim.id,
+            operations: [],
+            selectionReviewed: true,
+            rationaleReviewed: false,
+          },
+        },
+      },
+      f.sourceBytes,
+    );
+    const revised = (await projectReviewForPublicationV1(metadata)).human[0];
+    expect(revised?.details.human_revision?.changed_fields).toEqual([]);
+    expect(revised?.details.evidence_review?.selectionReviewed).toBe(true);
+    expect(revised?.details.human_revision?.previous_observation_id).toBe(`notes:${f.claim.id}`);
+    expect(revised?.observation_sha256).not.toBe(projected.human[0]?.observation_sha256);
+  });
+
+  it("reports proposal tag changes through the common claim comparison", async () => {
+    const f = await reviewedFixture();
+    const modified = await decideClaimV2(
+      f.reviewed,
+      {
+        handoffId: f.handoff.handoffId,
+        claimId: f.claim.id,
+        humanId: "expert",
+        id: "tag-change",
+        disposition: "modified",
+        modifiedClaim: { ...f.claim, tagId: "streams" },
+      },
+      f.sourceBytes,
+    );
+    const row = (await projectReviewForPublicationV1(modified)).human[0];
+    expect(row?.details.proposal_changes).toEqual(["tag_id"]);
+    expect(row?.details.human_revision).toBeNull();
+  });
+
   it("builds typed HF tables from the actual domain collector projection", async () => {
     const f = await reviewedFixture();
     const document = await decideClaimV2(
@@ -108,6 +270,17 @@ describe("dataset publication projection", () => {
         id: "publication-accept",
         disposition: "accepted",
         rationale: "原始人工确认。",
+        evidenceReview: {
+          selectionOrigin: "inherited-agent",
+          sourceHandoffId: f.handoff.handoffId,
+          sourceClaimId: f.claim.id,
+          operations: [
+            { kind: "auto-scope-fill", target: "witness" },
+            { kind: "explicit-scope-selection", target: "witness" },
+          ],
+          selectionReviewed: true,
+          rationaleReviewed: false,
+        },
       },
       f.sourceBytes,
     );
@@ -152,6 +325,14 @@ manifest=build_snapshot(data,config,root/'snapshot')
 report=validate_snapshot(root/'snapshot')
 human=pq.read_table(root/'snapshot/data/human.parquet').to_pylist()
 assert human[0]['details']['human_rationale']=='原始人工确认。'
+assert human[0]['details']['evidence_review']['selection_origin']=='inherited-agent'
+assert human[0]['details']['evidence_review']['selection_reviewed'] is True
+assert human[0]['details']['evidence_review']['rationale_reviewed'] is False
+assert [op['kind'] for op in human[0]['details']['evidence_review']['operations']]==['auto-scope-fill','explicit-scope-selection']
+assert human[0]['details']['proposal_changes']==[]
+assert human[0]['observation_sha256']==data['human'][0]['observation_sha256']
+assert human[0]['cell_id'].startswith('cell-')
+assert manifest['version']==3
 print(json.dumps(manifest['counts']))
 `;
     const counts = JSON.parse(
@@ -228,7 +409,12 @@ print(json.dumps(manifest['counts']))
       salience: null,
       end_ms: 1700,
       origin: "human-modified",
-      details: { human_rationale: "人类更正原文。", evidence: f.claim.evidence },
+      details: {
+        human_rationale: "人类更正原文。",
+        evidence: f.claim.evidence,
+        evidence_review: null,
+        proposal_changes: ["assessment", "scope"],
+      },
     });
     expect(modified?.supersedes_record_ids).toEqual([
       humanPublicationRecordIdV1(document.source.sha256, "accepted:observation"),

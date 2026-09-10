@@ -14,7 +14,7 @@ from huggingface_hub import CommitOperationAdd, CommitOperationDelete, HfApi, Re
 from huggingface_hub.errors import EntryNotFoundError, RepositoryNotFoundError
 import pyarrow.parquet as pq
 
-from snapshot import validate_snapshot
+from snapshot import JUDGMENT_SCHEMAS, validate_snapshot
 
 
 def digest(data):
@@ -109,7 +109,7 @@ def _remote_manifest(api, repo_id, commit):
         return None, None
     raw = Path(path).read_bytes()
     value = json.loads(raw)
-    if value.get('contract') != 'beatmap-lens-annotations' or value.get('version') not in (1, 2):
+    if value.get('contract') != 'beatmap-lens-annotations' or value.get('version') not in JUDGMENT_SCHEMAS:
         raise ValueError('The destination contains an unrelated dataset manifest.')
     if value.get('repo_id') != repo_id:
         raise ValueError('The destination manifest identifies another repository.')
@@ -182,7 +182,7 @@ def _frozen_upload(snapshot):
     validate_snapshot(snapshot)
     manifest_bytes = (snapshot/'manifest.json').read_bytes()
     manifest = json.loads(manifest_bytes)
-    if (manifest.get('contract') != 'beatmap-lens-annotations' or manifest.get('version') not in (1, 2)
+    if (manifest.get('contract') != 'beatmap-lens-annotations' or manifest.get('version') not in JUDGMENT_SCHEMAS
             or not isinstance(manifest.get('files'), dict)
             or not all(_owned_path(name) for name in manifest['files'])):
         raise ValueError('Snapshot manifest changed or contains unsafe publication paths.')

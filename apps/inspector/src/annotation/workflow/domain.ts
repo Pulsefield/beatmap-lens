@@ -9,6 +9,7 @@ import {
   type AuditClaimResultV2,
   type AuditPacketV2,
   type ClaimV2,
+  type EvidenceReviewV2,
   FOUNDATION_CONTRACT_V2,
   type FoundationV2,
   HANDOFF_CONTRACT_V2,
@@ -36,6 +37,7 @@ export interface DecideClaimInputV2 extends OperationOptionsV2 {
   readonly humanId: string;
   readonly rationale?: string;
   readonly modifiedClaim?: ClaimV2;
+  readonly evidenceReview?: EvidenceReviewV2;
 }
 
 export interface AddObservationsInputV2 extends OperationOptionsV2 {
@@ -44,6 +46,7 @@ export interface AddObservationsInputV2 extends OperationOptionsV2 {
   readonly supersedesObservationIds?: Readonly<Record<string, string>>;
   readonly claims: readonly ClaimV2[];
   readonly humanId: string;
+  readonly evidenceReviews?: Readonly<Record<string, EvidenceReviewV2>>;
 }
 
 export interface DecideSectionInputV2 extends OperationOptionsV2 {
@@ -52,6 +55,7 @@ export interface DecideSectionInputV2 extends OperationOptionsV2 {
   /** Direct assessments for dimensions missing from a legacy section proposal. */
   readonly observations?: readonly ClaimV2[];
   readonly supersedesObservationIds?: Readonly<Record<string, string>>;
+  readonly evidenceReviews?: Readonly<Record<string, EvidenceReviewV2>>;
 }
 
 export async function hashWorkflowValueV2(value: unknown): Promise<string> {
@@ -669,6 +673,55 @@ export async function decideClaimV2(
   );
 }
 
+function assertEvidenceReviewV2(
+  review: EvidenceReviewV2,
+  claim: ClaimV2,
+  document: ReviewDocumentV2,
+): void {
+  record(
+    review,
+    ["selectionOrigin", "operations", "selectionReviewed", "rationaleReviewed"],
+    ["sourceHandoffId", "sourceObservationId", "sourceClaimId"],
+    "evidenceReview",
+  );
+  oneOf(
+    review.selectionOrigin,
+    ["inherited-agent", "inherited-human", "new-human", "copied-section", "unknown"],
+    "evidenceReview.selectionOrigin",
+  );
+  oneOf(review.selectionReviewed, [true, false], "evidenceReview.selectionReviewed");
+  oneOf(review.rationaleReviewed, [true, false], "evidenceReview.rationaleReviewed");
+  for (const key of ["sourceHandoffId", "sourceObservationId", "sourceClaimId"] as const)
+    if (review[key] !== undefined) nonempty(review[key], `evidenceReview.${key}`);
+  for (const operation of array(review.operations, "evidenceReview.operations")) {
+    const item = record(operation, ["kind", "target"], [], "evidenceReview.operation");
+    oneOf(
+      item.kind,
+      ["auto-scope-fill", "explicit-scope-selection", "manual-note-edit", "range-filter"],
+      "evidenceReview.operation.kind",
+    );
+    oneOf(item.target, ["witness", "context", "both"], "evidenceReview.operation.target");
+  }
+  if (
+    review.selectionOrigin === "inherited-agent" &&
+    !document.handoffs.some(
+      (entry) =>
+        entry.handoff.handoffId === review.sourceHandoffId &&
+        entry.handoff.proposals.some((source) => source.id === review.sourceClaimId),
+    )
+  )
+    throw new Error("Inherited agent evidence must identify its source handoff and claim.");
+  if (
+    review.selectionOrigin === "inherited-human" &&
+    !document.observations.some(
+      (entry) => entry.id === review.sourceObservationId && entry.claim.id === review.sourceClaimId,
+    )
+  )
+    throw new Error("Inherited human evidence must identify its preceding observation and claim.");
+  if (review.rationaleReviewed && !claim.evidence.rationale.trim())
+    throw new Error("A reviewed rationale requires a current explanation.");
+}
+
 function prepareHumanDecisionV2(
   document: ReviewDocumentV2,
   input: DecideClaimInputV2,
@@ -693,6 +746,7 @@ function prepareHumanDecisionV2(
   if (input.disposition !== "modified" && input.modifiedClaim)
     throw new Error("Only a modified human decision may supply a revised claim.");
   const claim = input.modifiedClaim ?? proposal;
+  if (input.evidenceReview) assertEvidenceReviewV2(input.evidenceReview, claim, document);
   if (confirming)
     assertClaimV2(claim, sourceNotes, document.foundation, input.disposition !== "modified");
   if (confirming && ["unresolved", "unreviewed"].includes(claim.assessment.presence))
@@ -722,6 +776,7 @@ function prepareHumanDecisionV2(
     foundationSha256,
     humanId: input.humanId,
     confirmedAt: decidedAt,
+    ...(input.evidenceReview ? { evidenceReview: input.evidenceReview } : {}),
     origin: {
       kind: "agent-proposal",
       handoffId: input.handoffId,
@@ -785,6 +840,7 @@ export async function decideSectionV2(
         {
           claims: directClaims,
           humanId: input.humanId,
+          ...(input.evidenceReviews ? { evidenceReviews: input.evidenceReviews } : {}),
           id: `${groupId}:direct`,
           now: () => now,
           ...(input.supersedesObservationIds
@@ -882,6 +938,11 @@ function prepareHumanObservationsV2(
     assertSamePlaybackRate(prior.claim, claim);
   }
   for (const claim of input.claims) assertClaimV2(claim, refs, document.foundation, false);
+  for (const [claimId, review] of Object.entries(input.evidenceReviews ?? {})) {
+    const claim = input.claims.find((entry) => entry.id === claimId);
+    if (!claim) throw new Error("Evidence review must identify a submitted direct claim.");
+    assertEvidenceReviewV2(review, claim, document);
+  }
   const confirmedAt = timestamp(input);
   const groupId = input.id ?? crypto.randomUUID();
   const observations = input.claims.map((claim): HumanObservationV2 => {
@@ -892,6 +953,9 @@ function prepareHumanObservationsV2(
       foundationSha256,
       humanId: input.humanId,
       confirmedAt,
+      ...(input.evidenceReviews?.[claim.id]
+        ? { evidenceReview: input.evidenceReviews[claim.id] }
+        : {}),
       origin: { kind: "direct-human" },
       ...(supersedesObservationId ? { supersedesObservationId } : {}),
     };
@@ -1475,9 +1539,14 @@ export async function validateReviewDocumentV2(
     record(
       observation,
       ["id", "claim", "foundationSha256", "humanId", "confirmedAt", "origin"],
-      ["supersedesObservationId"],
+      ["supersedesObservationId", "evidenceReview"],
       "observation",
     );
+    if (observation.evidenceReview)
+      assertEvidenceReviewV2(observation.evidenceReview, observation.claim, {
+        ...document,
+        observations: [...seenObservations.values()],
+      });
     if (observation.supersedesObservationId !== undefined) {
       nonempty(observation.supersedesObservationId, "observation.supersedesObservationId");
       const previous = seenObservations.get(observation.supersedesObservationId);

@@ -14,7 +14,7 @@ import pyarrow as pa
 import publish
 
 from snapshot import (
-    JUDGMENT_SCHEMA, JUDGMENT_SCHEMA_V1, _dataset_card, build_snapshot, canonical_json, sha256_bytes, validate_snapshot,
+    JUDGMENT_SCHEMA, JUDGMENT_SCHEMAS, _dataset_card, build_snapshot, canonical_json, sha256_bytes, validate_snapshot,
 )
 
 
@@ -80,7 +80,7 @@ def add_agent(projection, config, *, status="agent-reviewed", auxiliary="current
               "human_evidence_refs": [{"sourceSha256": SOURCE, "observationId": "one", "observationSha256": "6" * 64}],
               "tracking": "complete"}
     row = deepcopy(projection["human"][0])
-    row.update(record_id="agent:one", origin="agent-reviewed", observation_id=None,
+    row.update(record_id="agent:one", origin="agent-reviewed", observation_id=None, observation_sha256=None,
                handoff_id="handoff", provenance_id=PROVENANCE, method_id=METHOD,
                auxiliary_evidence_status=auxiliary, review_status=status,
                audit_status="supported", audit_supported=True)
@@ -111,6 +111,20 @@ class SnapshotTests(unittest.TestCase):
 
     def rewrite_manifest(self, path, manifest):
         (path / "manifest.json").write_bytes(canonical_json(manifest))
+
+    def downgrade_snapshot(self, path, manifest, version):
+        """Materialize the original Arrow contract; no new metadata survives."""
+        manifest["version"] = version
+        for name, info in manifest["files"].items():
+            if not info.get("schema", "").startswith("judgment-v"):
+                continue
+            rows = pq.read_table(path / name).to_pylist()
+            pq.write_table(pa.Table.from_pylist(rows, schema=JUDGMENT_SCHEMAS[version]), path / name, compression="zstd")
+            info.update(schema=f"judgment-v{version}", sha256=sha256_bytes((path / name).read_bytes()))
+        card = _dataset_card(manifest).encode("utf-8")
+        (path / "README.md").write_bytes(card)
+        manifest["files"]["README.md"]["sha256"] = sha256_bytes(card)
+        self.rewrite_manifest(path, manifest)
 
     def add_second_human_source(self):
         source_sha = "9" * 64
@@ -158,6 +172,79 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual(manifest["methods"][METHOD]["provenance_status"], "partial")
         self.assertEqual(manifest["provenance"][PROVENANCE]["human_evidence_refs"][0]["record_id"], "human:one")
         self.assertIn("default: true", (path / "README.md").read_text())
+
+    def test_v3_preserves_explicit_evidence_review_without_inventing_legacy_intent(self):
+        review = {"selectionOrigin": "inherited-agent", "sourceHandoffId": "original-handoff",
+                  "sourceClaimId": "original-claim", "operations": [
+                      {"kind": "auto-scope-fill", "target": "witness"},
+                      {"kind": "explicit-scope-selection", "target": "witness"}],
+                  "selectionReviewed": True, "rationaleReviewed": False}
+        annotated = deepcopy(self.projection["human"][0])
+        annotated.update(record_id="human:reviewed", observation_id="reviewed", origin="human-modified",
+                         handoff_id="original-handoff", decision_id="new-decision")
+        annotated["details"]["evidence_review"] = review
+        annotated["details"]["proposal_changes"] = ["assessment"]
+        self.projection["human"].append(annotated)
+        path, manifest = self.build()
+        rows = {row["record_id"]: row for row in pq.read_table(path / "data/human.parquet").to_pylist()}
+        self.assertIsNone(rows["human:one"]["details"]["evidence_review"])
+        self.assertEqual(rows["human:reviewed"]["details"]["evidence_review"], {
+            "selection_origin": "inherited-agent", "source_handoff_id": "original-handoff",
+            "source_claim_id": "original-claim", "source_observation_id": None,
+            "operations": review["operations"], "selection_reviewed": True, "rationale_reviewed": False})
+        self.assertEqual(rows["human:reviewed"]["details"]["proposal_changes"], ["assessment"])
+        self.assertEqual(rows["human:one"]["cell_id"], rows["human:reviewed"]["cell_id"])
+        self.assertEqual(rows["human:one"]["observation_sha256"], "6" * 64)
+        self.assertEqual(manifest["counts"]["human"], 2)
+        card = (path / "README.md").read_text()
+        for phrase in ("not a selected negative set", "not independently checked", "does not certify minimal", "disclose the target"):
+            self.assertIn(phrase, card)
+
+    def test_cell_identity_groups_records_across_layers_but_separates_scope_tag_and_rate(self):
+        add_agent(self.projection, self.config)
+        for name, changes in (("scope", {"end_ms": 400}), ("rate", {"playback_rate": 0.75})):
+            row = deepcopy(self.projection["human"][0])
+            row.update(record_id=f"human:{name}", observation_id=name, **changes)
+            self.projection["human"].append(row)
+        path, _ = self.build()
+        human = {row["record_id"]: row for row in pq.read_table(path / "data/human.parquet").to_pylist()}
+        machine = pq.read_table(path / f"data/agent/{METHOD}.parquet").to_pylist()[0]
+        self.assertEqual(human["human:one"]["cell_id"], machine["cell_id"])
+        self.assertEqual(len({row["cell_id"] for row in human.values()}), 3)
+        self.assertIsNone(machine["observation_sha256"])
+
+    def test_same_record_cannot_acquire_review_declarations_or_changed_identity(self):
+        for change in ("review", "hash", "comparison", "human_revision"):
+            with self.subTest(change=change):
+                self.projection, self.config = fixture()
+                if change == "comparison":
+                    self.projection["human"][0].update(origin="human-modified", handoff_id="handoff", decision_id="decision")
+                previous, _ = self.build(f"old-{change}")
+                self.config["previous_snapshot"] = {"repo_id": self.config["repo_id"], "commit": "e" * 40}
+                row = self.projection["human"][0]
+                if change == "review":
+                    row["details"]["evidence_review"] = {
+                        "selectionOrigin": "new-human", "operations": [],
+                        "selectionReviewed": True, "rationaleReviewed": True}
+                elif change == "hash":
+                    row["observation_sha256"] = "8" * 64
+                elif change == "comparison":
+                    row["details"]["proposal_changes"] = []
+                else:
+                    row["details"]["human_revision"] = {"previous_observation_id": "older",
+                        "previous_observation_sha256": "9" * 64, "changed_fields": []}
+                with self.assertRaisesRegex(ValueError, "Immutable record"):
+                    self.build(f"changed-{change}", previous=previous)
+
+    def test_human_revision_preserves_predecessor_binding_and_latest_claim_delta(self):
+        revision = {"previous_observation_id": "previous", "previous_observation_sha256": "9" * 64,
+                    "changed_fields": ["witnesses"]}
+        self.projection["human"][0]["details"]["human_revision"] = revision
+        path, _ = self.build()
+        row = pq.read_table(path / "data/human.parquet").to_pylist()[0]
+        self.assertEqual(row["details"]["human_revision"], revision)
+        self.assertIsNone(row["details"]["proposal_changes"])
+        self.assertIn("immediately preceding human observation", (path / "README.md").read_text())
 
     def test_human_precedence_blocks_cross_handoff_conflicts_and_masked_cells(self):
         for presence in ("absent", "unresolved", "unreviewed"):
@@ -262,23 +349,13 @@ class SnapshotTests(unittest.TestCase):
         legacy_card_hash = "4a6343634097fc91258e92eb9cd1ac060fa024bafd1c2595f89aa89110b3c084"
         self.assertNotIn("human_precedence", manifest["policy"])
         self.assertEqual(manifest["counts"]["agents"], {METHOD: 1})
-        self.assertEqual(sha256_bytes((path / "README.md").read_bytes()), legacy_card_hash)
         manifest["policy"].pop("excluded_sources")
         for version in (2, 1):
             with self.subTest(version=version):
-                manifest["version"] = version
-                if version == 1:
-                    for name, info in manifest["files"].items():
-                        if info.get("schema") != "judgment-v2":
-                            continue
-                        rows = pq.read_table(path / name).to_pylist()
-                        for row in rows:
-                            row.pop("playback_rate")
-                        pq.write_table(pa.Table.from_pylist(rows, schema=JUDGMENT_SCHEMA_V1), path / name, compression="zstd")
-                        info.update(schema="judgment-v1", sha256=sha256_bytes((path / name).read_bytes()))
-                self.rewrite_manifest(path, manifest)
+                self.downgrade_snapshot(path, manifest, version)
                 self.assertEqual(validate_snapshot(path)["version"], version)
                 self.assertEqual(sha256_bytes(_dataset_card(manifest).encode("utf-8")), legacy_card_hash)
+                self.assertNotIn("observation_sha256", pq.read_table(path / "data/human.parquet").schema.names)
 
     def test_explicit_false_preserves_machine_overlaps_and_policy_requires_boolean(self):
         add_agent(self.projection, self.config)
@@ -308,7 +385,7 @@ class SnapshotTests(unittest.TestCase):
         self.projection['human'].append(slow)
         path, manifest = self.build()
         rows = pq.read_table(path / 'data/human.parquet').to_pylist()
-        self.assertEqual(manifest['version'], 2)
+        self.assertEqual(manifest['version'], 3)
         self.assertEqual({r['playback_rate'] for r in rows}, {1, 0.5})
         self.assertEqual({r['start_ms'] for r in rows}, {100})
         self.assertEqual(validate_snapshot(path)['human_overlap_pairs'], 0)
@@ -316,21 +393,21 @@ class SnapshotTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'contradictory human gold'):
             self.build('same-rate-conflict')
 
-    def test_historical_v1_snapshot_migrates_without_changing_immutable_record(self):
-        path, manifest = self.build('old')
-        name = 'data/human.parquet'
-        rows = pq.read_table(path / name).to_pylist()
-        for row in rows:
-            row.pop('playback_rate')
-        pq.write_table(pa.Table.from_pylist(rows, schema=JUDGMENT_SCHEMA_V1), path / name, compression='zstd')
-        manifest['version'] = 1
-        manifest['files'][name].update(schema='judgment-v1', sha256=sha256_bytes((path / name).read_bytes()))
-        self.rewrite_manifest(path, manifest)
-        self.assertEqual(validate_snapshot(path)['version'], 1)
-        self.config['previous_snapshot'] = {'repo_id': self.config['repo_id'], 'commit': 'e' * 40}
-        fresh, revised = self.build('new', previous=path)
-        self.assertEqual(revised['removed_records'], [])
-        self.assertEqual(pq.read_table(fresh / name).to_pylist()[0]['playback_rate'], 1)
+    def test_historical_v1_v2_snapshots_migrate_without_changing_immutable_record(self):
+        for version in (1, 2):
+            with self.subTest(version=version):
+                self.projection, self.config = fixture()
+                path, manifest = self.build(f'old-{version}')
+                self.downgrade_snapshot(path, manifest, version)
+                self.assertEqual(validate_snapshot(path)['version'], version)
+                self.config['previous_snapshot'] = {'repo_id': self.config['repo_id'], 'commit': 'e' * 40}
+                fresh, revised = self.build(f'new-{version}', previous=path)
+                self.assertEqual(revised['removed_records'], [])
+                row = pq.read_table(fresh / 'data/human.parquet').to_pylist()[0]
+                self.assertEqual(row['playback_rate'], 1)
+                self.assertIsNone(row['details']['evidence_review'])
+                self.assertIsNone(row['details']['human_revision'])
+                self.assertEqual(row['observation_sha256'], '6' * 64)
 
     def test_rate_snapshot_can_be_staged_published_and_retried(self):
         self.projection['human'][0]['playback_rate'] = 1.5

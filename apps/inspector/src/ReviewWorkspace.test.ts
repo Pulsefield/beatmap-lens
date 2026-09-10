@@ -49,6 +49,200 @@ afterEach(() => {
 });
 
 describe("ReviewWorkspace mounted workflow", () => {
+  it("saves evidence review for one legacy human judgment without requiring or saving missing dimensions", async () => {
+    const f = await workspaceFixture(true, false, undefined, 5);
+    if (!f.task || !f.handoff) throw new Error("Missing task.");
+    const handoff = await sealHandoffV2(f.task, {
+      handoffId: "single-legacy-claim",
+      createdAt: NOW,
+      agent: f.handoff.agent,
+      proposals: [f.claim],
+      questions: [],
+      audit: [],
+    });
+    const initial = await f.read();
+    if (!initial) throw new Error("Missing review.");
+    const imported = await f.directory.importHandoff(f.sourceBytes, initial.version, handoff);
+    const accepted = await f.directory.decide(f.sourceBytes, imported.stored.version, {
+      handoffId: handoff.handoffId,
+      claimId: f.claim.id,
+      disposition: "accepted",
+      humanId: "human-ui",
+    });
+    const { container } = await openWorkspace(f);
+    await setValue(control(container, "Human reviewer"), "human-ui", "input");
+    await openHumanObservation(container, 0);
+    expect(sectionAssessments(container)).toEqual([
+      "Prominent",
+      "Unreviewed",
+      "Unreviewed",
+      "Unreviewed",
+      "Unreviewed",
+    ]);
+    expect(button(container, "Submit section review").disabled).toBe(true);
+    (control(container, "I reviewed selected and unselected notes") as HTMLInputElement).click();
+    (control(container, "I reviewed the explanation") as HTMLInputElement).click();
+    await nextTick();
+    await click(container, "Save evidence review for this judgment");
+    const reviewed = await f.read();
+    expect(reviewed?.document.observations).toHaveLength(2);
+    expect(reviewed?.document.observations[0]).toEqual(accepted.document.observations[0]);
+    expect(reviewed?.document.observations.at(-1)).toMatchObject({
+      claim: f.claim,
+      evidenceReview: { selectionReviewed: true, rationaleReviewed: true },
+    });
+    expect(sectionAssessments(container).slice(1)).toEqual([
+      "Unreviewed",
+      "Unreviewed",
+      "Unreviewed",
+      "Unreviewed",
+    ]);
+    await setSlider(container, "synthetic-b", "1");
+    (control(container, "I reviewed selected and unselected notes") as HTMLInputElement).click();
+    await chooseAssessment(container, "synthetic-a");
+    await setValue(
+      control(container, "Evidence / judgment rationale"),
+      "A revised explanation for the existing label.",
+      "input",
+    );
+    await click(container, "Save evidence review for this judgment");
+    const revised = await f.read();
+    expect(revised?.document.observations).toHaveLength(3);
+    expect(
+      revised?.document.observations.every((entry) => entry.claim.tagId === "synthetic-a"),
+    ).toBe(true);
+    expect(sectionAssessments(container)[1]).toBe("Supporting");
+    await chooseAssessment(container, "synthetic-b");
+    expect(
+      (control(container, "I reviewed selected and unselected notes") as HTMLInputElement).checked,
+    ).toBe(true);
+    await chooseAssessment(container, "synthetic-a");
+    const rangeInputs = container.querySelectorAll<HTMLInputElement>(
+      '.claim-fields input[type="number"]',
+    );
+    await setValue(rangeInputs[0], String(f.claim.scope.startMs + 10));
+    expect(button(container, "Save evidence review for this judgment").disabled).toBe(true);
+    await setValue(rangeInputs[0], String(f.claim.scope.startMs));
+    expect(button(container, "Save evidence review for this judgment").disabled).toBe(false);
+    await setValue(rangeInputs[1], String(f.claim.scope.endMs - 10));
+    expect(button(container, "Save evidence review for this judgment").disabled).toBe(true);
+    await setValue(rangeInputs[1], String(f.claim.scope.endMs));
+    await setSlider(container, "synthetic-a", "0");
+    expect(button(container, "Save evidence review for this judgment").disabled).toBe(true);
+  });
+
+  it("records selection actions separately and saves dedicated evidence review without changing labels", async () => {
+    const f = await workspaceFixture(false, false, undefined, 5);
+    const { container } = await openWorkspace(f);
+    await setValue(control(container, "Human reviewer"), "human-ui", "input");
+    await setValue(control(container, "Source time"), "1000", "input");
+    await click(container, "New section at playhead");
+    for (const tag of ["a", "b", "c", "d", "e"])
+      await setSlider(container, `synthetic-${tag}`, "1");
+    await chooseAssessment(container, "synthetic-a");
+    await click(container, "Use arrangement in claim scope");
+    await setValue(control(container, "Click notes to toggle"), "contextNoteRefs");
+    await toggleWitness(container, 1);
+    await setValue(
+      control(container, "Evidence / judgment rationale"),
+      "Current explanation.",
+      "input",
+    );
+    await click(container, "Save section judgments");
+    const saved = await f.read();
+    const a = saved?.document.observations.find((entry) => entry.claim.tagId === "synthetic-a");
+    expect(a?.evidenceReview).toEqual({
+      selectionOrigin: "new-human",
+      selectionReviewed: false,
+      rationaleReviewed: false,
+      operations: [
+        { kind: "auto-scope-fill", target: "witness" },
+        { kind: "explicit-scope-selection", target: "witness" },
+        { kind: "manual-note-edit", target: "context" },
+      ],
+    });
+    if (!a) throw new Error("Missing saved observation.");
+    await openHumanObservation(container, 0);
+    expect(container.textContent).toContain("Selection source: Previous human observation");
+    const selection = control(
+      container,
+      "I reviewed selected and unselected notes",
+    ) as HTMLInputElement;
+    const rationale = control(container, "I reviewed the explanation") as HTMLInputElement;
+    expect(selection.checked).toBe(false);
+    selection.click();
+    rationale.click();
+    await nextTick();
+    await click(container, "Save revised section");
+    const reviewed = await f.read();
+    expect(reviewed?.document.observations).toHaveLength(6);
+    expect(reviewed?.document.observations.at(-1)).toMatchObject({
+      claim: a.claim,
+      supersedesObservationId: a.id,
+      evidenceReview: {
+        selectionOrigin: "inherited-human",
+        sourceObservationId: a.id,
+        selectionReviewed: true,
+        rationaleReviewed: true,
+        operations: [],
+      },
+    });
+    expect(reviewed?.document.observations.slice(0, 5)).toEqual(saved?.document.observations);
+    await openHumanObservation(container, 5);
+    expect(
+      (control(container, "I reviewed selected and unselected notes") as HTMLInputElement).checked,
+    ).toBe(false);
+    await click(container, "Save revised section");
+    expect((await f.read())?.document).toEqual(reviewed?.document);
+  });
+
+  it("resets dedicated review and the old explanation on note and linked range edits", async () => {
+    const f = await workspaceFixture(false, false, undefined, 5);
+    const { container } = await openWorkspace(f);
+    await setValue(control(container, "Source time"), "1000", "input");
+    await click(container, "New section at playhead");
+    await setSlider(container, "synthetic-a", "1");
+    await setValue(
+      control(container, "Evidence / judgment rationale"),
+      "Before witness edit.",
+      "input",
+    );
+    (control(container, "I reviewed selected and unselected notes") as HTMLInputElement).click();
+    (control(container, "I reviewed the explanation") as HTMLInputElement).click();
+    await nextTick();
+    const removeWitness = container.querySelector<HTMLButtonElement>(
+      '.claim-fields button[aria-label^="Remove witness"]',
+    );
+    removeWitness?.click();
+    await nextTick();
+    expect(control(container, "Evidence / judgment rationale").value).toBe("");
+    expect(
+      (control(container, "I reviewed selected and unselected notes") as HTMLInputElement).checked,
+    ).toBe(false);
+    expect((control(container, "I reviewed the explanation") as HTMLInputElement).checked).toBe(
+      false,
+    );
+    expect(container.textContent).toContain("Edited witnesses");
+    await setValue(
+      control(container, "Evidence / judgment rationale"),
+      "Before range edit.",
+      "input",
+    );
+    await setSlider(container, "synthetic-b", "1");
+    await setValue(
+      control(container, "Evidence / judgment rationale"),
+      "Sibling before range edit.",
+      "input",
+    );
+    const ranges = container.querySelectorAll<HTMLInputElement>(
+      '.claim-fields input[type="number"]',
+    );
+    await setValue(ranges[0], "1100");
+    expect(control(container, "Evidence / judgment rationale").value).toBe("");
+    await chooseAssessment(container, "synthetic-a");
+    expect(control(container, "Evidence / judgment rationale").value).toBe("");
+  });
+
   it.each([undefined, 0.5, 1.5] as const)(
     "shows calibration rate %s and played duration while keeping source coordinates",
     async (rate) => {
@@ -265,7 +459,7 @@ describe("ReviewWorkspace mounted workflow", () => {
     app.config.errorHandler = (error) => appErrors.push(error);
     apps.push(app);
     app.mount(container);
-    await vi.waitFor(() => expect(container.textContent).toContain("Human context changed"));
+    await vi.waitFor(() => expect(container.textContent).toContain("Human examples changed"));
     await setValue(control(container, "Human reviewer"), "fixture-human", "input");
     expect(control(container, "Assessment").disabled).toBe(false);
     expect(button(container, "Submit section review").disabled).toBe(true);
@@ -1490,6 +1684,12 @@ describe("ReviewWorkspace mounted workflow", () => {
       '.claim-fields input[type="number"]',
     );
     await setValue(numberInputs[0], "1100");
+    expect(control(container, "Evidence / judgment rationale").value).toBe("");
+    await setValue(
+      control(container, "Evidence / judgment rationale"),
+      "Unsaved B modification.",
+      "input",
+    );
     const observationSection = [...container.querySelectorAll(".review-source details")].find(
       (section) => section.querySelector("summary")?.textContent?.startsWith("Human observations"),
     );

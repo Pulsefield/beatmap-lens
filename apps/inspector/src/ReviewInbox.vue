@@ -143,7 +143,7 @@ function reviewLabel(claim: InboxClaimV2): string {
 
 function trustLabel(claim: InboxClaimV2): string {
   if (!claim.trust) return "Evidence context untracked";
-  return `Source ${claim.trust.source} · Foundation ${claim.trust.foundation} · human context ${claim.trust.humanContext}`;
+  return `Source ${claim.trust.source} · Foundation ${claim.trust.foundation} · human examples ${claim.trust.humanContext}`;
 }
 
 function strengthLabel(claim: InboxClaimV2): string {
@@ -252,7 +252,7 @@ onBeforeUnmount(() => { stopped = true; clearTimeout(timer); });
       <h2>{{ sampleBatch ? 'Review your sample' : 'Sample section labels' }}</h2>
       <button v-if="remainingSample" type="button" class="inbox-continue" :disabled="loading" @click="openSample(remainingSample)">Continue review <span>{{ sampleReviewed }}/{{ sampleRows.length }} reviewed →</span></button>
       <details :open="!sampleBatch" class="inbox-sample-setup"><summary>{{ sampleBatch ? 'Draw a new sample' : 'Sample settings' }}</summary>
-      <details class="inbox-help"><summary>How sampling works</summary><p>Random section labels. Identical judgments within the same labeler and auditor versions are sampled once; human-reviewed and superseded claims are excluded. Work status and evidence context remain visible; changed human context does not block review. Modify to save a replacement judgment; reject when no replacement is available.</p></details>
+      <details class="inbox-help"><summary>How sampling works</summary><p>Random section labels. Identical judgments within the same labeler and auditor versions are sampled once; human-reviewed and superseded claims are excluded. Work status and source provenance remain visible; changed human examples do not block review. Modify to save a replacement judgment; reject when no replacement is available.</p></details>
       <form class="inbox-sample-controls" @submit.prevent="drawSample">
         <label>Label type<select v-model="sampleTag" name="sampleTag"><option value="">All five labels</option><option v-for="(name, id) in REVIEW_TARGETS" :key="id" :value="id">{{ name }}</option></select></label>
         <label>Strength<select v-model="sampleStrength" name="sampleStrength"><option value="all">All strengths</option><option value="absent">Absent · 0</option><option value="supporting">Supporting · weak</option><option value="prominent">Prominent · strong</option></select></label>

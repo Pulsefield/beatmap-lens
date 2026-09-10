@@ -239,7 +239,7 @@ describe("machine review sampling", () => {
       const row = container.querySelector<HTMLButtonElement>(".inbox-sample-list button");
       assert(row);
       expect(row.disabled).toBe(false);
-      expect(row.textContent).toContain("human context changed");
+      expect(row.textContent).toContain("human examples changed");
       expect(container.textContent).not.toContain("Awaiting agent reread");
       row.click();
       await vi.waitFor(() =>
@@ -248,7 +248,7 @@ describe("machine review sampling", () => {
     },
   );
 
-  it("samples work with changed human context independently of its work status", async () => {
+  it("samples work with changed human examples independently of its work status", async () => {
     const { source, claim } = await fixture();
     const reviews = ["stale", "awaiting-audit", "needs-revision", "agent-reviewed"].map(
       (status, index) =>
