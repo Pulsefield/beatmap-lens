@@ -45,6 +45,13 @@ Fill the release configuration with:
 - `foundations`: public artifact references for the selected frozen Foundation hashes.
 - `policy.agent_methods`: optional exact method IDs from the collected inventory.
   The default empty list publishes only human judgments.
+- `policy.human_precedence`: new configurations set this to `true`. An effective
+  human assessment at the exact same source hash, start, end, tag and playback
+  rate excludes an otherwise eligible machine row, even on a different handoff.
+  Unresolved and unreviewed human assessments also mask machine supervision.
+  This is a publication filter; it does not delete historical machine proposals
+  or change human records. Historical configurations without this field retain
+  their original overlap behavior.
 - `policy.excluded_sources`: optional source SHA-256 to reason mapping, for example
   when the annotated historical bytes are no longer publicly retrievable. It
   excludes those judgments from this snapshot and records their counts and reasons;
@@ -164,6 +171,12 @@ supervision = human.filter(lambda row: row["presence"] in ("present", "absent"))
 Install `datasets` in the consumer's own environment. The `full` split is an
 annotation resource, not an advertised held-out benchmark. Agent configurations
 are opt-in and must not be silently unioned with human judgments as independent gold.
+When constructing training examples, deduplicate agreeing human observations on
+the exact source/scope/tag/rate key so independent provenance records do not add
+duplicate training weight. Preserve the original records for traceability. Use
+the human precedence policy when adding machine supervision; missing or masked
+human values do not become machine-provided negatives. Different scopes and rates
+remain distinct judgments.
 
 ## Published snapshots
 

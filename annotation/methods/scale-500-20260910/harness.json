@@ -1,0 +1,102 @@
+{
+  "kind": "frozen-evidence-harness-source-inventory-v1",
+  "repository": "https://github.com/Pulsefield/beatmap-lens",
+  "verified_source_commits": [
+    "ee9bcab75a48755041e1db2365608f96b7f34fb4",
+    "110de618a488a17af35f97c8fa8e9557263a179e"
+  ],
+  "entrypoint": "harness/annotation-harness.py",
+  "files": [
+    {
+      "bundle_path": "tools/annotation-facts.py",
+      "repository_path": "harness/annotation-facts.py",
+      "sha256": "e976214446fcbc815dbd5a9e5352cfc14e4c306cb64a2f6f49314b481716f8bf"
+    },
+    {
+      "bundle_path": "tools/annotation-harness.py",
+      "repository_path": "harness/annotation-harness.py",
+      "sha256": "410e9f07ec01d8aee0ce04586a7368aedacbf93136193dc83d206ddf8572bf21"
+    },
+    {
+      "bundle_path": "tools/annotation-queries.py",
+      "repository_path": "harness/annotation-queries.py",
+      "sha256": "70aa572cb360f061465afff61f57455eb3b3cbe0df5fce58565cbec346c4ac59"
+    },
+    {
+      "bundle_path": "tools/harness_examples.py",
+      "repository_path": "harness/harness_examples.py",
+      "sha256": "e856685d7751563b7ed98c41ef0d57bcd97046712d587f4d7fad4bffd6f8d536"
+    },
+    {
+      "bundle_path": "tools/harness_inspection.py",
+      "repository_path": "harness/harness_inspection.py",
+      "sha256": "c35ec787f2b52258a0921aa3f3d3526129a0b6c56436c5e63f027b576fb0c721"
+    },
+    {
+      "bundle_path": "tools/harness_playback.py",
+      "repository_path": "harness/harness_playback.py",
+      "sha256": "75308d6dd4825969cfa48b039b6af1f03ce6eee42b8af7f33b7a468e0e990dbd"
+    },
+    {
+      "bundle_path": "tools/harness_render.py",
+      "repository_path": "harness/harness_render.py",
+      "sha256": "28ca3b220fe74f742b495b173719e2e94842c3a6a9840df96a57170af5e66e9d"
+    },
+    {
+      "bundle_path": "tools/playback_rate.py",
+      "repository_path": "annotation/playback_rate.py",
+      "sha256": "3ae0f1f18d40d1a58ea55e8937f49ba9a84ffe983b6140bcd5daf6ece9aef774"
+    }
+  ],
+  "preparer": {
+    "path": "harness/prepare-annotation-harness.py",
+    "sha256": "f570680e4d2a7bde00d7f203f2a526ba8c3ef1c69828612486ecf98380cabd72"
+  },
+  "verified_bundles": [
+    {
+      "name": "initial-shard-1",
+      "manifest_sha256": "9035b02433a22e5a83de29fae10af93a296a741c9d52b9c3ee23b41c30ab7ea1",
+      "verified_file_count": 231,
+      "section_count": 167
+    },
+    {
+      "name": "initial-shard-2",
+      "manifest_sha256": "302c478ed84b3c5a4f6d1df167386dfefa8426cb92c722d4bdb83d7847fcc1ab",
+      "verified_file_count": 231,
+      "section_count": 167
+    },
+    {
+      "name": "initial-shard-3",
+      "manifest_sha256": "216b1e70afad1760145834b29bb85e982096043c77783b097864c8d732cc579d",
+      "verified_file_count": 230,
+      "section_count": 166
+    },
+    {
+      "name": "repair-shard-1",
+      "manifest_sha256": "607f4b7551ee9d2277bd62d0754aeff32eff542abddaca27bef9b016f68f0171",
+      "verified_file_count": 180,
+      "section_count": 10
+    },
+    {
+      "name": "repair-shard-2",
+      "manifest_sha256": "83400684117ad5d60d953a85330ec4b005c340ae981ebb49fa1e48bc6ec23418",
+      "verified_file_count": 180,
+      "section_count": 10
+    },
+    {
+      "name": "repair-shard-3",
+      "manifest_sha256": "4ca17d33eadcb6810351e64662df43ac8431aac357c2b74b73fef8747f0fa2d6",
+      "verified_file_count": 179,
+      "section_count": 9
+    },
+    {
+      "name": "factual-correction-003",
+      "manifest_sha256": "d7e7d6a7e64d22367ec8da77c4c6a37fae9c41f1e187735257503f9ba91ad5a9",
+      "verified_file_count": 172,
+      "section_count": 1
+    }
+  ],
+  "verification": "Every named local bundle file matches its manifest; all eight evidence tool files and the preparer match both source commits byte for byte. Bundles contain different scoped data and share the same evidence code.",
+  "publication_scope": "Source references and bundle digests only. Source charts, normalized notes, example libraries, raw manifests and traces are not copied.",
+  "delivery_boundary": "Evidence source references do not pin every controller process or later delivery repair. See README.md for the distinct delivery changes."
+}

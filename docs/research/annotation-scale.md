@@ -3,9 +3,10 @@
 A frozen-skill expansion added 500 fixed sections from 179 previously unregistered
 native 4K charts, assessing Jack, Stream, Trill, Tech and LN coordination at 1×.
 All 2,500 initial judgments received a separate machine audit. After targeted
-repairs, 2,483 current judgments are supported, 16 require an expert judgment and
-one remains excluded because of its fixed-window boundary. These are audit
-dispositions, not measured accuracy against human gold.
+repairs, 2,483 judgments were supported, 16 required an expert judgment and
+one remained excluded because of its fixed-window boundary. The subsequent
+expert review resolved all 16 referrals and revised seven of the 80 reviewed
+dimensions. These are selected review results, not measured population accuracy.
 
 ## Coverage and execution
 
@@ -102,7 +103,7 @@ the new unresolved proposal introduces a more conservative scope interpretation,
 not a newly established endpoint error. Its diagnostic remains machine follow-up
 material and does not assert anything about the full subsequent LN episode.
 
-## Final verified result
+## Verified result before expert review
 
 | Current disposition | Judgment cells |
 | --- | ---: |
@@ -148,3 +149,51 @@ capability. The earlier [rate experiment](rate-style-response.md) and the
 [context-control investigation](annotation-context-control.md) retain their own
 limitations. A matched comparison of single-section and four-section jobs is
 still needed to measure the effect of job context on judgment quality.
+
+## Expert review and method freeze
+
+On 2026-09-10, 81 new saved decisions produced 80 effective judgments over all five
+dimensions of 16 sections on 15 charts. One section was saved twice; the later
+decision is effective. All 16 referred dimensions were resolved, together with
+64 companion dimensions that had previously received supporting machine audits.
+Seven assessments changed: four referrals and three previously supported
+dimensions. The other 73 assessments agreed with the final machine baseline.
+
+| Section (original source milliseconds, 1×) | Dimension | Machine baseline → effective human judgment |
+| --- | --- | --- |
+| Super Nuko ni Narenkatta [Hyper], `[81010, 86063)` | Trill | absent → supporting |
+| The Worst [Terrible], `[120016, 127696)` | Trill | supporting → absent |
+| Catalinesie [Catalyst of Amnesia], `[113311, 117485)` | Trill | absent → supporting |
+| think abt it w/ ppgcasper [_o_ [1.3x Rate]], `[58010, 62626)` | Trill | absent → supporting |
+| Yolomania Vol. 3A [Ariana Grande - Baby I [Leo137] 14], `[143960, 153372)` | Trill | supporting → absent |
+| Same Yolomania section | LN coordination | supporting → absent |
+| Destiny [Noch's MAXIMUM], `[87706, 92030)` | Stream | prominent → supporting |
+
+The rate written in a difficulty name is source metadata; this expansion played
+each supplied source at 1×. Super Nuko's final Trill judgment is supporting: its
+four single notes at 85431, 85510, 85589 and 85668 ms alternate columns 0–2–0–2.
+The human described a perceptible weak alternation at the ending. This is distinct
+from the Yolomania section, whose effective human Trill judgment remains absent.
+
+The reviewed set was selected for uncertainty and includes correlated dimensions
+from each section. Neither 73/80 agreement nor the earlier machine-supported
+fraction is a random-sample accuracy estimate. The five Tech referrals were all
+confirmed supporting, mostly without new human-authored explanation; these
+confirmations do not provide a newly established universal Tech rule.
+
+The [method bundle](../../annotation/methods/scale-500-20260910/README.md) freezes
+the exact skill, roles and evidence tools used for this expansion. Publication
+does not revise judgment guidance. A future small skill iteration should test
+grouping of short or fragmented Trill episodes and whole-section Stream salience
+against the expert examples. It should not infer a universal note-count or speed
+cutoff, require only one prominent tag, or claim that player-profile dependence
+has been established. Any judgment-affecting revision needs the existing critical
+case and repeated-comparison regression gate before adoption.
+
+After exact human precedence, the expansion contributes 80 human cells and 2,419
+machine-only cells; the single fixed-boundary LN defect remains excluded. The
+release separates human judgments from opt-in machine method tables and prevents
+an independently supported repair on another handoff from overriding an effective
+human assessment at the same source, scope, tag and playback rate. The cumulative
+human resource also includes earlier records; these are not all new expansion
+reviews. See the [publication guide](../annotation/dataset-publication.md).

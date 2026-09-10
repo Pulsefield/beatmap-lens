@@ -16,6 +16,15 @@
     "lineEnding": "lf",
     "lineWidth": 100
   },
+  "overrides": [
+    {
+      "includes": [
+        "annotation/methods/scale-500-20260910/skill/**",
+        "annotation/methods/scale-500-20260910/inputs/**"
+      ],
+      "formatter": { "enabled": false }
+    }
+  ],
   "linter": {
     "enabled": true,
     "rules": {

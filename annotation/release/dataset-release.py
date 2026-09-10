@@ -70,7 +70,8 @@ def prepare_config(projection_path, output):
         'methods': {key: {'artifacts': {}, 'provenance_status': 'partial'}
                     for key in sorted(projection['methods'])},
         'policy': {'agent_methods': [], 'auxiliary_evidence': ['current'],
-                   'allow_partial_method_provenance': False, 'excluded_sources': {}},
+                   'allow_partial_method_provenance': False, 'excluded_sources': {},
+                   'human_precedence': True},
         'previous_snapshot': None, 'removals': {},
     }
     output.mkdir(parents=True)

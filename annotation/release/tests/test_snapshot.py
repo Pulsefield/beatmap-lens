@@ -3,6 +3,7 @@
 from copy import deepcopy
 import json
 from pathlib import Path
+import runpy
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
@@ -13,7 +14,7 @@ import pyarrow as pa
 import publish
 
 from snapshot import (
-    JUDGMENT_SCHEMA, JUDGMENT_SCHEMA_V1, build_snapshot, canonical_json, sha256_bytes, validate_snapshot,
+    JUDGMENT_SCHEMA, JUDGMENT_SCHEMA_V1, _dataset_card, build_snapshot, canonical_json, sha256_bytes, validate_snapshot,
 )
 
 
@@ -157,6 +158,148 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual(manifest["methods"][METHOD]["provenance_status"], "partial")
         self.assertEqual(manifest["provenance"][PROVENANCE]["human_evidence_refs"][0]["record_id"], "human:one")
         self.assertIn("default: true", (path / "README.md").read_text())
+
+    def test_human_precedence_blocks_cross_handoff_conflicts_and_masked_cells(self):
+        for presence in ("absent", "unresolved", "unreviewed"):
+            with self.subTest(presence=presence):
+                self.projection, self.config = fixture()
+                add_agent(self.projection, self.config)
+                self.projection["human"][0].update(
+                    origin="human-modified", handoff_id="different-handoff", claim_id="different-claim",
+                    decision_id="human-correction", presence=presence, salience=None)
+                self.config["policy"]["human_precedence"] = True
+                path, manifest = self.build(presence)
+                self.assertEqual(manifest["counts"], {"sources": 1, "human": 1, "agents": {METHOD: 0}})
+                self.assertEqual(manifest["exclusions"]["agents"], {"human-precedence": 1})
+                self.assertEqual(pq.read_table(path / "data/human.parquet").to_pylist()[0]["presence"], presence)
+                self.assertTrue(validate_snapshot(path)["valid"])
+
+    def test_human_precedence_preserves_agreeing_human_duplicates_and_separate_tables(self):
+        add_agent(self.projection, self.config)
+        duplicate = deepcopy(self.projection["human"][0])
+        duplicate.update(record_id="human:two", observation_id="two", claim_id="another-claim")
+        self.projection["human"].append(duplicate)
+        self.config["policy"]["human_precedence"] = True
+        original = deepcopy(self.projection)
+        path, manifest = self.build()
+        self.assertEqual(manifest["counts"], {"sources": 1, "human": 2, "agents": {METHOD: 0}})
+        self.assertEqual(manifest["exclusions"]["agents"], {"human-precedence": 1})
+        self.assertEqual(pq.read_table(path / "data/human.parquet").column("record_id").to_pylist(), ["human:one", "human:two"])
+        self.assertEqual(pq.read_table(path / f"data/agent/{METHOD}.parquet").num_rows, 0)
+        self.assertEqual(validate_snapshot(path)["human_overlap_pairs"], 1)
+        self.assertEqual(self.projection, original)
+        card = (path / "README.md").read_text()
+        self.assertIn("Deduplicate agreeing human assessments by this key", card)
+        self.assertIn("no merged gold table is published", card)
+        self.assertIn("`exclusions.agents.human-precedence`", card)
+        self.assertNotIn("Machine ancestors can overlap human-confirmed rows", card)
+
+    def test_human_precedence_separates_source_boundaries_tag_and_rate(self):
+        second_source = self.add_second_human_source()
+        self.projection["human"].pop()
+        foundation = self.projection["foundations"][FOUNDATION]
+        foundation["tags"].append({"id": "jumpstream"})
+        content = canonical_json(foundation).decode("utf-8")
+        digest = sha256_bytes(content.encode("utf-8"))
+        self.projection["foundation_artifacts"][FOUNDATION] = {"content": content, "sha256": digest}
+        self.config["foundations"][FOUNDATION]["artifact"]["sha256"] = digest
+        same_cell = add_agent(self.projection, self.config)
+        same_cell["playback_rate"] = 1.0  # Historical missing human rate is also 1x.
+        changes = {"source_sha256": second_source, "start_ms": 99, "end_ms": 301,
+                   "tag_id": "jumpstream", "playback_rate": 1.5}
+        for field, value in changes.items():
+            distinct = deepcopy(same_cell)
+            distinct.update(record_id="agent:" + field, **{field: value})
+            self.projection["agents"].append(distinct)
+        self.config["policy"]["human_precedence"] = True
+        path, manifest = self.build()
+        rows = pq.read_table(path / f"data/agent/{METHOD}.parquet").to_pylist()
+        self.assertEqual({row["record_id"] for row in rows}, {"agent:" + field for field in changes})
+        self.assertEqual(manifest["counts"]["agents"], {METHOD: 5})
+        self.assertEqual(manifest["exclusions"]["agents"], {"human-precedence": 1})
+        self.assertTrue(validate_snapshot(path)["valid"])
+
+    def test_human_precedence_uses_effective_projection_before_human_release_gates(self):
+        for field in ("source_status", "foundation_status"):
+            with self.subTest(field=field):
+                self.projection, self.config = fixture()
+                add_agent(self.projection, self.config)
+                self.projection["human"][0][field] = "changed"
+                self.config["policy"]["human_precedence"] = True
+                _, manifest = self.build(field)
+                self.assertEqual(manifest["counts"], {"sources": 0, "human": 0, "agents": {METHOD: 0}})
+                self.assertEqual(manifest["exclusions"]["agents"], {"human-precedence": 1})
+                self.assertEqual(sum(manifest["exclusions"]["human"].values()), 1)
+
+    def test_human_precedence_counts_only_otherwise_eligible_machine_rows(self):
+        eligible = add_agent(self.projection, self.config)
+        rejected = deepcopy(eligible)
+        rejected.update(record_id="agent:rejected", review_status="rejected")
+        self.projection["agents"].append(rejected)
+        self.config["policy"]["human_precedence"] = True
+        _, manifest = self.build()
+        self.assertEqual(manifest["exclusions"]["agents"], {"human-precedence": 1, "not-effective-agent-review": 1})
+
+    def test_validator_enforces_human_precedence_against_all_released_human_assessments(self):
+        for presence in ("present", "absent", "unresolved", "unreviewed"):
+            with self.subTest(presence=presence):
+                self.projection, self.config = fixture()
+                add_agent(self.projection, self.config)
+                self.projection["human"][0].update(presence=presence,
+                                                    salience="prominent" if presence == "present" else None)
+                path, manifest = self.build(presence)
+                manifest["policy"]["human_precedence"] = True
+                card = _dataset_card(manifest).encode("utf-8")
+                (path / "README.md").write_bytes(card)
+                manifest["files"]["README.md"]["sha256"] = sha256_bytes(card)
+                self.rewrite_manifest(path, manifest)
+                with self.assertRaisesRegex(ValueError, "human_precedence policy"):
+                    validate_snapshot(path)
+
+    def test_legacy_v1_v2_policy_and_card_bytes_remain_compatible(self):
+        add_agent(self.projection, self.config)
+        path, manifest = self.build()
+        legacy_card_hash = "4a6343634097fc91258e92eb9cd1ac060fa024bafd1c2595f89aa89110b3c084"
+        self.assertNotIn("human_precedence", manifest["policy"])
+        self.assertEqual(manifest["counts"]["agents"], {METHOD: 1})
+        self.assertEqual(sha256_bytes((path / "README.md").read_bytes()), legacy_card_hash)
+        manifest["policy"].pop("excluded_sources")
+        for version in (2, 1):
+            with self.subTest(version=version):
+                manifest["version"] = version
+                if version == 1:
+                    for name, info in manifest["files"].items():
+                        if info.get("schema") != "judgment-v2":
+                            continue
+                        rows = pq.read_table(path / name).to_pylist()
+                        for row in rows:
+                            row.pop("playback_rate")
+                        pq.write_table(pa.Table.from_pylist(rows, schema=JUDGMENT_SCHEMA_V1), path / name, compression="zstd")
+                        info.update(schema="judgment-v1", sha256=sha256_bytes((path / name).read_bytes()))
+                self.rewrite_manifest(path, manifest)
+                self.assertEqual(validate_snapshot(path)["version"], version)
+                self.assertEqual(sha256_bytes(_dataset_card(manifest).encode("utf-8")), legacy_card_hash)
+
+    def test_explicit_false_preserves_machine_overlaps_and_policy_requires_boolean(self):
+        add_agent(self.projection, self.config)
+        self.config["policy"]["human_precedence"] = False
+        path, manifest = self.build()
+        self.assertIs(manifest["policy"]["human_precedence"], False)
+        self.assertEqual(manifest["counts"]["agents"], {METHOD: 1})
+        self.assertEqual(manifest["exclusions"]["agents"], {})
+        self.assertIn("`policy.human_precedence` is `false`", (path / "README.md").read_text())
+        self.config["policy"]["human_precedence"] = "true"
+        with self.assertRaisesRegex(ValueError, "human_precedence must be boolean"):
+            self.build("invalid")
+
+    def test_new_release_configuration_enables_human_precedence(self):
+        entrypoint = runpy.run_path(str(Path(__file__).resolve().parents[1] / "dataset-release.py"))
+        projection_path = self.root / "projection.json"
+        projection_path.write_bytes(canonical_json(self.projection))
+        prepared = self.root / "prepared"
+        entrypoint["prepare_config"](projection_path, prepared)
+        config = json.loads((prepared / "release.json").read_text())
+        self.assertIs(config["policy"]["human_precedence"], True)
 
     def test_different_rates_can_have_opposite_human_judgments(self):
         slow = deepcopy(self.projection['human'][0])

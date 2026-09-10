@@ -1,0 +1,236 @@
+{
+  "kind": "frozen-annotation-methods-v1",
+  "freeze_date": "2026-09-10",
+  "repository": "https://github.com/Pulsefield/beatmap-lens",
+  "artifact_commit_binding": "Paths without a commit are exact byte artifacts in this package. Dataset release configuration must bind them to the full GitHub commit containing this package. This manifest is not a release configuration.",
+  "foundation_frozen_sha256": "15fa68913bdb2bf395a189df7ab433f6d5b126fc35c46c1dbc8e607ce2182e97",
+  "coverage": "selected-sections",
+  "playback_rate": 1,
+  "methods": {
+    "method-a444f6f5f4d5468cca164c350c6f70a49ebe3d15cc2b807b9fd354bda105d4b1": {
+      "labeler": {
+        "model": "gpt-6-astra",
+        "role": "labeler",
+        "skill": {
+          "name": "mania-pattern-judgment",
+          "sha256": "73e8007c7523667ea610f80e59cf1225fdddebf9c60ab9223d35a72de595a2c6",
+          "version": "fine-harness:ee9bcab75a48755041e1db2365608f96b7f34fb4"
+        },
+        "toolVersion": "codex-cli 0.153.4"
+      },
+      "auditors": [
+        {
+          "model": "gpt-6-astra",
+          "role": "auditor",
+          "skill": {
+            "name": "mania-pattern-judgment",
+            "sha256": "73e8007c7523667ea610f80e59cf1225fdddebf9c60ab9223d35a72de595a2c6",
+            "version": "fine-harness:ee9bcab75a48755041e1db2365608f96b7f34fb4"
+          },
+          "toolVersion": "codex-cli 0.153.4"
+        }
+      ],
+      "requested_reasoning_effort": {
+        "labeler": "medium",
+        "auditor": "high"
+      },
+      "batch_policy": {
+        "max_sections": 4,
+        "max_brief_characters": 28000,
+        "fresh_labeler_and_independent_auditor": true
+      },
+      "artifacts": {
+        "labeler_skill": {
+          "path": "annotation/methods/scale-500-20260910/skill/manifest.json",
+          "sha256": "73e8007c7523667ea610f80e59cf1225fdddebf9c60ab9223d35a72de595a2c6"
+        },
+        "auditor_skill": {
+          "path": "annotation/methods/scale-500-20260910/skill/manifest.json",
+          "sha256": "73e8007c7523667ea610f80e59cf1225fdddebf9c60ab9223d35a72de595a2c6"
+        },
+        "labeler_role": {
+          "path": "annotation/methods/scale-500-20260910/labeler.md",
+          "sha256": "8a7e8ac22cb0d267ff566d01f9c86b3224117bc8cc911dbf215d2b5a66f8458d"
+        },
+        "auditor_role": {
+          "path": "annotation/methods/scale-500-20260910/auditor.md",
+          "sha256": "3734b70acb8b6763707ab7e547b7dac986fe8a02e819daedcfdab50cedc21493"
+        },
+        "harness": {
+          "repository": "https://github.com/Pulsefield/beatmap-lens",
+          "commit": "ee9bcab75a48755041e1db2365608f96b7f34fb4",
+          "path": "harness/annotation-harness.py",
+          "sha256": "410e9f07ec01d8aee0ce04586a7368aedacbf93136193dc83d206ddf8572bf21"
+        }
+      }
+    },
+    "method-46fb9e0f64b8c2b249019fa18b6642b825c1a4e3343317d28918724668332f20": {
+      "labeler": {
+        "model": "gpt-6-astra",
+        "role": "labeler",
+        "skill": {
+          "name": "mania-pattern-judgment",
+          "sha256": "73e8007c7523667ea610f80e59cf1225fdddebf9c60ab9223d35a72de595a2c6",
+          "version": "fine-harness:110de618a488a17af35f97c8fa8e9557263a179e"
+        },
+        "toolVersion": "codex-cli 0.153.4"
+      },
+      "auditors": [
+        {
+          "model": "gpt-6-astra",
+          "role": "auditor",
+          "skill": {
+            "name": "mania-pattern-judgment",
+            "sha256": "73e8007c7523667ea610f80e59cf1225fdddebf9c60ab9223d35a72de595a2c6",
+            "version": "fine-harness:110de618a488a17af35f97c8fa8e9557263a179e"
+          },
+          "toolVersion": "codex-cli 0.153.4"
+        }
+      ],
+      "requested_reasoning_effort": {
+        "labeler": "medium",
+        "auditor": "high"
+      },
+      "batch_policy": {
+        "max_sections": 1,
+        "max_brief_characters": 28000,
+        "fresh_labeler_and_independent_auditor": true
+      },
+      "artifacts": {
+        "labeler_skill": {
+          "path": "annotation/methods/scale-500-20260910/skill/manifest.json",
+          "sha256": "73e8007c7523667ea610f80e59cf1225fdddebf9c60ab9223d35a72de595a2c6"
+        },
+        "auditor_skill": {
+          "path": "annotation/methods/scale-500-20260910/skill/manifest.json",
+          "sha256": "73e8007c7523667ea610f80e59cf1225fdddebf9c60ab9223d35a72de595a2c6"
+        },
+        "labeler_role": {
+          "path": "annotation/methods/scale-500-20260910/labeler.md",
+          "sha256": "8a7e8ac22cb0d267ff566d01f9c86b3224117bc8cc911dbf215d2b5a66f8458d"
+        },
+        "auditor_role": {
+          "path": "annotation/methods/scale-500-20260910/auditor.md",
+          "sha256": "3734b70acb8b6763707ab7e547b7dac986fe8a02e819daedcfdab50cedc21493"
+        },
+        "harness": {
+          "repository": "https://github.com/Pulsefield/beatmap-lens",
+          "commit": "110de618a488a17af35f97c8fa8e9557263a179e",
+          "path": "harness/annotation-harness.py",
+          "sha256": "410e9f07ec01d8aee0ce04586a7368aedacbf93136193dc83d206ddf8572bf21"
+        }
+      }
+    }
+  },
+  "shared_worker_inputs": {
+    "auditor-prompt.txt": {
+      "path": "annotation/methods/scale-500-20260910/inputs/auditor-prompt.txt",
+      "sha256": "2497c128cd4786f1fa1a6ecc90b74ae775b35085f23c7ca4c2a5de9beb1ce72f"
+    },
+    "auditor-response-schema.json": {
+      "path": "annotation/methods/scale-500-20260910/inputs/auditor-response-schema.json",
+      "sha256": "b7a03a443c5e99671a9d6b09d3ac23a1aaff375bb95beeb5a8cfe3d3e692bf54"
+    },
+    "foundation-definitions.json": {
+      "path": "annotation/methods/scale-500-20260910/inputs/foundation-definitions.json",
+      "sha256": "7ec1983d2235dd09595d8c4f759466adc6afa0ebba6919c2c20b89306e6cbf3e"
+    },
+    "labeler-prompt.txt": {
+      "path": "annotation/methods/scale-500-20260910/inputs/labeler-prompt.txt",
+      "sha256": "6ccfc5ac0d29d2e78d2541cec1dce9e450eb4bd0420b8c57d6a427304a1eeaf8"
+    },
+    "labeler-response-schema.json": {
+      "path": "annotation/methods/scale-500-20260910/inputs/labeler-response-schema.json",
+      "sha256": "2a6044cc319f1f906edb85d9795827b64da35ac6603f58b75b52f4ce675bc671"
+    },
+    "worker-instructions.md": {
+      "path": "annotation/methods/scale-500-20260910/inputs/worker-instructions.md",
+      "sha256": "349d7575a2185844ab09e09a651b613a3cb7b376ba1b4c032424ab919c2b7e53"
+    }
+  },
+  "harness_inventory": {
+    "path": "annotation/methods/scale-500-20260910/harness.json",
+    "sha256": "1afa6b7f4f0ef6e43c560488186f9b0c28ca039b38e7bda2e080322d66d885d4"
+  },
+  "input_boundary": "The copied worker inputs are identical across both methods. Source-linked section briefs/cases and sealed auditor handoffs vary per job; they remain private. Returned human examples are separately tracked auxiliary evidence, not additions to the frozen skill manifest.",
+  "verification": {
+    "worker_records_checked": 314,
+    "initial_worker_records": 254,
+    "repair_worker_records_including_factual_correction": 60,
+    "skill_files_per_bundle": 8,
+    "shared_inputs_and_all_skill_files_match_recorded_hashes": true,
+    "evidence_tool_files_per_bundle": 8,
+    "harness_bundles_checked": 7
+  },
+  "limitations": [
+    "Artifact provenance does not establish annotation accuracy or human confirmation.",
+    "Recorded model and CLI version strings are retained; no historical executable or provider model-weights digest was recorded.",
+    "Context isolation flags describe requested execution and are not proof of every hidden model-context boundary."
+  ],
+  "optional_artifacts": {
+    "method_documentation": {
+      "path": "annotation/methods/scale-500-20260910/README.md",
+      "sha256": "63e579c226a086b1396413b0ceed8b5c2a7f628f40f5067bea13e1a5ffc35491"
+    },
+    "harness_inventory": {
+      "path": "annotation/methods/scale-500-20260910/harness.json",
+      "sha256": "1afa6b7f4f0ef6e43c560488186f9b0c28ca039b38e7bda2e080322d66d885d4"
+    },
+    "worker_instructions": {
+      "path": "annotation/methods/scale-500-20260910/inputs/worker-instructions.md",
+      "sha256": "349d7575a2185844ab09e09a651b613a3cb7b376ba1b4c032424ab919c2b7e53"
+    },
+    "foundation_definitions": {
+      "path": "annotation/methods/scale-500-20260910/inputs/foundation-definitions.json",
+      "sha256": "7ec1983d2235dd09595d8c4f759466adc6afa0ebba6919c2c20b89306e6cbf3e"
+    },
+    "labeler_prompt": {
+      "path": "annotation/methods/scale-500-20260910/inputs/labeler-prompt.txt",
+      "sha256": "6ccfc5ac0d29d2e78d2541cec1dce9e450eb4bd0420b8c57d6a427304a1eeaf8"
+    },
+    "auditor_prompt": {
+      "path": "annotation/methods/scale-500-20260910/inputs/auditor-prompt.txt",
+      "sha256": "2497c128cd4786f1fa1a6ecc90b74ae775b35085f23c7ca4c2a5de9beb1ce72f"
+    },
+    "labeler_output_schema": {
+      "path": "annotation/methods/scale-500-20260910/inputs/labeler-response-schema.json",
+      "sha256": "2a6044cc319f1f906edb85d9795827b64da35ac6603f58b75b52f4ce675bc671"
+    },
+    "auditor_output_schema": {
+      "path": "annotation/methods/scale-500-20260910/inputs/auditor-response-schema.json",
+      "sha256": "b7a03a443c5e99671a9d6b09d3ac23a1aaff375bb95beeb5a8cfe3d3e692bf54"
+    },
+    "skill_skill": {
+      "path": "annotation/methods/scale-500-20260910/skill/SKILL.md",
+      "sha256": "cef9d7270930bd96bfaade00271bf8970542bcbe5d31bd2ce57dcde3b75ddf3a"
+    },
+    "skill_agents_openai": {
+      "path": "annotation/methods/scale-500-20260910/skill/agents/openai.yaml",
+      "sha256": "ccf36cf046af3bb2919a79be0498afbb9a00304fc99e3cee2bb9b404da2be06a"
+    },
+    "skill_references_beatmap_lens_exchange": {
+      "path": "annotation/methods/scale-500-20260910/skill/references/beatmap-lens-exchange.md",
+      "sha256": "4c11d831416d895ce8ea8bc5507e7de78b9e00f519a2ec1ebe566c74ea00f304"
+    },
+    "skill_references_corpus_learning": {
+      "path": "annotation/methods/scale-500-20260910/skill/references/corpus-learning.md",
+      "sha256": "5654f10fd4b56adc78ea58d7deb9a611e10cd15c820e2a55a06d40bd2fc4d647"
+    },
+    "skill_references_feedback_maintenance": {
+      "path": "annotation/methods/scale-500-20260910/skill/references/feedback-maintenance.md",
+      "sha256": "b6c83a1b335a171f864d2bfb3d0f8ada0fd22bc980a35a1a34b1247417a3e561"
+    },
+    "skill_references_judgment_guide": {
+      "path": "annotation/methods/scale-500-20260910/skill/references/judgment-guide.md",
+      "sha256": "f3e0a214a3b7bbb60b481b78bb9b680ebdbf54b3059c5b7aa30f52088c23e22a"
+    },
+    "skill_references_structural_queries": {
+      "path": "annotation/methods/scale-500-20260910/skill/references/structural-queries.md",
+      "sha256": "3a136cdc46cd192c93c0c373508e54b09b2fb41d7177589c0a062ebe43e991c9"
+    },
+    "skill_references_tech_pack_20260907": {
+      "path": "annotation/methods/scale-500-20260910/skill/references/tech-pack-20260907.md",
+      "sha256": "1e1ef39c5c791a8b077f3c66bb577b6efc89f895569261388180af686d4a7280"
+    }
+  }
+}

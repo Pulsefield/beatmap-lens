@@ -1,0 +1,4 @@
+interface:
+  display_name: "Mania Pattern Judgment"
+  short_description: "Learn mania organization from charts and human experience"
+  default_prompt: "Use $mania-pattern-judgment to study this beatmap through time, action, and organization, using relevant human experience to build revisable explanations."

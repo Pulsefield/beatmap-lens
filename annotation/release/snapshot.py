@@ -219,10 +219,13 @@ def _snake(value: Any) -> Any:
 def _policy(config: dict) -> dict:
     value = deepcopy(config.get("policy", {}))
     value.setdefault("excluded_sources", {})
-    _fail(set(value) == {"agent_methods", "auxiliary_evidence", "allow_partial_method_provenance", "excluded_sources"}, "policy must declare agent_methods, auxiliary_evidence and allow_partial_method_provenance, with optional excluded_sources")
+    required = {"agent_methods", "auxiliary_evidence", "allow_partial_method_provenance", "excluded_sources"}
+    _fail(required <= set(value) <= required | {"human_precedence"}, "policy must declare agent_methods, auxiliary_evidence and allow_partial_method_provenance, with optional excluded_sources and human_precedence")
     _fail(isinstance(value["agent_methods"], list) and len(value["agent_methods"]) == len(set(value["agent_methods"])), "policy agent_methods must be unique")
     _fail(isinstance(value["auxiliary_evidence"], list) and not set(value["auxiliary_evidence"]) - {"current", "changed", "untracked"}, "policy auxiliary_evidence must explicitly select supported statuses")
     _fail(isinstance(value["allow_partial_method_provenance"], bool), "allow_partial_method_provenance must be boolean")
+    if "human_precedence" in value:
+        _fail(isinstance(value["human_precedence"], bool), "human_precedence must be boolean")
     _fail(isinstance(value["excluded_sources"], dict), "policy excluded_sources must map source hashes to reasons")
     for source_sha, reason in value["excluded_sources"].items():
         _digest(source_sha, "Excluded source hash")
@@ -233,6 +236,11 @@ def _policy(config: dict) -> dict:
     value["agent_methods"].sort()
     value["auxiliary_evidence"] = sorted(set(value["auxiliary_evidence"]))
     return value
+
+
+def _judgment_cell(row: dict) -> tuple:
+    return (row["source_sha256"], row["start_ms"], row["end_ms"], row["tag_id"],
+            normalize_playback_rate(row.get("playback_rate")))
 
 
 def _method(recorded: dict, supplied: dict | None) -> dict:
@@ -372,6 +380,9 @@ def _removals(previous: Path | None, current_rows: list[dict], manifest: dict, c
 def _dataset_card(manifest: dict) -> str:
     # JSON strings are valid YAML scalars, so user-supplied titles cannot add YAML keys.
     quote = lambda value: json.dumps(value, ensure_ascii=False)
+    authority = "The default `human` configuration contains effective human judgments. Agent configurations are explicit opt-ins and must not be silently combined with human gold. Machine ancestors can overlap human-confirmed rows; preserve ancestry when selecting examples."
+    if manifest["policy"].get("human_precedence"):
+        authority = "The default `human` configuration contains effective human judgments. Agent configurations are explicit opt-ins and must not be silently combined with human gold. The selected machine tables exclude exact cells with effective human judgments; ancestry remains available through provenance."
     lines = ["---", f"license: {quote(manifest['license'])}", "configs:", "- config_name: human", "  default: true", "  data_files:", "  - split: full", "    path: data/human.parquet", "- config_name: sources", "  data_files:", "  - split: full", "    path: data/sources.parquet"]
     for method_id in manifest["policy"]["agent_methods"]:
         lines += [f"- config_name: agent-{method_id}", "  data_files:", "  - split: full", f"    path: data/agent/{method_id}.parquet"]
@@ -385,7 +396,7 @@ def _dataset_card(manifest: dict) -> str:
         lines.append(f"- [{foundation_id}]({url})")
     if not manifest["foundations"]:
         lines.append("No Foundation is referenced by this empty local snapshot.")
-    lines += ["", "The default `human` configuration contains effective human judgments. Agent configurations are explicit opt-ins and must not be silently combined with human gold. Machine ancestors can overlap human-confirmed rows; preserve ancestry when selecting examples.", "", "This is a positive-first, partially exhaustive annotation resource. A row is one tag assessment over one exact source interval, in original source milliseconds, with half-open `[start_ms, end_ms)` boundaries. Tags are independent and multiple tags may be prominent. `presence` is `present`, `absent`, `unresolved`, or `unreviewed`. Only `present` has `salience` (`supporting` or `prominent`); other rows have null salience. Missing rows are unreviewed, never negatives. Rejected proposals do not manufacture absence labels.", "", "```python", "from datasets import load_dataset", f"human = load_dataset({quote(manifest['repo_id'])}, 'human',", "                     revision='<full-HF-commit>', split='full')", "supervised = human.filter(lambda row: row['presence'] in ('present', 'absent'))", "```", "", "The split is named `full`; this release makes no held-out benchmark or measured accuracy claim. `agent-reviewed` describes independent audit, not human authority or calibrated confidence.", "", "`sources` contains metadata, exact source hashes, and retrieval references, not beatmap bytes, notes, audio, or images. For `source_ref.kind == 'hf'`, retrieve `path` from the declared corpus `repository` at the full `commit`; `record_key`, when present, identifies the record in that file. For `content-addressed`, retrieve `uri`. For `osu`, retrieve the official `https://osu.ppy.sh/osu/{beatmap_id}` URI. For `url`, retrieve the declared HTTPS `uri`, such as a public mirror holding the original revision. The official locator is mutable, as are general URL locators, and neither promises archival availability; the original `source_sha256` remains the identity. Verify the retrieved original `.osu` bytes against that hash before using time ranges or source-line note references. A mismatch must fail instead of substituting a newer chart. Corpus access and format are owned by its publisher.", "", "The manifest references immutable public Foundation and method artifacts on GitHub. Frozen Foundation hashes and public artifact hashes are deliberately distinct when calibration bytes have been replaced by references. Definitions, skill text, raw agent packets, and workspace journals are not embedded here. `details` retains typed context, evidence, boundary uncertainty, transition, exemplar role, section ID, and original human rationale. Public annotator identities are omitted from annotation tables.", "", "Judgment authority, source/Foundation compatibility, and auxiliary evidence freshness are separate. Included rows have compatible source/Foundation binding. `auxiliary_evidence_status` is snapshot-relative: `current`, `changed`, `untracked`, or `not-applicable`. Changed or untracked machine ancestry does not revoke a human judgment. Human confirmation does not certify an ancestor's rationale. Historic snapshots remain fixed as workspace judgments evolve.", "", f"Machine release policy: auxiliary evidence admitted = `{json.dumps(manifest['policy']['auxiliary_evidence'])}`; partial method provenance admitted = `{str(manifest['policy']['allow_partial_method_provenance']).lower()}`. Selected agent rows require independent supporting audit and an effective `agent-reviewed` or `accepted` state. See `manifest.json` for selected methods, omissions, lineage, file hashes, and public evaluation references, when supplied.", "", "Checks of schema, identity, and provenance do not measure labeling accuracy. No numeric quality certification is implied.", ""]
+    lines += ["", authority, "", "This is a positive-first, partially exhaustive annotation resource. A row is one tag assessment over one exact source interval, in original source milliseconds, with half-open `[start_ms, end_ms)` boundaries. Tags are independent and multiple tags may be prominent. `presence` is `present`, `absent`, `unresolved`, or `unreviewed`. Only `present` has `salience` (`supporting` or `prominent`); other rows have null salience. Missing rows are unreviewed, never negatives. Rejected proposals do not manufacture absence labels.", "", "```python", "from datasets import load_dataset", f"human = load_dataset({quote(manifest['repo_id'])}, 'human',", "                     revision='<full-HF-commit>', split='full')", "supervised = human.filter(lambda row: row['presence'] in ('present', 'absent'))", "```", "", "The split is named `full`; this release makes no held-out benchmark or measured accuracy claim. `agent-reviewed` describes independent audit, not human authority or calibrated confidence.", "", "`sources` contains metadata, exact source hashes, and retrieval references, not beatmap bytes, notes, audio, or images. For `source_ref.kind == 'hf'`, retrieve `path` from the declared corpus `repository` at the full `commit`; `record_key`, when present, identifies the record in that file. For `content-addressed`, retrieve `uri`. For `osu`, retrieve the official `https://osu.ppy.sh/osu/{beatmap_id}` URI. For `url`, retrieve the declared HTTPS `uri`, such as a public mirror holding the original revision. The official locator is mutable, as are general URL locators, and neither promises archival availability; the original `source_sha256` remains the identity. Verify the retrieved original `.osu` bytes against that hash before using time ranges or source-line note references. A mismatch must fail instead of substituting a newer chart. Corpus access and format are owned by its publisher.", "", "The manifest references immutable public Foundation and method artifacts on GitHub. Frozen Foundation hashes and public artifact hashes are deliberately distinct when calibration bytes have been replaced by references. Definitions, skill text, raw agent packets, and workspace journals are not embedded here. `details` retains typed context, evidence, boundary uncertainty, transition, exemplar role, section ID, and original human rationale. Public annotator identities are omitted from annotation tables.", "", "Judgment authority, source/Foundation compatibility, and auxiliary evidence freshness are separate. Included rows have compatible source/Foundation binding. `auxiliary_evidence_status` is snapshot-relative: `current`, `changed`, `untracked`, or `not-applicable`. Changed or untracked machine ancestry does not revoke a human judgment. Human confirmation does not certify an ancestor's rationale. Historic snapshots remain fixed as workspace judgments evolve.", "", f"Machine release policy: auxiliary evidence admitted = `{json.dumps(manifest['policy']['auxiliary_evidence'])}`; partial method provenance admitted = `{str(manifest['policy']['allow_partial_method_provenance']).lower()}`. Selected agent rows require independent supporting audit and an effective `agent-reviewed` or `accepted` state. See `manifest.json` for selected methods, omissions, lineage, file hashes, and public evaluation references, when supplied.", "", "Checks of schema, identity, and provenance do not measure labeling accuracy. No numeric quality certification is implied.", ""]
     lines += ["`playback_rate` is the judgment's execution rate: 0.5, 0.75, 1, 1.25, or 1.5. "
               "All stored ranges and note references remain in original source milliseconds. "
               "Performance durations and intervals divide by this rate; BPM multiplies by it. "
@@ -395,6 +406,12 @@ def _dataset_card(manifest: dict) -> str:
         lines += ["The exported annotations and accompanying dataset documentation use the MIT license in `LICENSE`. Externally referenced beatmaps remain subject to their own terms; this snapshot does not distribute or relicense their contents.", ""]
     if manifest["policy"].get("excluded_sources"):
         lines += [f"This is a partial source selection: {len(manifest['policy']['excluded_sources'])} source(s) were explicitly omitted. `manifest.json` records each original source hash and exclusion reason in `policy.excluded_sources`, and omitted judgment counts under `exclusions`. The omitted workspace judgments remain intact. Required Foundation calibration sources cannot be excluded.", ""]
+    if "human_precedence" in manifest["policy"]:
+        lines += ["For training, identify an exact judgment cell by `(source_sha256, start_ms, end_ms, tag_id, playback_rate)`. The human table preserves distinct effective observations, including agreeing duplicates at the same cell. Deduplicate agreeing human assessments by this key before weighting examples; retain their record IDs as provenance. Keep `unresolved` and `unreviewed` cells masked from supervision and do not replace human uncertainty with a machine label. Conflicting supervised human assessments at the same cell block publication.", ""]
+        if manifest["policy"]["human_precedence"]:
+            lines += ["`policy.human_precedence` is `true`: otherwise-eligible machine rows are excluded whenever any effective human projection row has the same exact cell, including `unresolved` or `unreviewed` human assessments and rows from different handoffs or claims. This check uses the full effective human projection, even when a human row is omitted by another release gate. Different source hashes, interval boundaries, tags, or playback rates remain distinct. `exclusions.agents.human-precedence` counts the omitted machine rows. The canonical human table and separate opt-in method tables remain separate; no merged gold table is published.", ""]
+        else:
+            lines += ["`policy.human_precedence` is `false`: machine tables may contain exact cells also assessed by humans. Consumers selecting machine examples for training must give effective human cells precedence, including masked human uncertainty, and preserve the separate authority and provenance of each layer.", ""]
     return "\n".join(lines)
 
 
@@ -420,6 +437,7 @@ def build_snapshot(projection: dict, config: dict, output: Path, previous: Path 
     retained: dict[str, list[dict]] = {"human": []}
     retained.update({method_id: [] for method_id in policy["agent_methods"]})
     exclusions = {"human": Counter(), "agents": Counter()}
+    human_cells = {_judgment_cell(row) for row in projection["human"]} if policy.get("human_precedence") else set()
     for channel, rows in (("human", projection["human"]), ("agents", projection["agents"])):
         for row in rows:
             reason = None
@@ -441,6 +459,8 @@ def build_snapshot(projection: dict, config: dict, output: Path, previous: Path 
                     reason = "auxiliary-evidence-not-admitted"
                 elif methods[method_id]["provenance_status"] == "partial" and not policy["allow_partial_method_provenance"]:
                     reason = "partial-method-provenance"
+                elif policy.get("human_precedence") and _judgment_cell(row) in human_cells:
+                    reason = "human-precedence"
             if reason:
                 exclusions[channel][reason] += 1
             else:
@@ -768,6 +788,10 @@ def validate_snapshot(path: Path) -> dict:
     _fail(used_methods == set(manifest["methods"]), "Snapshot contains unused methods")
     expected_counts = {"sources": len(sources), "human": len(tables["human"]), "agents": {key: len(tables["agent-" + key]) for key in policy["agent_methods"]}}
     _fail(manifest["counts"] == expected_counts, "Manifest counts disagree with tables")
+    if policy.get("human_precedence"):
+        human_cells = {_judgment_cell(row) for row in tables["human"]}
+        for method_id in policy["agent_methods"]:
+            _fail(all(_judgment_cell(row) not in human_cells for row in tables["agent-" + method_id]), "Agent row overlaps an effective human cell despite human_precedence policy")
     removed_ids = set()
     for removal in manifest["removed_records"]:
         _text(removal["record_id"], "Removed record ID")
@@ -786,7 +810,7 @@ def validate_snapshot(path: Path) -> dict:
         _fail(observation_key not in human_observation_ids, "Duplicate human observation identity")
         human_observation_ids.add(observation_key)
         if row["presence"] in {"present", "absent"}:
-            scope = (row["source_sha256"], row["start_ms"], row["end_ms"], row["tag_id"], row["playback_rate"])
+            scope = _judgment_cell(row)
             assessment = (row["presence"], row["salience"])
             _fail(scope not in supervised_scopes or supervised_scopes[scope] == assessment, "Same-scope contradictory human gold requires resolution before publication")
             supervised_scopes[scope] = assessment
