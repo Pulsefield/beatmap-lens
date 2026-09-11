@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import { watch } from "vue";
-import type { AssessmentV2, ClaimV2, FoundationTagV2 } from "./annotation/workflow/contracts";
+import type { AssessmentV2, ClaimV2, FoundationTagV2, HumanConfidenceV2 } from "./annotation/workflow/contracts";
 
 const props = withDefaults(defineProps<{
   claims: readonly ClaimV2[];
   tags: readonly FoundationTagV2[];
   disabled?: boolean;
   activeClaimId?: string;
+  confidences?: Readonly<Record<string, HumanConfidenceV2 | undefined>>;
 }>(), { disabled: false });
 const emit = defineEmits<{
   "update:claim": [claim: ClaimV2];
   select: [claimId: string];
+  "update:confidence": [claimId: string, confidence: HumanConfidenceV2];
 }>();
 
 // Native input and click can arrive before the controlled value renders again.
@@ -19,6 +21,11 @@ watch(() => props.claims, () => pendingAssessments.clear(), { flush: "sync" });
 
 function name(claim: ClaimV2): string {
   return props.tags.find((tag) => tag.id === claim.tagId)?.displayName ?? claim.tagId;
+}
+
+function shortName(claim: ClaimV2): string {
+  const full = name(claim);
+  return full === "LN coordination" ? "LN" : full.replace(/ organization$/, "");
 }
 
 function assessmentText(assessment: AssessmentV2): string {
@@ -55,6 +62,11 @@ function input(claim: ClaimV2, event: Event): void {
     : { presence: "present", salience: value === 1 ? "supporting" : "prominent" });
 }
 
+function confidenceInput(claim: ClaimV2, event: Event): void {
+  if (props.disabled || !isRated(claim.assessment)) return;
+  emit("update:confidence", claim.id, (event.target as HTMLInputElement).checked ? "high" : "low");
+}
+
 function keydown(claim: ClaimV2, event: KeyboardEvent): void {
   if (props.disabled) return;
   const control = event.target as HTMLInputElement;
@@ -75,6 +87,7 @@ function keydown(claim: ClaimV2, event: KeyboardEvent): void {
     <div class="slider-scale" aria-hidden="true">
       <span>Absent</span><span>Supporting</span><span>Prominent</span>
     </div>
+    <span v-if="confidences" class="confidence-heading">High</span>
     <div
       v-for="claim in claims"
       :key="claim.id"
@@ -89,7 +102,7 @@ function keydown(claim: ClaimV2, event: KeyboardEvent): void {
         :aria-pressed="claim.id === activeClaimId"
         @click="select(claim)"
       >
-        <strong>{{ name(claim) }}</strong>
+        <strong :title="name(claim)">{{ shortName(claim) }}</strong>
         <span>{{ assessmentText(claim.assessment) }}</span>
       </button>
       <input
@@ -113,13 +126,33 @@ function keydown(claim: ClaimV2, event: KeyboardEvent): void {
         :aria-pressed="claim.assessment.presence === 'unresolved'"
         @click="update(claim, { presence: 'unresolved' })"
       >Unresolved</button>
+      <label v-if="confidences" class="confidence-control">
+      <span class="confidence-accessible-label">High confidence</span>
+      <input
+        type="checkbox"
+        class="confidence-checkbox"
+        :aria-label="`${name(claim)} high confidence`"
+        :title="confidences[claim.id] === undefined ? 'Confidence not specified in this historical judgment' : confidences[claim.id] === 'high' ? 'High confidence' : 'Low confidence'"
+        :disabled="disabled || !isRated(claim.assessment)"
+        :checked="confidences[claim.id] === 'high'"
+        @change="confidenceInput(claim, $event)"
+      >
+      </label>
     </div>
   </fieldset>
 </template>
 
 <style scoped>
-.section-sliders { display: grid; grid-template-columns: 68px minmax(0, 1fr) 68px; column-gap: 8px; min-width: 0; margin: 0; padding: 0; border: 0; }
-.slider-scale { grid-column: 2; display: flex; justify-content: space-between; gap: 4px; padding: 0 2px 4px; color: var(--ink-secondary); font-size: 10px; }
+.section-sliders { display: grid; grid-template-columns: 68px minmax(0, 1fr) 68px; column-gap: 6px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.section-sliders:has(.confidence-heading) { grid-template-columns: 58px minmax(0, 1fr) 52px 40px; }
+.confidence-heading { grid-column: 4; font-size: 9px; color: var(--ink-secondary); align-self: center; text-align: center; }
+.confidence-control { display: grid; place-items: center; width: 40px; height: 40px; cursor: pointer; }
+.confidence-accessible-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.confidence-checkbox { appearance: none; width: 18px; height: 18px; margin: 0; border: 1px solid var(--ink-secondary); border-radius: 4px; background: var(--surface); cursor: pointer; }
+.confidence-checkbox:checked { border-color: var(--signal); background: var(--signal); }
+.confidence-checkbox:checked::after { content: ""; display: block; width: 5px; height: 9px; margin: 1px 0 0 5px; border: solid white; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.confidence-checkbox:disabled { opacity: .45; cursor: default; }
+.slider-scale { grid-column: 2; display: flex; justify-content: space-between; gap: 4px; padding: 0 2px 4px; color: var(--ink-secondary); font-size: 9px; }
 .slider-row { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: center; min-height: 48px; }
 button { min-width: 0; min-height: 40px; padding: 4px 0; border: 0; border-radius: 10px; background: transparent; color: var(--ink-secondary); font: inherit; cursor: pointer; }
 button:hover { color: var(--ink); background: var(--surface-quiet); }
@@ -130,7 +163,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--signal); ou
 .slider-label strong { color: var(--ink); font-size: 12px; font-weight: 650; }
 .slider-label span { font-size: 10px; }
 .active .slider-label strong { color: var(--signal); }
-.unresolved-button { font-size: 10px; }
+.unresolved-button { font-size: 9px; }
 .unresolved-button[aria-pressed="true"] { color: var(--ink); font-weight: 650; text-decoration: underline; text-underline-offset: 3px; }
 input[type="range"] { appearance: none; width: 100%; min-width: 0; height: 40px; margin: 0; padding: 0; border: 0; border-radius: 4px; background: transparent; cursor: pointer; }
 input[type="range"]::-webkit-slider-runnable-track { height: 3px; border-radius: 2px; background: var(--line); }

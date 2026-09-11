@@ -60,9 +60,11 @@ final milestone. Deterministic tests verify tools and workflow contracts; skill
 length checks do not verify annotation quality.
 
 Judgment-affecting skill, role, prompt, or evidence-tool updates must satisfy the
-annotation regression gate: designated critical cases remain correct, broader
-repeated comparisons expose regressions for review, and missing evidence is not a
-pass. Do not change gold or its baseline merely to make a candidate pass.
+annotation regression gate: automatically collect current High-confidence human
+labels from the canonical workspace, freeze one gold suite for both sides, and
+keep every selected cell correct across repeated candidate runs. Missing or stale
+gold/evidence is not a pass. Do not change human confidence, gold, or its baseline
+merely to make a candidate pass.
 
 Verify the actual human Review page after service or workflow migration. Describe
 the tested scope and any untested semantic coverage precisely.

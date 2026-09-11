@@ -248,6 +248,7 @@ describe("local Review service exchange", () => {
         disposition: "accepted",
         humanId: "expert",
         rationale: "Checked current evidence.",
+        confidence: "low",
       },
     });
     expect(accepted.status).toBe(200);
@@ -259,6 +260,7 @@ describe("local Review service exchange", () => {
         disposition: "modified",
         humanId: "expert",
         rationale: "Revised gold.",
+        confidence: "high",
         modifiedClaim: {
           ...f.claim,
           tagId: "streams",
@@ -283,9 +285,12 @@ describe("local Review service exchange", () => {
     const currentGold = (await get(service.url, `feedback/${f.sha}`)).effectiveHumanObservations;
     expect(currentGold).toHaveLength(1);
     expect(currentGold[0]).toMatchObject({
+      confidence: "high",
+      observationSha256: await hashWorkflowValueV2(correction.value.document.observations[1]),
       summary: { assessment: { presence: "absent" } },
       humanComment: "Revised gold.",
     });
+    expect(currentGold[0].summary).not.toHaveProperty("confidence");
     // A concurrent editor still must refresh before saving: trust is not a write lock.
     expect(
       (

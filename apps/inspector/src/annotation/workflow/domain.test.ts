@@ -29,6 +29,41 @@ import { createExperimentalFoundationV2 } from "./experimental-campaign";
 import { historicalAcceptance, NOW, workflowFixture } from "./test-fixtures";
 
 describe("V2 source-backed agent–human domain", () => {
+  it("preserves unspecified history and appends confidence-only direct revisions with new bindings", async () => {
+    const f = await workflowFixture();
+    const original = await addHumanObservationV2(
+      f.registered,
+      { humanId: "expert", id: "original", claim: f.claim },
+      f.sourceBytes,
+    );
+    const previous = original.observations[0];
+    if (!previous) throw new Error("Missing human observation.");
+    expect(previous).not.toHaveProperty("confidence");
+    const before = serializeCanonicalJson(original);
+    const revised = await addHumanObservationV2(
+      original,
+      {
+        humanId: "expert",
+        id: "confident",
+        claim: previous.claim,
+        supersedesObservationId: previous.id,
+        confidence: "high",
+      },
+      f.sourceBytes,
+    );
+    expect(serializeCanonicalJson(original)).toBe(before);
+    expect(revised.observations[0]).toEqual(previous);
+    const [effective] = effectiveHumanObservationsV2(revised);
+    expect(effective).toMatchObject({ confidence: "high", claim: previous.claim });
+    expect(effective?.claim).not.toHaveProperty("confidence");
+    expect(revised.reviewRevision).toBe(original.reviewRevision + 1);
+    expect(await baseForTaskV2(revised)).not.toEqual(await baseForTaskV2(original));
+    expect(await hashWorkflowValueV2(effective)).not.toEqual(
+      await hashWorkflowValueV2({ ...effective, confidence: "low" }),
+    );
+    await expect(assertReviewDocumentV2(revised, f.sourceBytes)).resolves.toEqual(revised);
+  });
+
   it("normalizes differing legacy cuts within one section identity but never combines distinct sections", async () => {
     const f = await workflowFixture();
     const proposals: ClaimV2[] = ["tech", "streams"].map((tagId, index) => ({
@@ -201,11 +236,13 @@ describe("V2 source-backed agent–human domain", () => {
             handoffId: f.handoff.handoffId,
             claimId: "streams-claim",
             disposition: "accepted",
+            confidence: "high",
           },
           {
             handoffId: f.handoff.handoffId,
             claimId: "speedjack-claim",
             disposition: "modified",
+            confidence: "low",
             modifiedClaim: {
               ...speedjack,
               assessment: { presence: "absent" },
@@ -218,6 +255,7 @@ describe("V2 source-backed agent–human domain", () => {
           tagId,
           assessment: { presence: "absent" },
         })),
+        confidences: { "direct-jumpstream": "low", "direct-longjack": "high" },
       },
       f.sourceBytes,
     );
@@ -227,6 +265,13 @@ describe("V2 source-backed agent–human domain", () => {
     expect(reviewed.decisions).toHaveLength(3);
     expect(reviewed.decisions[0]).toEqual(partiallyReviewed.decisions[0]);
     expect(reviewed.observations[0]).toEqual(partiallyReviewed.observations[0]);
+    expect(reviewed.observations.map((entry) => entry.confidence)).toEqual([
+      undefined,
+      "high",
+      "low",
+      "low",
+      "high",
+    ]);
     expect(effectiveHumanObservationsV2(reviewed)).toHaveLength(5);
     expect(reviewed.observations.slice(1).every((entry) => entry.confirmedAt === NOW)).toBe(true);
     expect(

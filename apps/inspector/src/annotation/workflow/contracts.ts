@@ -256,6 +256,8 @@ export interface HumanDecisionV2 {
   readonly observationId?: string;
 }
 
+export type HumanConfidenceV2 = "high" | "low";
+
 export interface HumanObservationV2 {
   readonly id: string;
   /** Explicit append-only revision of a direct human observation. */
@@ -264,6 +266,8 @@ export interface HumanObservationV2 {
   readonly foundationSha256: string;
   readonly humanId: string;
   readonly confirmedAt: string;
+  /** Explicit human confidence in this assessment; absent historical values are unspecified. */
+  readonly confidence?: HumanConfidenceV2;
   /** Absent in historical records: selection origin and dedicated review are unknown. */
   readonly evidenceReview?: EvidenceReviewV2;
   readonly origin:

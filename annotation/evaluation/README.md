@@ -1,101 +1,103 @@
 # Annotation regression gate
 
-The [2026-09-10 skill calibration report](../../docs/research/human-feedback-skill-tuning.md)
-records the adopted comparison, rejected iterations, and explicitly accepted
-noncritical limitations. Its supplemental feedback suite is separate from the
-unchanged protected corpus below.
+The active gate automatically protects **every current effective human observation
+whose confidence is explicitly `high`**. Historical observations without confidence
+are unspecified and excluded; `low` observations are excluded. The canonical Review
+workspace is the authority. A cached feedback export cannot establish current gold.
 
-The gate protects previously learned judgments when the judgment skill, labeler role,
-evidence tools, or selected-section execution inputs change. It does not certify
-whole-chart discovery or independent audit quality.
+The previous `cases.json`, `accepted-evidence.json`, `source-baseline.json`, and
+`feedback-tuning-20260910/` files retain their historical meanings. The
+[2026-09-10 calibration report](../../docs/research/human-feedback-skill-tuning.md)
+describes that earlier comparison. Static cases and accepted receipts are never a
+fallback for the active automatic selection.
 
-`cases.json` contains 28 exact human judgments across all five dimensions. Fourteen
-cells are protected: established pilot anchors and four explicit Trill corrections.
-Historical completed-output receipts identify formerly correct judgments where that
-evidence exists. The Trill corrections are newly protected and make no prior-success
-claim. Generic human confirmations establish a label, not the correctness of an
-earlier agent's explanation. These are development-exposed regression examples,
-not a held-out accuracy benchmark.
+## Selection and identity
 
-## Enforcement
+`read-current-human-feedback.mjs` uses the same `WorkflowDirectoryV2` and
+`effectiveHumanObservationsV2` as Inspector. It reads plain or packed canonical
+workflow documents without writing them and checks that the document inventory and
+bytes stayed unchanged during the snapshot. Revision resolution happens before
+confidence filtering: lowering or withdrawing a current observation removes its old
+High judgment even though append-only history remains on disk.
 
-Prepare the root project environment with `uv sync --locked`. Python commands use
-its `.venv` and locked dependencies:
+The generated suite pins canonical document revisions/hashes and all contributing
+observation IDs/hashes, Foundation hashes, and exact human scopes, rates, and review
+contexts. Source/scope/tag/playback-rate duplicates count once; omitted playback
+rate and explicit 1x identify the same cell. Equal independent judgments retain all
+human identities. Conflicting independent current High judgments fail explicitly.
+Tags sharing a source/scope/rate share a worker section; its bounded review context
+is the union of the contributing human contexts. Every gold cell is protected.
+
+Zero usable High gold fails explicitly. Missing campaign sources, unsupported High
+judgments, and incompatible High Foundation identities also fail; they are never
+silently omitted. Gold edits remain human decisions, never a way to make a candidate
+pass.
+
+## Freeze once, prepare both sides
+
+Install dependencies with `uv sync --locked` and the project pnpm environment. The
+canonical reader uses the installed Inspector/Vite runtime. Freeze the complete
+current pool **once for a baseline/candidate pair**:
 
 ```sh
-uv run --locked python annotation/evaluation/regression_gate.py check
-uv run --locked python -m unittest discover -s annotation/evaluation/tests -p 'test_regression_gate.py'
+uv run --locked python annotation/evaluation/run_regression.py freeze \
+  --workflow-dir /path/to/review-workspace \
+  --out /path/to/local-comparison/suite.json
 ```
 
-`pnpm check:regression` runs the first command separately from the engineering
-checks in `pnpm check`. Dataset publication validates the selected frozen snapshot
-under its own declared admission policy; this method comparator does not block
-human editing or an independently valid human-only release. An unchanged source
-snapshot passes without local datasets, model calls, or historical artifacts. A
-judgment change needs fresh baseline and candidate evidence. The command exits
-nonzero for missing or stale evidence, incomplete output, reused repeat workers,
-different model settings or source sections, any protected error, or an unreviewed
-broader regression. Foundation content and the source/example input pool must also
-match between sides; intentionally changed tool code and contrast policy remain
-part of the candidate being tested.
+`--workflow-dir` names the workspace root containing `workflow/`. The new suite has
+a unique comparison ID and cannot overwrite an existing suite. Keep it outside
+worker jobs. Both sides must use this exact file, even if human review continues
+while workers run. A changed canonical pool requires a new suite and both new sides
+before acceptance.
 
-Both sides need at least three independent repeats. Every protected cell must match
-its exact human assessment in every candidate repeat, even if a baseline repeat was
-also wrong. For other cells, every paired correct-to-wrong change is listed and needs
-a named accepted disposition with its reason. A higher aggregate score cannot hide
-these losses. A named review of source evidence and reasoning is also required;
-matching labels alone do not establish correct reasoning.
-
-When running this method evaluation in CI, set `ANNOTATION_REGRESSION_BASE` to the
-pull request base SHA or push's prior SHA and fetch that Git history. The checker
-computes sources from that tree, so editing
-`source-baseline.json` cannot erase a regression in the same change. A first push
-with an all-zero prior SHA uses the reviewed initial snapshot. The initial migration
-snapshot records unchanged annotation semantics, not a successful model replay.
-There is no reset or unconditional acceptance command. After a reviewed update,
-the source baseline may advance in the same commit as its accepted evidence; CI
-can still check that commit against its prior tree. The normal engineering CI
-does not invoke this method evaluation or claim that it passed.
-
-Direct auditor-role, discovery workflow, selected-workflow controller, Foundation,
-or corpus changes currently fail with explicit unsupported coverage. They need a
-corresponding replay adapter or a separately reviewed expansion of this gate before
-adoption. Shared judgment-guide and harness changes are covered by selected-section
-judgment replay; passing it makes no claim about unmeasured roles.
-
-## Preparing a comparison
-
-Use the adopted source checkout for one side and the candidate checkout for the
-other. Run the following from each checkout with different output directories:
+Run the current evaluator for both sides, selecting the adopted and candidate
+production checkouts with `--source-repo`. Use the same suite, campaign, example
+snapshot, and model settings, with distinct output roots:
 
 ```sh
 uv run --locked python annotation/evaluation/run_regression.py prepare \
   --root /path/to/local-comparison/baseline \
+  --source-repo /path/to/adopted-checkout \
+  --suite /path/to/local-comparison/suite.json \
   --campaign /path/to/campaign \
-  --feedback-dir /path/to/feedback
+  --feedback-dir /path/to/example-feedback
 ```
 
-Preparation uses the project Python environment and locally available campaign
-source files. It creates three repeats, with bounded jobs of up to five sections.
-The same production `prepare_job`, role, skill, and `common_prompt` build each job.
-The evaluation harness excludes every target source and its known song group from
-human-example retrieval. Target review records and earlier repair questions are
-absent from section inputs; gold stays with the controller. The skill contains its
-ordinary guidance, so this remains exposed regression testing. Source access outside
-the job is forbidden by worker instructions, not by an OS read sandbox.
+For the candidate, change `--root` to the candidate output directory and
+`--source-repo` to the candidate checkout. The selected checkout owns the production
+preparer, skill, roles, harness tools, and execution runtime. Its imports run in an
+isolated adapter process; candidate guidance is never copied into the baseline.
+This also works when the adopted checkout still has the historical static evaluator.
+The current common evaluator is fingerprinted separately and must be identical on
+both sides; production source fingerprints identify their respective checkouts.
+`run` automatically reuses the recorded source checkout and verifies its sources
+before launch. Keep both checkouts unchanged through preparation and execution.
 
-Preparation does not start workers. This command consumes model usage:
+Preparation makes three independent repeats through the actual production
+`prepare_job`, prompt, role, skill, runtime, and bounded section packing. Each job
+contains at most five sections with the production 28,000-character packing target;
+a single complete dense section may exceed that target, as in production. No source
+context is truncated to fit a budget. Preparation does not launch model workers.
+
+The evaluation harness excludes every target source and its known song group from
+human-example retrieval. Target gold, confidence, review records, and prior repair
+questions remain outside worker inputs. Calibration examples are removed from the
+worker Foundation. The frozen suite stays in the controller root; worker bindings
+contain only its opaque hash. Ordinary skill guidance remains visible, so this is
+exposed regression testing. Filesystem access outside the job is forbidden by the
+production instructions rather than an OS read sandbox.
+
+The following command consumes model usage; run it separately for each side:
 
 ```sh
 uv run --locked python annotation/evaluation/run_regression.py run \
   --root /path/to/local-comparison/baseline --concurrency 3
 ```
 
-Repeat preparation and execution for the candidate with the same model settings and
-source campaign. Existing production delivery is never called; evaluation outputs
-do not submit or replace human review records.
+Evaluation never invokes production delivery or changes canonical human records.
 
-## Reviewing and retaining results
+## Review and acceptance
 
 ```sh
 uv run --locked python annotation/evaluation/regression_gate.py compare \
@@ -104,35 +106,58 @@ uv run --locked python annotation/evaluation/regression_gate.py compare \
   --out /path/to/local-comparison/evidence.json
 ```
 
-This first comparison writes compact evidence and deliberately exits nonzero until
-reviewed. It validates completed runs with the existing section scorer, verifies
-frozen input and output hashes, and retains per-cell assessments and output receipts.
-The complete raw jobs can remain local; keeping the research execution history is
-not a publishing requirement.
+The first comparison writes v2 evidence embedding the frozen suite and exits nonzero
+until reviewed. It verifies frozen worker inputs, source/Foundation/harness bindings,
+completed output receipts, source sections and rates, independent producers, equal
+model settings, and at least three complete repeats on each side. Both sides must
+use the exact same suite and underlying source/example data. Every protected cell
+must match its exact human assessment in every candidate repeat, including cells
+where the baseline was wrong. Aggregate improvements cannot hide individual losses.
 
-Copy the generated evidence's `review` object to a review JSON file. Retain its
-`comparisonSha256`, fill in `reviewer` and `rationaleReview`, and add a disposition
-for each broader regression reported by the checker:
+Copy the generated `review` object into a review file, retaining its
+`comparisonSha256`, and fill in a named source-evidence and rationale review:
 
 ```json
 {
   "comparisonSha256": "copy from the generated evidence",
   "reviewer": "reviewer name",
-  "rationaleReview": "What source facts and explanations were checked, with remaining limits.",
-  "regressions": {
-    "probe-01:tech": {
-      "decision": "accept",
-      "reason": "The specific reason this observed regression is acceptable."
-    }
-  }
+  "rationaleReview": "Source facts and explanations checked, including remaining limits.",
+  "regressions": {}
 }
 ```
 
-Rerun `compare` with `--review /path/to/review.json` and write the reviewed compact
-artifact to `annotation/evaluation/accepted-evidence.json`. Then `check` verifies the
-artifact against the current source and corpus identities and recomputes its pass
-conditions. A review of earlier outputs cannot be silently applied to new outputs.
-For an exploratory comparison, use `check --evidence /path/to/evidence.json` instead.
+Run `compare` again with `--review /path/to/review.json`. A review of older outputs
+cannot be rebound to new receipts. Label agreement alone cannot pass, and a review
+disposition cannot override a protected failure. Check the reviewed evidence against
+both current annotation sources and the canonical human workspace:
 
-The older section and optional-harness benchmark commands remain useful for
-experiments. Their historical reports do not constitute current adoption evidence.
+```sh
+uv run --locked python annotation/evaluation/regression_gate.py check \
+  --evidence /path/to/local-comparison/evidence.json \
+  --workflow-dir /path/to/review-workspace
+```
+
+The check rebuilds the current canonical pool and compares it to the embedded frozen
+suite. Changed confidence, judgments, observation identity, document revision, or
+workspace inventory invalidates stale evidence. There is no default evidence file,
+static corpus fallback, reset, or unconditional acceptance command.
+
+An unchanged annotation source snapshot still passes without private datasets or
+model calls. `pnpm check:regression` is separate from engineering `pnpm check` and
+human dataset publication. A changed judgment source requires fresh evidence;
+missing evidence is not a pass. Set `ANNOTATION_REGRESSION_BASE` or `--base-ref` to
+the actual CI base commit and fetch that history. The checker computes sources from
+that tree, so replacing `source-baseline.json` cannot erase a change in the same
+commit. An all-zero first-push base uses the historical initial source snapshot.
+
+This gate covers selected-section labeler behavior, not whole-chart discovery or
+independent audit quality. Direct auditor, discovery, selected-workflow controller,
+and Foundation changes still fail with explicit unsupported coverage until their
+own replay adapters exist. Historical experimental benchmark reports do not approve
+current changes.
+
+Deterministic verification (no model calls):
+
+```sh
+uv run --locked python -m unittest discover -s annotation/evaluation/tests
+```

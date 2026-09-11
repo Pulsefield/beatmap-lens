@@ -5,27 +5,32 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import regression_gate as gate
 
 
 def fixture():
-    suite = {'cases': [
+    suite = {'kind': gate.human_gold.KIND, 'comparisonId': 'paired-fixture', 'cases': [
         {'caseId': 'protected', 'critical': True, 'gold': {'tech': {'presence': 'absent'}}},
-        {'caseId': 'broad', 'critical': False,
+        {'caseId': 'broad', 'critical': True,
          'gold': {'trill-organization': {'presence': 'present', 'salience': 'supporting'}}},
     ]}
-    baseline = {'files': {role: {} for role in gate.SOURCES}, 'suiteSha256': gate.digest(suite)}
+    for index, case in enumerate(suite['cases']):
+        case.update(sourceSha256='source-sha', scope={'startMs': index * 100, 'endMs': (index + 1) * 100},
+                    reviewContext={'startMs': 0, 'endMs': 200})
+    baseline = {'files': {role: {} for role in gate.SOURCES}}
     candidate = copy.deepcopy(baseline)
     candidate['files']['labeler'] = {'annotation/roles/harness-labeler.md': 'new'}
-    result = {'kind': 'annotation-regression-evidence-v1', 'baseline': baseline, 'candidate': candidate,
-              'suiteSha256': gate.digest(suite), 'runs': {}}
+    result = {'kind': 'annotation-regression-evidence-v2', 'baseline': baseline, 'candidate': candidate,
+              'suite': suite, 'suiteSha256': gate.digest(suite), 'evaluationAdapter': gate.adapter_snapshot(), 'runs': {}}
     for side, source in [('baseline', baseline), ('candidate', candidate)]:
         result['runs'][side] = [
             {'status': 'completed', 'mechanicalErrors': [], 'sourceSha256': gate.digest(source),
              'producerIds': [f'{side}-{i}'], 'responseSha256': f'response-{side}-{i}',
-             'casesSha256': 'same-source-notes', 'model': 'test-model', 'reasoningEffort': 'high',
+             'suiteSha256': gate.digest(suite), 'casesSha256': 'same-source-notes', 'model': 'test-model', 'reasoningEffort': 'high',
+             'evaluationAdapterSha256': gate.digest(result['evaluationAdapter']),
              'evaluationDataSha256': 'same-foundation-and-example-inputs',
              'cells': [{'caseId': c['caseId'], 'tagId': tag, 'predicted': copy.deepcopy(gold)}
                        for c in suite['cases'] for tag, gold in c['gold'].items()]}
@@ -60,13 +65,13 @@ class RegressionGateTests(unittest.TestCase):
         self.assertFalse(result['passed'])
         self.assertTrue(any('protected case failed' in e for e in result['errors']))
 
-    def test_broader_paired_loss_requires_explicit_review_even_when_aggregate_ties(self):
+    def test_every_high_cell_is_protected_even_when_aggregate_ties(self):
         self.evidence['runs']['baseline'][0]['cells'][1]['predicted'] = {'presence': 'absent'}
         self.evidence['runs']['candidate'][1]['cells'][1]['predicted'] = {'presence': 'absent'}
         self.assertFalse(self.compare()['passed'])
         self.evidence['review']['regressions']['broad:trill-organization'] = {
             'decision': 'accept', 'reason': 'Reviewed repeat 2 against repeat 1: same overall count, localized uncertainty.'}
-        self.assertTrue(self.compare()['passed'])
+        self.assertFalse(self.compare()['passed'])
 
     def test_missing_or_reused_repeats_fail(self):
         self.evidence['runs']['candidate'].pop()
@@ -104,6 +109,10 @@ class RegressionGateTests(unittest.TestCase):
     def test_repeat_source_binding_and_source_notes_are_checked(self):
         self.evidence['runs']['candidate'][0]['sourceSha256'] = 'old-source'
         self.assertFalse(self.compare()['passed'])
+
+    def test_different_shared_evaluation_adapter_cannot_pass(self):
+        self.evidence['runs']['candidate'][0]['evaluationAdapterSha256'] = 'another-adapter'
+        self.assertFalse(self.compare()['passed'])
         self.setUp()
         self.evidence['runs']['candidate'][0]['casesSha256'] = 'different-notes'
         self.assertFalse(self.compare()['passed'])
@@ -138,6 +147,34 @@ class RegressionGateTests(unittest.TestCase):
             self.assertTrue(gate.check(repo)['passed'])
             role.write_text('Changed judgment instructions.\n')
             self.assertFalse(gate.check(repo)['passed'])
+
+    def test_static_accepted_evidence_is_never_an_implicit_fallback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo, role = self.repository(directory)
+            role.write_text('Changed judgment instructions.\n')
+            gate.save(repo / gate.EVIDENCE, self.evidence)
+            result = gate.check(repo)
+            self.assertFalse(result['passed'])
+            self.assertIn('explicit --evidence', result['errors'][0])
+            result = gate.check(repo, evidence_path=repo / gate.EVIDENCE)
+            self.assertFalse(result['passed'])
+            self.assertIn('--workflow-dir', result['errors'][0])
+
+    def test_explicit_evidence_checks_current_gold_even_if_sources_are_unchanged(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo, _ = self.repository(directory)
+            gate.save(repo / 'evidence.json', self.evidence)
+            with patch.object(gate.human_gold, 'require_current',
+                              side_effect=ValueError('Frozen gold differs from current canonical observations')) as current:
+                with self.assertRaisesRegex(ValueError, 'current canonical'):
+                    gate.check(repo, evidence_path=repo / 'evidence.json', workflow_dir='canonical-workspace')
+                current.assert_called_once_with(self.suite, 'canonical-workspace')
+
+    def test_static_suite_edits_do_not_change_active_gold_selection(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo, _ = self.repository(directory)
+            gate.save(repo / gate.SUITE, {'cases': ['historical amendment']})
+            self.assertTrue(gate.check(repo)['passed'])
 
     def test_direct_auditor_change_is_explicitly_uncovered(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -194,18 +231,20 @@ class RegressionGateTests(unittest.TestCase):
         suite = copy.deepcopy(self.suite)
         source_cases = []
         for case in suite['cases']:
-            case.update(sourceSha256='source-sha', scope={'startMs': 0, 'endMs': 100},
-                        reviewContext={'startMs': 0, 'endMs': 200})
+            case.update(sourceSha256='source-sha', reviewContext={'startMs': 0, 'endMs': 200})
             if playback_rate is not None:
                 case['playbackRate'] = playback_rate
             source_cases.append({**{k: case[k] for k in ('caseId', 'sourceSha256', 'scope', 'reviewContext')},
                                  **({'playbackRate': playback_rate} if playback_rate is not None else {}),
                                  'notes': [{'source_line': 10, 'column': 0, 'kind': 'tap',
-                                            'start_ms': 50, 'end_ms': 50}]})
+                                            'start_ms': case['scope']['startMs'] + 50, 'end_ms': case['scope']['startMs'] + 50}]})
         gate.save(root / 'harness/manifest.json', {'mode': 'evaluation'})
         sources = {'files': {}, 'suiteSha256': gate.digest(suite)}
-        binding = {'sourceSha256': gate.digest(sources),
+        binding = {'sourceSha256': gate.digest(sources), 'suiteSha256': gate.digest(suite),
+                   'evaluationAdapterSha256': gate.digest(gate.adapter_snapshot()),
                    'harnessManifestSha256': gate.sha(root / 'harness/manifest.json'),
+                   'harness': {'bundle': str(root / 'harness'), 'python': sys.executable,
+                               'manifestSha256': gate.sha(root / 'harness/manifest.json')},
                    'evaluationDataSha256': 'fixture-data',
                    'foundationSha256': gate.hashlib.sha256(b'{}').hexdigest()}
         job = root / 'repeats/01/runs/labeler-001'
@@ -222,10 +261,13 @@ class RegressionGateTests(unittest.TestCase):
         hashes = {str(p.relative_to(job)): gate.sha(p) for p in job.iterdir()}
         gate.save(job / 'response.json', response)
         gate.save(job / 'run.json', {'status': 'completed', 'exitCode': 0, 'inputHashes': hashes,
+                                    'inputsUnchanged': True, 'harness': binding['harness'],
                                     'responseSha256': gate.sha(job / 'response.json'), 'producerId': 'capture-fixture',
                                     'requestedModel': 'test', 'requestedReasoningEffort': 'high',
                                     'usage': {}, 'elapsedSeconds': 1})
+        gate.save(root / 'gold-suite.json', suite)
         gate.save(root / 'regression.json', {'suiteSha256': gate.digest(suite), 'sources': sources,
+                                            'evaluationAdapter': gate.adapter_snapshot(),
                                             'binding': binding, 'harnessFiles': {},
                                             'repeats': [{'jobs': [str(job.relative_to(root))]}]})
         return root, job, suite
@@ -248,6 +290,19 @@ class RegressionGateTests(unittest.TestCase):
             gate.save(root / 'regression.json', preparation)
             with self.assertRaisesRegex(ValueError, 'source identity differs'):
                 gate.capture(root, suite)
+
+    def test_capture_rejects_different_executed_harness_and_changed_during_run_inputs(self):
+        for change in ('bundle', 'manifestSha256', 'python', 'inputsUnchanged'):
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as directory:
+                root, job, suite = self.completed_capture(directory)
+                run = gate.read(job / 'run.json')
+                if change == 'inputsUnchanged':
+                    run[change] = False
+                else:
+                    run['harness'][change] = 'another-runtime-or-bundle'
+                gate.save(job / 'run.json', run)
+                with self.assertRaisesRegex(ValueError, 'runtime harness differs|inputs changed during execution'):
+                    gate.capture(root, suite)
 
     def test_capture_requires_worker_and_gold_playback_rates_to_match(self):
         with tempfile.TemporaryDirectory() as directory:

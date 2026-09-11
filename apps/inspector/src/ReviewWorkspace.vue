@@ -14,7 +14,7 @@ import { IndexedDbSessionStore, type SessionPreferences } from "./annotation/ses
 import { type InspectedOsuSourceV1, inspectOsuSourceV1 } from "./annotation/source-identity";
 import { createStableNoteRefV1, stableNoteRefKey } from "./annotation/stable-note-ref";
 import { fitTimelineViewRange, timelineZoomAnchorMs, zoomTimelineViewRangeAtTime } from "./annotation/timeline-view-range";
-import type { AgentReviewV2, ClaimV2, CommunityAlignmentV2, EvidenceReviewV2, FoundationTagV2, FoundationV2, HumanObservationV2, ReviewBaseV2, TaskPacketV2 } from "./annotation/workflow/contracts";
+import type { AgentReviewV2, ClaimV2, CommunityAlignmentV2, EvidenceReviewV2, FoundationTagV2, FoundationV2, HumanConfidenceV2, HumanObservationV2, ReviewBaseV2, TaskPacketV2 } from "./annotation/workflow/contracts";
 import { type StoredReviewV2, WorkflowDirectoryV2 } from "./annotation/workflow/directory";
 import { assertTaskPacketV2, effectiveHumanObservationsV2, handoffBaseStatusV2, readAgentReviewsV2, readDispositionsV2, sameBase } from "./annotation/workflow/domain";
 import { inheritedHumanEvidenceReview, newEvidenceReview, recordEvidenceOperation, updateEvidenceDraft } from "./annotation/workflow/evidence-review";
@@ -57,6 +57,8 @@ const drafts = ref<readonly ClaimV2[]>([]);
 const activeClaimId = ref("");
 const evidenceReviews = ref<Record<string, EvidenceReviewV2>>({});
 const savedEvidenceReviews = shallowRef<Record<string, EvidenceReviewV2>>({});
+const confidences = ref<Record<string, HumanConfidenceV2 | undefined>>({});
+const savedConfidences = shallowRef<Record<string, HumanConfidenceV2 | undefined>>({});
 const activeEvidenceReview = computed(() => evidenceReviews.value[activeClaimId.value] ?? newEvidenceReview("unknown"));
 const evidenceOriginLabel: Record<EvidenceReviewV2["selectionOrigin"], string> = {
   "inherited-agent": "Agent proposal", "inherited-human": "Previous human observation", "new-human": "New human section",
@@ -81,6 +83,7 @@ const selectionAnchor = ref<number>();
 const gestureClaim = shallowRef<ClaimV2>();
 const gestureDrafts = shallowRef<readonly ClaimV2[]>();
 const gestureEvidenceReviews = shallowRef<Record<string, EvidenceReviewV2>>();
+const gestureConfidences = shallowRef<Record<string, HumanConfidenceV2 | undefined>>();
 const gestureEdge = ref("select");
 const notePage = ref(0);
 const restoring = ref(false);
@@ -310,6 +313,8 @@ function createRateJudgment(): void {
   }));
   evidenceReviews.value = Object.fromEntries(drafts.value.map(claim => [claim.id, newEvidenceReview("copied-section", { sourceClaimId: copiedClaims.find(source => source.tagId === claim.tagId)?.id ?? original.id })]));
   savedEvidenceReviews.value = {};
+  confidences.value = Object.fromEntries(drafts.value.map(claim => [claim.id, "low"]));
+  savedConfidences.value = {};
   activeClaimId.value = drafts.value.find(claim => claim.tagId === original.tagId)?.id ?? "";
   editorOrigin.value = "direct";
   activeObservationId.value = "";
@@ -400,7 +405,7 @@ function draftKey(kind = editorOrigin.value === "proposal" && activeClaim.value 
 function stashDraft(): void {
   if (restoring.value || !source.value || !drafts.value.length || !["direct", "proposal"].includes(editorOrigin.value)) return;
   localStorage.setItem(draftKey(), serializeCanonicalJson({
-    drafts: drafts.value, evidenceReviews: evidenceReviews.value, savedEvidenceReviews: savedEvidenceReviews.value, activeClaimId: activeClaimId.value, editorOrigin: editorOrigin.value,
+    drafts: drafts.value, evidenceReviews: evidenceReviews.value, savedEvidenceReviews: savedEvidenceReviews.value, confidences: confidences.value, savedConfidences: savedConfidences.value, activeClaimId: activeClaimId.value, editorOrigin: editorOrigin.value,
     activeHandoffId: activeHandoffId.value, decisionNote: decisionNote.value, base: editorBase.value, reviewRevision: editorReviewRevision.value, proposalEditing: proposalEditing.value,
   }));
 }
@@ -414,6 +419,8 @@ function restoreSection(): void {
   drafts.value = saved.drafts;
   evidenceReviews.value = saved.evidenceReviews ?? Object.fromEntries(drafts.value.map(claim => [claim.id, newEvidenceReview("unknown")]));
   savedEvidenceReviews.value = {};
+  confidences.value = saved.confidences ?? Object.fromEntries(drafts.value.map(claim => [claim.id, "low"]));
+  savedConfidences.value = {};
   activeClaimId.value = saved.activeClaimId;
   editorOrigin.value = "direct";
   activeObservationId.value = "";
@@ -475,7 +482,7 @@ function openRequestedClaim(): void {
 }
 
 watch(humanId, value => localStorage.setItem("beatmap-lens-review-human", value));
-watch([drafts, evidenceReviews, activeClaimId, editorOrigin, activeHandoffId, decisionNote], stashDraft, { deep: true, flush: "post" });
+watch([drafts, evidenceReviews, confidences, activeClaimId, editorOrigin, activeHandoffId, decisionNote], stashDraft, { deep: true, flush: "post" });
 watch(activeClaimId, () => {
   notePage.value = 0;
   if (editorOrigin.value === "observation" && !historicalObservation.value) activeObservationId.value = sectionObservationIds.value[activeClaimId.value] ?? "";
@@ -648,6 +655,8 @@ function newSection(): void {
   }));
   evidenceReviews.value = Object.fromEntries(drafts.value.map(claim => [claim.id, newEvidenceReview("new-human")]));
   savedEvidenceReviews.value = {};
+  confidences.value = Object.fromEntries(drafts.value.map(claim => [claim.id, "low"]));
+  savedConfidences.value = {};
   activeClaimId.value = drafts.value[0]?.id ?? "";
   editorOrigin.value = "direct";
   activeObservationId.value = "";
@@ -681,6 +690,12 @@ function atSectionRange(claim: ClaimV2, scope: TimeRangeV1, reviewContext: TimeR
   };
 }
 
+function sameLabelJudgment(left: ClaimV2, right: ClaimV2): boolean {
+  return serializeCanonicalJson(left.assessment) === serializeCanonicalJson(right.assessment)
+    && serializeCanonicalJson(left.scope) === serializeCanonicalJson(right.scope)
+    && left.tagId === right.tagId && resolvePlaybackRate(left.playbackRate) === resolvePlaybackRate(right.playbackRate);
+}
+
 function updateClaim(claim: ClaimV2): void {
   if (!canEdit.value) return;
   playback?.pause();
@@ -688,17 +703,30 @@ function updateClaim(claim: ClaimV2): void {
   const rangeChanged = previous && (serializeCanonicalJson(previous.scope) !== serializeCanonicalJson(claim.scope)
     || serializeCanonicalJson(previous.reviewContext) !== serializeCanonicalJson(claim.reviewContext));
   const reviews = { ...evidenceReviews.value };
+  const confidenceDraft = { ...confidences.value };
   drafts.value = drafts.value.map(current => {
     const candidate = current.id === claim.id ? claim : current;
     const next = rangeChanged ? atSectionRange(candidate, claim.scope, claim.reviewContext) : candidate;
     let review = reviews[current.id] ?? newEvidenceReview("unknown");
     if (rangeChanged) review = recordEvidenceOperation(review, { kind: "range-filter", target: "both" });
     const updated = updateEvidenceDraft(current, next, review);
+    if (!sameLabelJudgment(current, next)) confidenceDraft[current.id] = "low";
     reviews[current.id] = updated.review;
     return updated.claim;
   });
   evidenceReviews.value = reviews;
+  confidences.value = confidenceDraft;
   sectionComplete.value = false;
+}
+
+function updateConfidence(claimId: string, confidence: HumanConfidenceV2): void {
+  if (!canEdit.value || !drafts.value.some(claim => claim.id === claimId && settled(claim))) return;
+  confidences.value = { ...confidences.value, [claimId]: confidence };
+  sectionComplete.value = false;
+}
+
+function confidenceLabel(confidence: HumanConfidenceV2 | undefined): string {
+  return confidence === "high" ? "High confidence" : confidence === "low" ? "Low confidence" : "Confidence not specified";
 }
 
 function updateEditorClaim(claim: ClaimV2): void {
@@ -766,6 +794,17 @@ function openProposal(handoffId: string, claim: ClaimV2, keepViewport = false): 
   }));
   evidenceReviews.value = currentDraft ? currentDraft.evidenceReviews ?? Object.fromEntries(current.map(entry => [entry.id, newEvidenceReview("unknown")])) : initialReviews;
   savedEvidenceReviews.value = currentDraft ? currentDraft.savedEvidenceReviews ?? evidenceReviews.value : initialReviews;
+  const humanForClaim = (entry: ClaimV2) => additions.find(observation => observation.claim.id === entry.id) ?? observations.find(observation => observation.claim.id === entry.id && observation.origin.kind === "agent-proposal" && observation.origin.handoffId === handoffId);
+  const persistedConfidences = Object.fromEntries(current.map(entry => {
+    const human = humanForClaim(entry);
+    return [entry.id, human ? human.confidence : "low"];
+  }));
+  const initialConfidences = Object.fromEntries(drafts.value.map(entry => {
+    const human = humanForClaim(entry);
+    return [entry.id, human && sameLabelJudgment(human.claim, entry) ? human.confidence : "low"];
+  }));
+  confidences.value = currentDraft?.confidences ?? initialConfidences;
+  savedConfidences.value = currentDraft?.savedConfidences ?? persistedConfidences;
   savedSectionDrafts.value = current;
   activeClaimId.value = drafts.value.find(entry => entry.tagId === claim.tagId)?.id ?? drafts.value[0]?.id ?? "";
   activeHandoffId.value = handoffId;
@@ -812,6 +851,11 @@ function openObservation(observation: HumanObservationV2): void {
     return [claim.id, prior ? inheritedHumanEvidenceReview(prior) : newEvidenceReview("copied-section", { sourceClaimId: current.claim.id })];
   }));
   savedEvidenceReviews.value = { ...evidenceReviews.value };
+  confidences.value = Object.fromEntries(drafts.value.map(claim => {
+    const prior = siblings.find(entry => entry.claim.id === claim.id);
+    return [claim.id, prior ? prior.confidence : "low"];
+  }));
+  savedConfidences.value = { ...confidences.value };
   savedSectionDrafts.value = JSON.parse(serializeCanonicalJson(drafts.value));
   sectionObservationIds.value = Object.fromEntries(siblings.map(entry => [entry.claim.id, entry.id]));
   activeObservationId.value = current.id;
@@ -831,6 +875,7 @@ function openHistoricalObservation(observation: HumanObservationV2 | undefined):
   historicalObservation.value = observation;
   drafts.value = [JSON.parse(serializeCanonicalJson(observation.claim))];
   evidenceReviews.value = { [observation.claim.id]: observation.evidenceReview ?? newEvidenceReview("unknown") };
+  confidences.value = { [observation.claim.id]: observation.confidence };
   activeClaimId.value = observation.claim.id;
   activeObservationId.value = observation.id;
   activeHandoffId.value = "";
@@ -883,13 +928,16 @@ function beginRange(anchorMs: number, kind = "select"): void {
   gestureClaim.value = activeClaim.value;
   gestureDrafts.value = drafts.value;
   gestureEvidenceReviews.value = evidenceReviews.value;
+  gestureConfidences.value = confidences.value;
   gestureEdge.value = kind;
 }
 
 function cancelRange(): void {
   if (gestureDrafts.value) drafts.value = gestureDrafts.value;
   if (gestureEvidenceReviews.value) evidenceReviews.value = gestureEvidenceReviews.value;
+  if (gestureConfidences.value) confidences.value = gestureConfidences.value;
   gestureEvidenceReviews.value = undefined;
+  gestureConfidences.value = undefined;
   gestureClaim.value = undefined;
   gestureDrafts.value = undefined;
   selectionAnchor.value = undefined;
@@ -925,12 +973,14 @@ async function submitSection(proposal: boolean): Promise<void> {
   const key = proposal || editorOrigin.value === "direct" ? draftKey() : undefined;
   const snapshot = JSON.parse(serializeCanonicalJson(drafts.value)) as ClaimV2[];
   const reviewSnapshot = JSON.parse(serializeCanonicalJson(evidenceReviews.value)) as Record<string, EvidenceReviewV2>;
+  const confidenceSnapshot = { ...confidences.value };
   const reviewChanged = (claimId: string) => serializeCanonicalJson(reviewSnapshot[claimId]) !== serializeCanonicalJson(savedEvidenceReviews.value[claimId]);
+  const confidenceChanged = (claimId: string) => confidenceSnapshot[claimId] !== savedConfidences.value[claimId];
   const storedBefore = stored.value;
   const sameClaim = (left: ClaimV2, right: ClaimV2) => serializeCanonicalJson(left) === serializeCanonicalJson(right);
   const observations = snapshot.filter(claim => claim.assessment.presence !== "unreviewed"
     && (!proposal || !sectionProposals.value.some(original => original.id === claim.id))
-    && (!sectionObservationIds.value[claim.id] || !savedSectionDrafts.value.some(saved => saved.id === claim.id && sameClaim(saved, claim) && !reviewChanged(claim.id))));
+    && (!sectionObservationIds.value[claim.id] || !savedSectionDrafts.value.some(saved => saved.id === claim.id && sameClaim(saved, claim) && !reviewChanged(claim.id) && !confidenceChanged(claim.id))));
   const supersedesObservationIds = Object.fromEntries(observations.flatMap(claim => {
     const priorId = sectionObservationIds.value[claim.id];
     return priorId ? [[claim.id, priorId]] : [];
@@ -940,11 +990,14 @@ async function submitSection(proposal: boolean): Promise<void> {
     if (!original) return [];
     const prior = storedBefore.document.decisions.filter(entry => entry.handoffId === handoffId && entry.claimId === claim.id).at(-1);
     const previous = storedBefore.document.observations.find(entry => entry.id === prior?.observationId)?.claim;
-    if (previous && sameClaim(previous, claim) && !reviewChanged(claim.id)) return [];
+    if (previous && sameClaim(previous, claim) && !reviewChanged(claim.id) && !confidenceChanged(claim.id)) return [];
     const accepted = sameClaim(original, claim) && activeTrust.value?.foundation !== "changed";
+    const confidence = confidenceSnapshot[claim.id];
+    const confidenceOnly = previous && sameClaim(previous, claim) && !reviewChanged(claim.id) && confidenceChanged(claim.id);
     return [{ handoffId, claimId: claim.id, disposition: accepted ? "accepted" as const : "modified" as const,
       evidenceReview: reviewSnapshot[claim.id] ?? newEvidenceReview("unknown"),
-      rationale: decisionNote.value.trim() || (accepted ? "Human confirmed the original proposal." : "Human revised the section assessments."),
+      ...(confidence ? { confidence } : {}),
+      rationale: decisionNote.value.trim() || (confidenceOnly ? "Human updated label confidence." : accepted ? "Human confirmed the original proposal." : "Human revised the section assessments."),
       ...(!accepted ? { modifiedClaim: claim } : {}) }];
   }) : [];
   if (!observations.length && !decisions.length) { status.value = "All section judgments are already saved."; return; }
@@ -952,7 +1005,7 @@ async function submitSection(proposal: boolean): Promise<void> {
   savingDecision.value = { sourceSha, handoffId, claimId: anchorId };
   error.value = "";
   try {
-    const input = { humanId: humanId.value, evidenceReviews: Object.fromEntries(observations.map(claim => [claim.id, reviewSnapshot[claim.id] ?? newEvidenceReview("unknown")])), ...(Object.keys(supersedesObservationIds).length ? { supersedesObservationIds } : {}) };
+    const input = { humanId: humanId.value, confidences: Object.fromEntries(observations.flatMap(claim => confidenceSnapshot[claim.id] ? [[claim.id, confidenceSnapshot[claim.id] as HumanConfidenceV2]] : [])), evidenceReviews: Object.fromEntries(observations.map(claim => [claim.id, reviewSnapshot[claim.id] ?? newEvidenceReview("unknown")])), ...(Object.keys(supersedesObservationIds).length ? { supersedesObservationIds } : {}) };
     const saved = proposal
       ? await directory.value.decideSection(sourceBytes.value, storedBefore.version, { ...input, decisions, observations })
       : await directory.value.addObservations(sourceBytes.value, storedBefore.version, { ...input, claims: observations });
@@ -968,8 +1021,9 @@ async function submitSection(proposal: boolean): Promise<void> {
           }
           return effectiveDirect.find(entry => entry.claim.id === claim.id)?.claim ?? claim;
         });
-        const unchangedDuringSave = sameClaimList(snapshot, drafts.value) && serializeCanonicalJson(reviewSnapshot) === serializeCanonicalJson(evidenceReviews.value);
+        const unchangedDuringSave = sameClaimList(snapshot, drafts.value) && serializeCanonicalJson(reviewSnapshot) === serializeCanonicalJson(evidenceReviews.value) && serializeCanonicalJson(confidenceSnapshot) === serializeCanonicalJson(confidences.value);
         savedEvidenceReviews.value = reviewSnapshot;
+        savedConfidences.value = confidenceSnapshot;
         if (unchangedDuringSave) drafts.value = JSON.parse(serializeCanonicalJson(savedClaims));
         savedSectionDrafts.value = JSON.parse(serializeCanonicalJson(savedClaims));
         const direct = effectiveHumanObservationsV2(saved.document).filter(entry => entry.origin.kind === "direct-human" && drafts.value.some(claim => claim.id === entry.claim.id));
@@ -1194,7 +1248,8 @@ onBeforeUnmount(() => { window.removeEventListener("keydown", workspaceKeydown);
           </section>
           <section class="review-section review-proposed-judgment">
             <header class="review-claim-heading"><h2>Section judgments</h2><span class="review-kicker">{{ (activeClaim.scope.startMs / 1000).toFixed(3) }}–{{ (activeClaim.scope.endMs / 1000).toFixed(3) }} s</span></header>
-            <WorkflowSectionSliders :claims="drafts" :tags="activeFoundation.tags" :disabled="!canEdit" :active-claim-id="activeClaimId" @update:claim="updateSectionAssessment" @select="activeClaimId = $event" />
+            <WorkflowSectionSliders :claims="drafts" :tags="activeFoundation.tags" :disabled="!canEdit" :active-claim-id="activeClaimId" :confidences="confidences" @update:claim="updateSectionAssessment" @update:confidence="updateConfidence" @select="activeClaimId = $event" />
+            <p class="review-copy">Check High when confident in that label, independently of its strength. New judgments start Low; historical unrecorded confidence stays unspecified until edited.</p>
             <p v-if="drafts.some(claim => claim.assessment.presence === 'unreviewed')" class="review-copy">Unreviewed dimensions have no judgment yet.</p>
             <div class="review-actions"><button type="button" @click="focus(activeClaim.scope)">View claim range</button><button type="button" @click="focus(activeClaim.reviewContext)">View context</button></div>
           </section>
@@ -1204,9 +1259,9 @@ onBeforeUnmount(() => { window.removeEventListener("keydown", workspaceKeydown);
           </details>
           <button v-if="!historicalObservation && (editorOrigin === 'direct' || editorOrigin === 'observation')" class="review-primary" type="button" :disabled="busy || !!savingDecision || sourceLoading || !stored || !approved || !humanId.trim() || draftIsStale || !claimRateMatchesPlayback" @click="saveSection">{{ editorOrigin === 'observation' ? 'Save revised section' : 'Save section judgments' }}</button>
           <section v-if="historicalObservation" class="review-historical-observation"><h2>Historical human judgment</h2><p>{{ historicalObservation.confirmedAt }} · earlier version</p><button type="button" @click="openObservation(historicalObservation)">View current judgment</button><button type="button" @click="reviseFromHistoricalObservation">Revise current judgment using this version</button></section>
-          <details v-if="editorOrigin === 'observation' && observationHistory.length" class="review-observation-history"><summary>Human observation history · {{ observationHistory.length }}</summary><p v-for="entry in observationHistory" :key="entry.id">{{ assessmentLabel(entry.claim) }} · {{ entry.confirmedAt }}<br>{{ entry.claim.scope.startMs }}–{{ entry.claim.scope.endMs }} ms · {{ resolvePlaybackRate(entry.claim.playbackRate) }}×<button type="button" @click="openHistoricalObservation(entry)">View this version</button></p></details>
+          <details v-if="editorOrigin === 'observation' && observationHistory.length" class="review-observation-history"><summary>Human observation history · {{ observationHistory.length }}</summary><p v-for="entry in observationHistory" :key="entry.id">{{ assessmentLabel(entry.claim) }} · {{ confidenceLabel(entry.confidence) }} · {{ entry.confirmedAt }}<br>{{ entry.claim.scope.startMs }}–{{ entry.claim.scope.endMs }} ms · {{ resolvePlaybackRate(entry.claim.playbackRate) }}×<button type="button" @click="openHistoricalObservation(entry)">View this version</button></p></details>
           <template v-if="editorOrigin === 'proposal'">
-            <section v-if="finalDecision" class="review-human-result"><h2>Human judgment · {{ finalDecision.disposition }}</h2><template v-if="finalObservation"><p>{{ finalObservation.claim.tagId }} · {{ assessmentLabel(finalObservation.claim) }}</p><button type="button" @click="openObservation(finalObservation)">View saved human judgment</button></template><p v-if="finalDecision.rationale">{{ finalDecision.rationale }}</p></section>
+            <section v-if="finalDecision" class="review-human-result"><h2>Human judgment · {{ finalDecision.disposition }}</h2><template v-if="finalObservation"><p>{{ finalObservation.claim.tagId }} · {{ assessmentLabel(finalObservation.claim) }} · {{ confidenceLabel(finalObservation.confidence) }}</p><button type="button" @click="openObservation(finalObservation)">View saved human judgment</button></template><p v-if="finalDecision.rationale">{{ finalDecision.rationale }}</p></section>
             <p v-if="uncertainAcceptance" class="review-copy">This historical acceptance kept {{ finalObservation?.claim.assessment.presence }}. It did not decide whether this pattern is present.</p>
             <p v-if="laterClarification" class="review-copy">Later direct human judgment: {{ assessmentLabel(laterClarification.claim) }} · {{ laterClarification.confirmedAt }}.<button type="button" @click="openObservation(laterClarification)">View human clarification</button></p>
             <p v-if="!sectionReady" class="review-copy">Assess every dimension before submitting this section. Unresolved proposals need an explicit judgment.</p>

@@ -164,6 +164,39 @@ class SnapshotTests(unittest.TestCase):
         self.assertNotIn("source_status", rows[0])
         self.assertEqual(validate_snapshot(path)["human_overlap_pairs"], 3)
 
+    def test_v4_preserves_high_low_and_unspecified_human_confidence(self):
+        add_agent(self.projection, self.config)
+        self.projection["human"][0]["human_confidence"] = "high"
+        for confidence in ("low", None):
+            row = deepcopy(self.projection["human"][0])
+            row.update(record_id=f"human:{confidence}", observation_id=str(confidence),
+                       human_confidence=confidence)
+            self.projection["human"].append(row)
+        path, manifest = self.build()
+        self.assertEqual(manifest["version"], 4)
+        rows = pq.read_table(path / "data/human.parquet").to_pylist()
+        self.assertEqual({row["human_confidence"] for row in rows}, {"high", "low", None})
+        machine = pq.read_table(path / f"data/agent/{METHOD}.parquet").to_pylist()
+        self.assertIsNone(machine[0]["human_confidence"])
+        self.assertIn("confidence-only revision", (path / "README.md").read_text())
+        self.assertTrue(validate_snapshot(path)["valid"])
+
+    def test_confidence_only_revision_preserves_binding_and_snapshot_lineage(self):
+        self.projection["human"][0]["human_confidence"] = "low"
+        previous, _ = self.build("low")
+        row = self.projection["human"][0]
+        row.update(record_id="human:high", observation_id="high", human_confidence="high",
+                   observation_sha256="7" * 64, supersedes_record_ids=["human:one"])
+        revision = {"previous_observation_id": "one", "previous_observation_sha256": "6" * 64,
+                    "changed_fields": ["confidence"]}
+        row["details"]["human_revision"] = revision
+        self.config["previous_snapshot"] = {"repo_id": self.config["repo_id"], "commit": "e" * 40}
+        path, manifest = self.build("high", previous)
+        exported = pq.read_table(path / "data/human.parquet").to_pylist()[0]
+        self.assertEqual(exported["human_confidence"], "high")
+        self.assertEqual(exported["details"]["human_revision"], revision)
+        self.assertEqual(manifest["removed_records"], [{"record_id": "human:one", "reason": "superseded", "superseded_by": ["human:high"]}])
+
     def test_supported_agent_is_explicit_opt_in_and_crosslinks_actual_evidence(self):
         add_agent(self.projection, self.config)
         path, manifest = self.build()
@@ -227,7 +260,7 @@ class SnapshotTests(unittest.TestCase):
         self.assertIsNone(machine["observation_sha256"])
 
     def test_same_record_cannot_acquire_review_declarations_or_changed_identity(self):
-        for change in ("review", "hash", "comparison", "human_revision"):
+        for change in ("review", "hash", "comparison", "human_revision", "confidence"):
             with self.subTest(change=change):
                 self.projection, self.config = fixture()
                 if change == "comparison":
@@ -243,6 +276,8 @@ class SnapshotTests(unittest.TestCase):
                     row["observation_sha256"] = "8" * 64
                 elif change == "comparison":
                     row["details"]["proposal_changes"] = []
+                elif change == "confidence":
+                    row["human_confidence"] = "high"
                 else:
                     row["details"]["human_revision"] = {"previous_observation_id": "older",
                         "previous_observation_sha256": "9" * 64, "changed_fields": []}
@@ -398,7 +433,7 @@ class SnapshotTests(unittest.TestCase):
         self.projection['human'].append(slow)
         path, manifest = self.build()
         rows = pq.read_table(path / 'data/human.parquet').to_pylist()
-        self.assertEqual(manifest['version'], 3)
+        self.assertEqual(manifest['version'], 4)
         self.assertEqual({r['playback_rate'] for r in rows}, {1, 0.5})
         self.assertEqual({r['start_ms'] for r in rows}, {100})
         self.assertEqual(validate_snapshot(path)['human_overlap_pairs'], 0)
@@ -406,8 +441,8 @@ class SnapshotTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'contradictory human gold'):
             self.build('same-rate-conflict')
 
-    def test_historical_v1_v2_snapshots_migrate_without_changing_immutable_record(self):
-        for version in (1, 2):
+    def test_historical_v1_v2_v3_snapshots_remain_readable_without_changing_immutable_record(self):
+        for version in (1, 2, 3):
             with self.subTest(version=version):
                 self.projection, self.config = fixture()
                 path, manifest = self.build(f'old-{version}')
@@ -421,6 +456,7 @@ class SnapshotTests(unittest.TestCase):
                 self.assertIsNone(row['details']['evidence_review'])
                 self.assertIsNone(row['details']['human_revision'])
                 self.assertEqual(row['observation_sha256'], '6' * 64)
+                self.assertIsNone(row['human_confidence'])
 
     def test_rate_snapshot_can_be_staged_published_and_retried(self):
         self.projection['human'][0]['playback_rate'] = 1.5

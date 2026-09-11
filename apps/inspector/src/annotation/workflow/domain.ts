@@ -14,6 +14,7 @@ import {
   type FoundationV2,
   HANDOFF_CONTRACT_V2,
   type HandoffV2,
+  type HumanConfidenceV2,
   type HumanDecisionV2,
   type HumanObservationV2,
   type ImportedAuditV2,
@@ -37,6 +38,7 @@ export interface DecideClaimInputV2 extends OperationOptionsV2 {
   readonly humanId: string;
   readonly rationale?: string;
   readonly modifiedClaim?: ClaimV2;
+  readonly confidence?: HumanConfidenceV2;
   readonly evidenceReview?: EvidenceReviewV2;
 }
 
@@ -46,6 +48,8 @@ export interface AddObservationsInputV2 extends OperationOptionsV2 {
   readonly supersedesObservationIds?: Readonly<Record<string, string>>;
   readonly claims: readonly ClaimV2[];
   readonly humanId: string;
+  /** Explicit confidence keyed by the submitted claim ID; omission never implies high. */
+  readonly confidences?: Readonly<Record<string, HumanConfidenceV2>>;
   readonly evidenceReviews?: Readonly<Record<string, EvidenceReviewV2>>;
 }
 
@@ -55,6 +59,7 @@ export interface DecideSectionInputV2 extends OperationOptionsV2 {
   /** Direct assessments for dimensions missing from a legacy section proposal. */
   readonly observations?: readonly ClaimV2[];
   readonly supersedesObservationIds?: Readonly<Record<string, string>>;
+  readonly confidences?: Readonly<Record<string, HumanConfidenceV2>>;
   readonly evidenceReviews?: Readonly<Record<string, EvidenceReviewV2>>;
 }
 
@@ -742,6 +747,10 @@ function prepareHumanDecisionV2(
   const proposal = imported?.handoff.proposals.find((claim) => claim.id === input.claimId);
   if (!imported || !proposal) throw new Error("Unknown handoff claim.");
   const confirming = input.disposition === "accepted" || input.disposition === "modified";
+  if (input.confidence !== undefined) {
+    oneOf(input.confidence, ["high", "low"], "confidence");
+    if (!confirming) throw new Error("Only a confirmed human assessment may record confidence.");
+  }
   if (confirming) {
     requireApproved(document.foundation);
     if (input.disposition === "accepted" && imported.handoff.foundationSha256 !== foundationSha256)
@@ -784,6 +793,7 @@ function prepareHumanDecisionV2(
     foundationSha256,
     humanId: input.humanId,
     confirmedAt: decidedAt,
+    ...(input.confidence !== undefined ? { confidence: input.confidence } : {}),
     ...(input.evidenceReview ? { evidenceReview: input.evidenceReview } : {}),
     origin: {
       kind: "agent-proposal",
@@ -848,6 +858,7 @@ export async function decideSectionV2(
         {
           claims: directClaims,
           humanId: input.humanId,
+          ...(input.confidences ? { confidences: input.confidences } : {}),
           ...(input.evidenceReviews ? { evidenceReviews: input.evidenceReviews } : {}),
           id: `${groupId}:direct`,
           now: () => now,
@@ -861,6 +872,8 @@ export async function decideSectionV2(
     : [];
   if (!directClaims.length && Object.keys(input.supersedesObservationIds ?? {}).length)
     throw new Error("Observation revisions must identify a submitted direct claim.");
+  if (!directClaims.length && Object.keys(input.confidences ?? {}).length)
+    throw new Error("Confidence must identify a submitted direct claim.");
   const decisions = [...document.decisions, ...additions.map((entry) => entry.decision)];
   const observations = [
     ...document.observations,
@@ -946,6 +959,11 @@ function prepareHumanObservationsV2(
     assertSamePlaybackRate(prior.claim, claim);
   }
   for (const claim of input.claims) assertClaimV2(claim, refs, document.foundation, false);
+  for (const [claimId, confidence] of Object.entries(input.confidences ?? {})) {
+    if (!input.claims.some((claim) => claim.id === claimId))
+      throw new Error("Confidence must identify a submitted direct claim.");
+    oneOf(confidence, ["high", "low"], "confidence");
+  }
   for (const [claimId, review] of Object.entries(input.evidenceReviews ?? {})) {
     const claim = input.claims.find((entry) => entry.id === claimId);
     if (!claim) throw new Error("Evidence review must identify a submitted direct claim.");
@@ -961,6 +979,9 @@ function prepareHumanObservationsV2(
       foundationSha256,
       humanId: input.humanId,
       confirmedAt,
+      ...(input.confidences?.[claim.id] !== undefined
+        ? { confidence: input.confidences[claim.id] }
+        : {}),
       ...(input.evidenceReviews?.[claim.id]
         ? { evidenceReview: input.evidenceReviews[claim.id] }
         : {}),
@@ -977,11 +998,22 @@ export async function addHumanObservationV2(
   input: OperationOptionsV2 & {
     readonly claim: ClaimV2;
     readonly humanId: string;
+    readonly confidence?: HumanConfidenceV2;
     readonly supersedesObservationId?: string;
   },
   sourceBytes: Uint8Array,
 ): Promise<ReviewDocumentV2> {
-  return addHumanObservationsV2(document, { ...input, claims: [input.claim] }, sourceBytes);
+  return addHumanObservationsV2(
+    document,
+    {
+      ...input,
+      claims: [input.claim],
+      ...(input.confidence !== undefined
+        ? { confidences: { [input.claim.id]: input.confidence } }
+        : {}),
+    },
+    sourceBytes,
+  );
 }
 
 export async function readAgentReviewsV2(
@@ -1172,7 +1204,7 @@ export async function readDispositionsV2(document: ReviewDocumentV2) {
   };
 }
 
-/** Effective gold excludes every historical decision and superseded direct observation. */
+/** Effective human observations exclude previous decisions and superseded direct observations. */
 export function effectiveHumanObservationsV2(
   document: ReviewDocumentV2,
 ): readonly HumanObservationV2[] {
@@ -1547,9 +1579,11 @@ export async function validateReviewDocumentV2(
     record(
       observation,
       ["id", "claim", "foundationSha256", "humanId", "confirmedAt", "origin"],
-      ["supersedesObservationId", "evidenceReview"],
+      ["supersedesObservationId", "confidence", "evidenceReview"],
       "observation",
     );
+    if (observation.confidence !== undefined)
+      oneOf(observation.confidence, ["high", "low"], "observation.confidence");
     if (observation.evidenceReview)
       assertEvidenceReviewV2(observation.evidenceReview, observation.claim, {
         ...document,

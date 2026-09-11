@@ -98,6 +98,48 @@ async function secondSource(f: Awaited<ReturnType<typeof workflowFixture>>) {
 }
 
 describe("dataset publication projection", () => {
+  it("exports confidence-only revisions independently of claims and auxiliary evidence", async () => {
+    const f = await reviewedFixture();
+    const input = {
+      handoffId: f.handoff.handoffId,
+      claimId: f.claim.id,
+      humanId: "expert",
+      disposition: "accepted" as const,
+    };
+    const original = await decideClaimV2(
+      f.reviewed,
+      { ...input, id: "low", confidence: "low" },
+      f.sourceBytes,
+    );
+    const before = (await projectReviewForPublicationV1(original)).human[0];
+    const revised = await decideClaimV2(
+      original,
+      { ...input, id: "high", confidence: "high" },
+      f.sourceBytes,
+    );
+    const projection = await projectReviewForPublicationV1(revised);
+    const after = projection.human[0];
+    expect(before?.human_confidence).toBe("low");
+    expect(after?.human_confidence).toBe("high");
+    expect(after?.details.proposal_changes).toEqual([]);
+    expect(after?.details.human_revision).toEqual({
+      previous_observation_id: before?.observation_id,
+      previous_observation_sha256: before?.observation_sha256,
+      changed_fields: ["confidence"],
+    });
+    expect(after?.details.evidence).toEqual(before?.details.evidence);
+    expect(after?.details.evidence_review).toEqual(before?.details.evidence_review);
+    expect(after?.auxiliary_evidence_status).toBe(before?.auxiliary_evidence_status);
+    expect(after?.observation_sha256).not.toBe(before?.observation_sha256);
+    expect(projection.agents.every((row) => row.human_confidence === null)).toBe(true);
+    const historical = await addHumanObservationV2(
+      f.registered,
+      { claim: f.claim, humanId: "expert" },
+      f.sourceBytes,
+    );
+    expect((await projectReviewForPublicationV1(historical)).human[0]?.human_confidence).toBeNull();
+  });
+
   it("binds a label-only revision to unchanged notes and compares proposal note sets without order", async () => {
     const f = await reviewedFixture();
     const input = { handoffId: f.handoff.handoffId, claimId: f.claim.id, humanId: "expert" };
@@ -269,6 +311,7 @@ describe("dataset publication projection", () => {
         humanId: "expert",
         id: "publication-accept",
         disposition: "accepted",
+        confidence: "high",
         rationale: "原始人工确认。",
         evidenceReview: {
           selectionOrigin: "inherited-agent",
@@ -332,7 +375,8 @@ assert [op['kind'] for op in human[0]['details']['evidence_review']['operations'
 assert human[0]['details']['proposal_changes']==[]
 assert human[0]['observation_sha256']==data['human'][0]['observation_sha256']
 assert human[0]['cell_id'].startswith('cell-')
-assert manifest['version']==3
+assert human[0]['human_confidence']=='high'
+assert manifest['version']==4
 print(json.dumps(manifest['counts']))
 `;
     const counts = JSON.parse(

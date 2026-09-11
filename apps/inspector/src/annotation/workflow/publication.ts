@@ -6,6 +6,7 @@ import type {
   AgentReviewV2,
   ClaimV2,
   FoundationV2,
+  HumanConfidenceV2,
   HumanEvidenceRefV2,
   HumanObservationV2,
   ReviewDocumentV2,
@@ -32,6 +33,7 @@ type ClaimChangeField =
   | "boundary_uncertainty"
   | "transition"
   | "exemplar_role";
+type HumanChangeField = ClaimChangeField | "confidence";
 type PublicFoundation = Omit<FoundationV2, "calibrationExamples"> & {
   calibrationExamples: readonly (Omit<
     FoundationV2["calibrationExamples"][number],
@@ -54,6 +56,7 @@ export interface PublicationRowV1 {
   observation_id: string | null;
   /** Exact observation identity, also qualifying public auxiliary links. */
   observation_sha256?: string;
+  human_confidence: HumanConfidenceV2 | null;
   decision_id: string | null;
   handoff_id: string | null;
   claim_id: string;
@@ -74,7 +77,7 @@ export interface PublicationRowV1 {
     human_revision: {
       previous_observation_id: string;
       previous_observation_sha256: string;
-      changed_fields: ClaimChangeField[];
+      changed_fields: HumanChangeField[];
     } | null;
     human_rationale: string | null;
     section_id: string | null;
@@ -184,6 +187,7 @@ function rowForClaim(source: SourceIdentityV1, claim: ClaimV2): PublicationRowV1
     foundation_id: "",
     origin: "agent-reviewed",
     observation_id: null,
+    human_confidence: null,
     decision_id: null,
     handoff_id: null,
     claim_id: claim.id,
@@ -315,6 +319,7 @@ export async function projectReviewForPublicationV1(
     row.record_id = humanPublicationRecordIdV1(document.source.sha256, observation.id);
     row.observation_id = observation.id;
     row.observation_sha256 = await hashWorkflowValueV2(observation);
+    row.human_confidence = observation.confidence ?? null;
     row.foundation_id = observation.foundationSha256;
     row.foundation_status =
       observation.foundationSha256 === currentFoundation ? "current" : "changed";
@@ -333,7 +338,10 @@ export async function projectReviewForPublicationV1(
       row.details.human_revision = {
         previous_observation_id: previous.id,
         previous_observation_sha256: await hashWorkflowValueV2(previous),
-        changed_fields: claimChanges(previous.claim, observation.claim),
+        changed_fields: [
+          ...claimChanges(previous.claim, observation.claim),
+          ...(previous.confidence !== observation.confidence ? ["confidence" as const] : []),
+        ],
       };
     }
     if (observation.origin.kind === "agent-proposal") {

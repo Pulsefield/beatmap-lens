@@ -115,9 +115,10 @@ supporting audit are excluded from the agent subset.
 Validation checks schemas, hashes, counts, identifiers, ranges, assessments,
 references, and the exact file inventory. Unexpected files and symbolic links
 fail validation. It does not claim semantic accuracy or execute a model evaluation.
-New snapshots use manifest version 3 and `judgment-v3`, including a required
-`playback_rate`, a derived `cell_id`, and nullable observation/evidence-review metadata.
-Historical version 1 and 2 Arrow schemas remain readable without rewriting their
+New snapshots use manifest version 4 and `judgment-v4`, including a required
+`playback_rate`, a derived `cell_id`, nullable `human_confidence`, and nullable
+observation/evidence-review metadata.
+Historical version 1, 2 and 3 Arrow schemas remain readable without rewriting their
 files; version 1 implicitly uses 1×. Missing historical review metadata stays
 unknown. All source
 coordinates stay in original milliseconds; see [playback rates](playback-rate.md).
@@ -190,11 +191,13 @@ audit likewise does not certify a note-level human gold set or minimal/sufficien
 evidence. An inherited explanation can remain attached to a changed assessment;
 an empty human explanation also does not invalidate the label.
 
-Version 3 preserves these distinctions explicitly:
+Version 3 introduced these evidence distinctions; version 4 also records human
+label confidence independently of evidence review and expression strength:
 
 | Field | Meaning and limits |
 | --- | --- |
 | `record_id`, `observation_id`, `observation_sha256` | The immutable record and, when available, canonical human observation hash bind the current assessment and notes. The hash is null for machines and when unavailable. A new human revision receives a new identity; adding explicit review declarations to an existing identity is forbidden. |
+| `human_confidence` | Version 4: `high` or `low` as saved with the human observation; null for historical omissions and machine records. It describes certainty in the label, not style strength, exemplar representativeness or note-selection quality. Only explicit High human labels are eligible for the automatic method regression suite. |
 | `details.proposal_changes` | Claim fields differing from the original `handoff_id`/`claim_id`. Sets compare exact source note tuples, ignoring order. `[]` means unchanged; null means no comparison was supplied. Changes are factual lineage, not judgments about explanation correctness. |
 | `details.human_revision` | The immediately preceding human observation's ID/hash and `changed_fields`, for both direct revisions and successive decisions on one proposal. This separates the latest revision from cumulative changes against an original machine proposal. Null means no preceding human observation was supplied. |
 | `details.evidence_review.selection_origin` | The recorded starting point: inherited agent/human selection, a new human claim, copied section, or unknown. Source handoff/observation/claim pointers identify that starting point when recorded. |
@@ -212,8 +215,11 @@ making their judgment. A later agent annotation retains its own authority and
 does not rewrite a historical human observation. The common claim comparison covers `tag_id`, `assessment`, `scope`,
 `playback_rate`, `review_context`, `witnesses`, `context_notes`, `rationale`,
 `section_id`, `boundary_uncertainty`, `transition`, and `exemplar_role`. Identity
-and review declarations are metadata, so a metadata-only revision has empty
-`changed_fields`; the observation IDs/hashes still change. If A→B changes a label
+and evidence-review declarations are metadata, so changing only those declarations
+has empty `changed_fields`; the observation IDs/hashes still change. Version 4
+adds `confidence` to `human_revision.changed_fields` for confidence changes. It
+never adds confidence to `proposal_changes`, because machine claims carry no
+human confidence. If A→B changes a label
 and B→C only edits notes, C's `human_revision.changed_fields` lists `witnesses`,
 while its comparison against the original proposal can still include `assessment`.
 The superseded records remain addressable through lineage; the current table
@@ -221,8 +227,12 @@ contains only effective observations and does not copy private journal bodies.
 
 Version 1/2 predecessors can acquire derived grouping/comparison/hash
 columns in a later snapshot while their original claims remain identical; this
-does not grant missing human review declarations. A version 3 record cannot change
-its existing review metadata or identity binding under the same record ID.
+does not grant missing human review declarations. A version 3/4 record cannot change
+its existing review metadata or identity binding under the same record ID. Version
+4 can represent an unchanged version 3 record with null confidence; assigning a
+confidence requires a new human observation rather than changing that record.
+
+See [human confidence](human-confidence.md) for editing and current-gold selection.
 
 `auxiliary_evidence_status` answers whether the referenced human exemplars still
 match their recorded source/observation hashes and Foundation. It does **not**

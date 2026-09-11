@@ -49,6 +49,128 @@ afterEach(() => {
 });
 
 describe("ReviewWorkspace mounted workflow", () => {
+  it("saves per-label confidence together and revises confidence without changing the claim", async () => {
+    const f = await workspaceFixture(false, false, undefined, 5);
+    const { container } = await openWorkspace(f);
+    await setValue(control(container, "Human reviewer"), "human-ui", "input");
+    await click(container, "New section at playhead");
+    for (const tag of ["a", "b", "c", "d", "e"]) {
+      await setSlider(container, `synthetic-${tag}`, "1");
+      expect(confidenceControl(container, tag).checked).toBe(false);
+    }
+    for (const tag of ["a", "b", "c", "d", "e"]) await setConfidence(container, tag, true);
+    await setConfidence(container, "c", false);
+    await click(container, "Save section judgments");
+    const first = await f.read();
+    expect(first?.document.observations.map((entry) => entry.confidence)).toEqual([
+      "high",
+      "high",
+      "low",
+      "high",
+      "high",
+    ]);
+    expect(first?.document.observations.every((entry) => !("confidence" in entry.claim))).toBe(
+      true,
+    );
+    const a = first?.document.observations[0];
+    if (!a) throw new Error("Missing first human label.");
+    await openHumanObservation(container, 0);
+    await setConfidence(container, "a", false);
+    await click(container, "Save revised section");
+    const revised = await f.read();
+    expect(revised?.document.observations).toHaveLength(6);
+    expect(revised?.document.observations.at(-1)).toMatchObject({
+      confidence: "low",
+      claim: a.claim,
+      supersedesObservationId: a.id,
+    });
+    expect(revised?.document.observations.slice(0, 5)).toEqual(first?.document.observations);
+    await click(container, "Save revised section");
+    expect((await f.read())?.document).toEqual(revised?.document);
+    await setConfidence(container, "a", true);
+    await setSlider(container, "synthetic-a", "2");
+    expect(confidenceControl(container, "a").checked).toBe(false);
+    expect(confidenceControl(container, "b").checked).toBe(true);
+  });
+
+  it("keeps historical confidence unset until an explicit confidence-only human revision", async () => {
+    const f = await workspaceFixture(false, false, undefined, 5);
+    const initial = await f.read();
+    if (!initial) throw new Error("Missing workspace.");
+    const historical = await f.directory.addObservations(f.sourceBytes, initial.version, {
+      humanId: "historical-human",
+      claims: [f.claim],
+    });
+    const { container } = await openWorkspace(f);
+    await openHumanObservation(container, 0);
+    await setValue(control(container, "Human reviewer"), "human-ui", "input");
+    expect(confidenceControl(container, "a").checked).toBe(false);
+    expect(container.textContent).toContain("Confidence not specified");
+    await click(container, "Save revised section");
+    expect((await f.read())?.document).toEqual(historical.document);
+    await setConfidence(container, "a", true);
+    await click(container, "Save revised section");
+    const saved = await f.read();
+    expect(saved?.document.observations).toHaveLength(2);
+    expect(saved?.document.observations[0]).not.toHaveProperty("confidence");
+    expect(saved?.document.observations[1]).toMatchObject({
+      confidence: "high",
+      claim: historical.document.observations[0]?.claim,
+      supersedesObservationId: historical.document.observations[0]?.id,
+    });
+  });
+
+  it("resets only scope-normalized High judgments when reopening legacy section cuts", async () => {
+    const f = await workspaceFixture(true, false, undefined, 5);
+    const initial = await f.read();
+    if (!initial || !f.handoff) throw new Error("Missing fixture handoff.");
+    const imported = await f.directory.importHandoff(f.sourceBytes, initial.version, f.handoff);
+    const first = await f.directory.decide(f.sourceBytes, imported.stored.version, {
+      handoffId: f.handoff.handoffId,
+      claimId: "claim-b",
+      disposition: "accepted",
+      humanId: "fixture-human",
+      confidence: "high",
+    });
+    const { transition: _transition, ...claim } = f.claim;
+    const before = await f.directory.decide(f.sourceBytes, first.version, {
+      handoffId: f.handoff.handoffId,
+      claimId: "claim-a",
+      disposition: "modified",
+      humanId: "fixture-human",
+      confidence: "high",
+      modifiedClaim: {
+        ...claim,
+        scope: { startMs: 1100, endMs: 1750 },
+        evidence: {
+          ...claim.evidence,
+          noteRefs: claim.evidence.noteRefs.filter((note) => note.endMs >= 1100),
+        },
+      },
+    });
+    const { container } = await openWorkspace(f);
+    await setValue(control(container, "Human reviewer"), "human-ui", "input");
+    await chooseProposal(container, "synthetic-a");
+    expect(confidenceControl(container, "a").checked).toBe(true);
+    expect(confidenceControl(container, "b").checked).toBe(false);
+    await settleUnratedDimensions(container);
+    await click(container, "Submit section review");
+    const after = await f.read();
+    expect(after?.document.observations.slice(0, before.document.observations.length)).toEqual(
+      before.document.observations,
+    );
+    const b = after?.document.observations
+      .filter((entry) => entry.claim.tagId === "synthetic-b")
+      .at(-1);
+    expect(b).toMatchObject({
+      confidence: "low",
+      claim: { scope: { startMs: 1100, endMs: 1750 } },
+    });
+    expect(
+      after?.document.observations.filter((entry) => entry.claim.tagId === "synthetic-a"),
+    ).toHaveLength(1);
+  });
+
   it("records selection actions through normal section saves without explanation or extra review steps", async () => {
     const f = await workspaceFixture(false, false, undefined, 5);
     const { container } = await openWorkspace(f);
@@ -979,6 +1101,7 @@ describe("ReviewWorkspace mounted workflow", () => {
       expect(request).toHaveBeenCalledTimes(1);
       expect(JSON.parse(String(request.mock.calls[0]?.[1]?.body)).input.decisions).toHaveLength(5);
       await setSlider(container, "synthetic-b", "2");
+      await setConfidence(container, "b", true);
       const newest = sectionAssessments(container);
       releaseSave();
       await vi.waitFor(() =>
@@ -1001,6 +1124,7 @@ describe("ReviewWorkspace mounted workflow", () => {
       expect(retry.input.decisions[0]).toMatchObject({
         claimId: "claim-1",
         disposition: "modified",
+        confidence: "high",
       });
       const saved = await f.read();
       expect(saved?.document.observations.slice(0, 5)).toEqual(first?.document.observations);
@@ -1008,6 +1132,7 @@ describe("ReviewWorkspace mounted workflow", () => {
         presence: "present",
         salience: "prominent",
       });
+      expect(saved?.document.observations.at(-1)?.confidence).toBe("high");
       expect(saved?.document.decisions.slice(0, 5)).toEqual(first?.document.decisions);
       expect(saved?.document.revision).toBe(imported.stored.document.revision + 2);
       expect(saved?.document.handoffs[0]?.handoff).toEqual(handoff);
@@ -1553,6 +1678,8 @@ describe("ReviewWorkspace mounted workflow", () => {
     const f = await workspaceFixture(true);
     const { container } = await openWorkspace(f);
     await setValue(control(container, "Human reviewer"), "human-ui", "input");
+    await setSlider(container, "synthetic-a", "1");
+    await setConfidence(container, "a", true);
     await setValue(
       control(container, "Evidence / judgment rationale"),
       "Unsaved direct draft.",
@@ -1636,11 +1763,16 @@ describe("ReviewWorkspace mounted workflow", () => {
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     await nextTick();
     expect(rangeValues(container)).not.toEqual(beforeRange);
+    expect(confidenceControl(container, "a").checked).toBe(false);
     pointer(svg, "pointercancel", 700);
     await nextTick();
     expect(rangeValues(container)).toEqual(beforeRange);
+    expect(confidenceControl(container, "a").checked).toBe(true);
     expect(control(container, "Evidence / judgment rationale").value).toBe("Unsaved direct draft.");
     expect((await f.read())?.document.observations).toHaveLength(1);
+    await click(container, "I reviewed this draft against the current revision");
+    await click(container, "Save section judgments");
+    expect((await f.read())?.document.observations.at(-1)?.confidence).toBe("high");
   });
 
   it("keeps a foreign task's claimed Foundation approval out of a newly chosen canonical workspace", async () => {
@@ -1850,6 +1982,21 @@ function slider(container: Element, tagId: string): HTMLInputElement {
 async function setSlider(container: Element, tagId: string, value: string): Promise<void> {
   expect(slider(container, tagId).disabled).toBe(false);
   await setValue(slider(container, tagId), value, "input");
+}
+
+function confidenceControl(container: Element, letter: string): HTMLInputElement {
+  const input = container.querySelector<HTMLInputElement>(
+    `input[aria-label="Synthetic ${letter.toUpperCase()} high confidence"]`,
+  );
+  if (!input) throw new Error("Missing confidence control.");
+  return input;
+}
+
+async function setConfidence(container: Element, letter: string, high: boolean): Promise<void> {
+  const input = confidenceControl(container, letter);
+  expect(input.disabled).toBe(false);
+  if (input.checked !== high) input.click();
+  await nextTick();
 }
 
 function sectionAssessments(container: Element): string[] {
