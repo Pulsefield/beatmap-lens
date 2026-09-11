@@ -945,108 +945,126 @@ describe("ReviewWorkspace mounted workflow", () => {
     expect(control(container, "Source time").value).toBe(playhead);
   });
 
-  it("retains all section drafts during a pending or failed atomic save and permits newer edits without advancing", async () => {
-    const f = await workspaceFixture(true);
-    if (!f.handoff) throw new Error("Missing handoff.");
-    const current = await f.read();
-    if (!current) throw new Error("Missing review.");
-    const imported = await f.directory.importHandoff(f.sourceBytes, current.version, f.handoff);
-    const { container } = mountRemote(f, imported.stored, {
-      handoffId: f.handoff.handoffId,
-      claimId: "claim-a",
-    });
-    await vi.waitFor(() =>
-      expect(container.querySelectorAll('.section-sliders input[type="range"]')).toHaveLength(9),
-    );
-    await setValue(control(container, "Human reviewer"), "fixture-human", "input");
-    await settleUnratedDimensions(container);
-    await setSlider(container, "synthetic-b", "1");
-    await setValue(
-      control(container, "Evidence / judgment rationale"),
-      "B remains supporting.",
-      "input",
-    );
-    const beforeSave = sectionAssessments(container);
-    const playhead = control(container, "Source time").value;
-    const range = rangeValues(container);
-    let fail = true;
-    let releaseSave: () => void = () => {};
-    let saveGate = new Promise<void>((resolve) => {
-      releaseSave = resolve;
-    });
-    const request = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, options) => {
-      expect(String(url)).toContain("/decideSection");
-      const body = JSON.parse(String(options?.body));
-      expect(body.input.decisions).toHaveLength(3);
-      expect(body.input.observations).toHaveLength(6);
-      await saveGate;
-      if (fail) return Response.json({ error: "Save interrupted" }, { status: 500 });
-      return Response.json(
-        await f.directory.decideSection(f.sourceBytes, body.expectedBase, body.input),
+  it.each([false, true])(
+    "retains drafts and submits despite failed saves (storage full: %s)",
+    async (storageFull) => {
+      const f = await workspaceFixture(true);
+      if (!f.handoff) throw new Error("Missing handoff.");
+      const current = await f.read();
+      if (!current) throw new Error("Missing review.");
+      const imported = await f.directory.importHandoff(f.sourceBytes, current.version, f.handoff);
+      const { container } = mountRemote(f, imported.stored, {
+        handoffId: f.handoff.handoffId,
+        claimId: "claim-a",
+      });
+      await vi.waitFor(() =>
+        expect(container.querySelectorAll('.section-sliders input[type="range"]')).toHaveLength(9),
       );
-    });
-    try {
-      button(container, "Submit section review").click();
-      await nextTick();
-      expect(container.textContent).toContain("Saving section…");
-      expect(sectionAssessments(container)).toEqual(beforeSave);
-      expect(control(container, "Evidence / judgment rationale").value).toBe(
+      await setValue(control(container, "Human reviewer"), "fixture-human", "input");
+      await settleUnratedDimensions(container);
+      await setSlider(container, "synthetic-b", "1");
+      await setValue(
+        control(container, "Evidence / judgment rationale"),
         "B remains supporting.",
+        "input",
       );
-      expect(container.querySelector(".claim-fields legend")?.textContent).toBe("Synthetic B");
-      expect(button(container, "Submit section review").disabled).toBe(true);
-      button(container, "Submit section review").click();
-      expect(request).toHaveBeenCalledTimes(1);
-      expect(
-        [...container.querySelectorAll<HTMLInputElement>(".section-sliders input")].every(
-          (input) => !input.disabled,
-        ),
-      ).toBe(true);
-      await setSlider(container, "synthetic-a", "0");
-      const newerDraft = sectionAssessments(container);
-      expect(control(container, "Source time").value).toBe(playhead);
-      expect(rangeValues(container)).toEqual(range);
-      expect((await f.read())?.document.decisions).toHaveLength(0);
-      releaseSave();
-      await vi.waitFor(() => expect(container.textContent).toContain("Save interrupted"));
-      expect(sectionAssessments(container)).toEqual(newerDraft);
-      expect((await f.read())?.document.observations).toHaveLength(0);
-      expect(button(container, "Submit section review").disabled).toBe(false);
-      fail = false;
-      saveGate = Promise.resolve();
-      await click(container, "Submit section review");
-      expect(request).toHaveBeenCalledTimes(2);
-      expect(sectionAssessments(container)).toEqual(newerDraft);
-      expect(container.querySelector(".claim-fields legend")?.textContent).toBe("Synthetic A");
-      expect(container.querySelector(".review-section-complete")?.textContent).toBe(
-        "Section judgments saved together.",
-      );
-      const saved = await f.read();
-      expect(saved?.document.revision).toBe(imported.stored.document.revision + 1);
-      expect(
-        saved?.document.decisions.map((decision) => [decision.claimId, decision.disposition]),
-      ).toEqual([
-        ["claim-a", "modified"],
-        ["claim-b", "modified"],
-        ["claim-c", "modified"],
-      ]);
-      expect(saved?.document.observations).toHaveLength(9);
-      expect(
-        saved?.document.observations.find((entry) => entry.claim.id === "claim-a")?.claim
-          .assessment,
-      ).toEqual({ presence: "absent" });
-      expect(
-        saved?.document.observations.find((entry) => entry.claim.id === "claim-b")?.claim.evidence
-          .rationale,
-      ).toBe("B remains supporting.");
-      expect(saved?.document.handoffs[0]?.handoff).toEqual(f.handoff);
-      await click(container, "Submit section review");
-      expect(request).toHaveBeenCalledTimes(2);
-      expect((await f.read())?.document).toEqual(saved?.document);
-    } finally {
-      request.mockRestore();
-    }
-  });
+      const storageWrite = storageFull
+        ? vi.spyOn(localStorage, "setItem").mockImplementation(() => {
+            throw new DOMException("Full", "QuotaExceededError");
+          })
+        : undefined;
+      await setConfidence(container, "b", true);
+      if (storageFull)
+        expect(container.textContent).toContain("Browser draft storage is unavailable");
+      const beforeSave = sectionAssessments(container);
+      const playhead = control(container, "Source time").value;
+      const range = rangeValues(container);
+      let fail = true;
+      let releaseSave: () => void = () => {};
+      let saveGate = new Promise<void>((resolve) => {
+        releaseSave = resolve;
+      });
+      const request = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, options) => {
+        expect(String(url)).toContain("/decideSection");
+        const body = JSON.parse(String(options?.body));
+        expect(body.input.decisions).toHaveLength(3);
+        expect(body.input.observations).toHaveLength(6);
+        await saveGate;
+        if (fail) return Response.json({ error: "Save interrupted" }, { status: 500 });
+        return Response.json(
+          await f.directory.decideSection(f.sourceBytes, body.expectedBase, body.input),
+        );
+      });
+      try {
+        button(container, "Submit section review").click();
+        await nextTick();
+        expect(container.textContent).toContain("Saving section…");
+        expect(sectionAssessments(container)).toEqual(beforeSave);
+        expect(control(container, "Evidence / judgment rationale").value).toBe(
+          "B remains supporting.",
+        );
+        expect(container.querySelector(".claim-fields legend")?.textContent).toBe("Synthetic B");
+        expect(button(container, "Submit section review").disabled).toBe(true);
+        button(container, "Submit section review").click();
+        expect(request).toHaveBeenCalledTimes(1);
+        expect(
+          [...container.querySelectorAll<HTMLInputElement>(".section-sliders input")].every(
+            (input) => !input.disabled,
+          ),
+        ).toBe(true);
+        await setSlider(container, "synthetic-a", "0");
+        const newerDraft = sectionAssessments(container);
+        expect(control(container, "Source time").value).toBe(playhead);
+        expect(rangeValues(container)).toEqual(range);
+        expect((await f.read())?.document.decisions).toHaveLength(0);
+        releaseSave();
+        await vi.waitFor(() => expect(container.textContent).toContain("Save interrupted"));
+        expect(sectionAssessments(container)).toEqual(newerDraft);
+        expect((await f.read())?.document.observations).toHaveLength(0);
+        expect(button(container, "Submit section review").disabled).toBe(false);
+        fail = false;
+        saveGate = Promise.resolve();
+        await click(container, "Submit section review");
+        expect(request).toHaveBeenCalledTimes(2);
+        expect(sectionAssessments(container)).toEqual(newerDraft);
+        expect(container.querySelector(".claim-fields legend")?.textContent).toBe("Synthetic A");
+        expect(container.querySelector(".review-section-complete")?.textContent).toBe(
+          "Section judgments saved together.",
+        );
+        const saved = await f.read();
+        expect(saved?.document.revision).toBe(imported.stored.document.revision + 1);
+        expect(
+          saved?.document.decisions.map((decision) => [decision.claimId, decision.disposition]),
+        ).toEqual([
+          ["claim-a", "modified"],
+          ["claim-b", "modified"],
+          ["claim-c", "modified"],
+        ]);
+        expect(saved?.document.observations).toHaveLength(9);
+        expect(
+          saved?.document.observations.find((entry) => entry.claim.id === "claim-a")?.claim
+            .assessment,
+        ).toEqual({ presence: "absent" });
+        expect(
+          saved?.document.observations.find((entry) => entry.claim.id === "claim-b")?.claim.evidence
+            .rationale,
+        ).toBe("B remains supporting.");
+        expect(
+          saved?.document.observations.find((entry) => entry.claim.id === "claim-b")?.confidence,
+        ).toBe("high");
+        expect(
+          Object.keys(localStorage).filter((key) => key.startsWith("beatmap-lens-review-draft:")),
+        ).toHaveLength(0);
+        expect(saved?.document.handoffs[0]?.handoff).toEqual(f.handoff);
+        await click(container, "Submit section review");
+        expect(request).toHaveBeenCalledTimes(2);
+        expect((await f.read())?.document).toEqual(saved?.document);
+      } finally {
+        request.mockRestore();
+        storageWrite?.mockRestore();
+      }
+    },
+  );
 
   it("submits five sliders in one write and keeps edits made while a successful save is pending", async () => {
     const f = await workspaceFixture(true, false, undefined, 5);

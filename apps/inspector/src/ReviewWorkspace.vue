@@ -20,6 +20,7 @@ import { assertTaskPacketV2, effectiveHumanObservationsV2, handoffBaseStatusV2, 
 import { inheritedHumanEvidenceReview, newEvidenceReview, recordEvidenceOperation, updateEvidenceDraft } from "./annotation/workflow/evidence-review";
 import { createExperimentalFoundationV2 } from "./annotation/workflow/experimental-campaign";
 import { createRemoteReviewStore, type RemoteSourceV2, type ReviewStoreV2 } from "./annotation/workflow/remote-workspace";
+import { reviewDraftStorage } from "./annotation/workflow/review-draft-storage";
 import { agentVersionLabel, reviewVersionOptions, skillKey } from "./annotation/workflow/review-provenance";
 import FallingNoteViewport from "./FallingNoteViewport.vue";
 import WorkflowClaimEditor from "./WorkflowClaimEditor.vue";
@@ -41,6 +42,7 @@ const proposalEditing = ref(false);
 const sectionComplete = ref(false);
 const foundation = shallowRef<FoundationV2>(createExperimentalFoundationV2(new Date().toISOString()));
 const humanId = ref(localStorage.getItem("beatmap-lens-review-human") ?? "");
+const draftStorageWarning = ref(Object.keys(reviewDraftStorage.unsaved()).length > 0);
 const status = ref("Open a difficulty or a frozen task to begin.");
 const error = ref("");
 const busy = ref(false);
@@ -403,17 +405,18 @@ function draftKey(kind = editorOrigin.value === "proposal" && activeClaim.value 
 }
 
 function stashDraft(): void {
-  if (restoring.value || !source.value || !drafts.value.length || !["direct", "proposal"].includes(editorOrigin.value)) return;
-  localStorage.setItem(draftKey(), serializeCanonicalJson({
+  if (sectionComplete.value || restoring.value || !source.value || !drafts.value.length || !["direct", "proposal"].includes(editorOrigin.value)) return;
+  reviewDraftStorage.set(draftKey(), {
     drafts: drafts.value, evidenceReviews: evidenceReviews.value, savedEvidenceReviews: savedEvidenceReviews.value, confidences: confidences.value, savedConfidences: savedConfidences.value, activeClaimId: activeClaimId.value, editorOrigin: editorOrigin.value,
     activeHandoffId: activeHandoffId.value, decisionNote: decisionNote.value, base: editorBase.value, reviewRevision: editorReviewRevision.value, proposalEditing: proposalEditing.value,
-  }));
+  });
+  draftStorageWarning.value = Object.keys(reviewDraftStorage.unsaved()).length > 0;
 }
 
 function restoreSection(): void {
   historicalObservation.value = undefined;
   stashDraft();
-  const text = localStorage.getItem(draftKey("direct", playbackRate.value));
+  const text = reviewDraftStorage.get(draftKey("direct", playbackRate.value));
   if (!text) { newSection(); return; }
   const saved = JSON.parse(text);
   drafts.value = saved.drafts;
@@ -481,7 +484,9 @@ function openRequestedClaim(): void {
   if (claim) { openProposal(target.handoffId, claim); pendingOpenClaim = false; }
 }
 
-watch(humanId, value => localStorage.setItem("beatmap-lens-review-human", value));
+watch(humanId, value => {
+  try { localStorage.setItem("beatmap-lens-review-human", value); } catch { /* The current reviewer remains available for submission. */ }
+});
 watch([drafts, evidenceReviews, confidences, activeClaimId, editorOrigin, activeHandoffId, decisionNote], stashDraft, { deep: true, flush: "post" });
 watch(activeClaimId, () => {
   notePage.value = 0;
@@ -778,7 +783,7 @@ function openProposal(handoffId: string, claim: ClaimV2, keepViewport = false): 
   }));
   const current = originals.map(entry => updateEvidenceDraft(entry, atSectionRange(entry, anchor.scope, anchor.reviewContext), newEvidenceReview("unknown")).claim);
   const key = draftKey(`proposal:${handoffId}:section:${sectionIdentity(claim)}`);
-  const cached = localStorage.getItem(key) ?? localStorage.getItem(draftKey(`proposal:${handoffId}:${claim.id}`));
+  const cached = reviewDraftStorage.get(key) ?? reviewDraftStorage.get(draftKey(`proposal:${handoffId}:${claim.id}`));
   const saved = cached ? JSON.parse(cached) : undefined;
   const currentDraft = saved?.reviewRevision === document.value?.reviewRevision ? saved : undefined;
   drafts.value = currentDraft ? current.map(entry => currentDraft.drafts.find((draft: ClaimV2) => draft.tagId === entry.tagId) ?? entry) : current;
@@ -1036,7 +1041,10 @@ async function submitSection(proposal: boolean): Promise<void> {
         editorReviewRevision.value = saved.document.reviewRevision;
         sectionComplete.value = unchangedDuringSave;
         status.value = unchangedDuringSave ? "Section judgments saved together." : "Section saved. Your newer edits are ready to submit.";
-        if (unchangedDuringSave && key) localStorage.removeItem(key);
+        if (unchangedDuringSave && key) {
+          reviewDraftStorage.remove(key);
+          draftStorageWarning.value = Object.keys(reviewDraftStorage.unsaved()).length > 0;
+        }
         else stashDraft();
       }
     }
@@ -1195,6 +1203,9 @@ onBeforeUnmount(() => { window.removeEventListener("keydown", workspaceKeydown);
     <aside class="review-details review-rail" :class="{ 'mobile-active': mobilePanel === 'details' }">
       <div class="review-status" role="status">{{ savingDecision ? 'Saving section…' : busy || sourceLoading ? 'Working…' : status }}</div>
       <p v-if="error" class="review-error" role="alert">{{ error }}</p>
+      <p v-if="draftStorageWarning" role="alert">Browser draft storage is unavailable. Your unsaved edits remain in this page. Submit them or download a backup before refreshing or closing.
+        <button type="button" @click="download('unsaved-review-drafts.json', reviewDraftStorage.unsaved())">Download unsaved drafts</button>
+      </p>
       <template v-if="source">
         <section class="review-transport" aria-label="Playback controls">
           <div class="review-actions">
