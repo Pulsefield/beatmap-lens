@@ -281,6 +281,75 @@ to the Foundation or frozen labels. The published v0.2.0 files remain unchanged.
 
 ## Published snapshots
 
+### v3: human confidence and the latest audited Astra campaign
+
+[v3](https://huggingface.co/datasets/sed-i/mania-pattern-annotations/tree/b22a7a443783e05fee4db4b1d22b8e573ad448ae) was published on 2026-09-12 under MIT at HF commit
+`b22a7a443783e05fee4db4b1d22b8e573ad448ae`; the `v3` tag resolves to that commit. GitHub was synchronized
+and its 24 preparation files were publicly downloaded and hash-verified before HF
+publication. The exporter and [frozen method package](https://github.com/Pulsefield/beatmap-lens/tree/647009ab60ed69d98190712a6ab025807cca07b8/annotation/methods/astra-1000-20260912) are pinned to
+GitHub commit `647009ab60ed69d98190712a6ab025807cca07b8`.
+
+| Layer | Records | Annotated charts |
+| --- | ---: | ---: |
+| Default `human` | 592 | 192 |
+| Opt-in latest Astra method | 4,403 | 477 |
+
+Together the layers cover 545 annotated charts. The human layer contains
+300 present and 292 absent records across 590 exact cells.
+Explicit confidence is preserved (171 High, 22 Low,
+399 unspecified). Publication schema v4 also retains observation hashes,
+human revision lineage and source-linked evidence metadata.
+
+The machine layer selects exact handoffs from the 2026-09-12 campaign of
+1,000 sections on 500 charts. `method-5ebd91cd0db19242f14bf5d4fc96b328c792b185ec4ab2bc785ca2e13a4d056c` records labeler model
+`gpt-6-astra` with requested medium reasoning and a separate `gpt-6-astra`
+auditor with requested high reasoning; CLI `codex-cli 0.154.0-alpha.6.2`.
+The frozen package records skill manifest SHA-256
+`bf56212bc04c99b4bcc5736917285680f0fba756864bd8222c8a22ca3a186299`,
+harness source commit `eb233598c6d0fcf5e9931416948d105f23ca8a71`, complete
+roles/prompts, and all eight evidence-tool hashes. Per-record identities bind
+handoffs, independent audits, and auxiliary human evidence. The selected machine
+records cover 954 source sections, with per-tag admission rather than a claim
+that all 1,000 sections are fully settled. Other batches, older machine methods,
+Luna shadows, unsupported judgments and exact human cells are excluded.
+
+All 545 published source references were downloaded and checked against their
+original SHA-256, alongside 106 public artifact references. There are
+23 explicitly excluded historical source identities: the previous six and
+17 additional charts whose original bytes were unavailable from official and
+three checked mirror URLs. Their canonical labels are unchanged. The eight
+previously deferred human records remain outside the release.
+
+Relative to v2.1, 399 human record identities are retained and
+193 effective identities are added; 68 earlier human identities have
+explicit revision/removal lineage. The old machine tables are omitted under the
+new campaign-selection policy, with individual removal reasons and full historical
+access at v2.1. All prior version tags are unchanged.
+
+The complete repository check passed 515 TypeScript and 342 Python tests,
+source/skill checks, types, builds, package checks and corpus smokes. Candidate
+checks reproduced exact campaign admission and preserved canonical label fields,
+confidence and observation identities. Anonymous download of all six snapshot
+files matched the local candidate and passed snapshot validation. The manifest
+SHA-256 is `92ecf080737ec2e38a2508b0730a672e09edd45d48f46a2d5777cbb70cefcbcf`.
+
+The method's bounded development score is 21/24 across eight cells and three
+fresh labeler repeats. Full-suite and auditor semantic accuracy were not
+established. Repeated development on those cells is not held-out evaluation;
+independent same-model audit does not eliminate correlated errors. No population
+accuracy claim is made. The Dataset Card includes: "Thanks to LuckyCosine7042 for
+moral support."
+
+### v2.1: human revisions and dependency freshness
+
+[v2.1](https://huggingface.co/datasets/sed-i/mania-pattern-annotations/tree/d717909f764b05dd63d13caec1748585029d8ab5)
+was published on 2026-09-10 with 467 human records and 2,398 machine records
+(2,368 initial and 30 repair), spanning 332 annotated charts and 336 source
+references. It incorporated six explicit human revisions and excluded 21 machine
+rows with changed human-exemplar dependencies. Its schema-v3 snapshot and earlier
+tags remain immutable.
+
+
 ### v0.2.0: frozen expansion with separate machine layers
 
 [v0.2.0](https://huggingface.co/datasets/sed-i/mania-pattern-annotations/tree/a8ee5391b5f9dd68e9b2fb478674a46f354c7375) was published on 2026-09-10 under MIT at HF commit

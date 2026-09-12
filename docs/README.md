@@ -48,11 +48,13 @@ own. Small source/section/tag finding tables are useful when they clarify a resu
 Raw charts, intermediate runs, campaign status, and working notes may remain local;
 public documentation does not promise to reconstruct every historical experiment.
 The current published snapshot is
-[mania-pattern-annotations v0.2.0](https://huggingface.co/datasets/sed-i/mania-pattern-annotations/tree/a8ee5391b5f9dd68e9b2fb478674a46f354c7375):
-467 human records and 2,419 machine judgments. The default human layer and two
-opt-in machine methods remain separate, with exact human precedence. The
+[mania-pattern-annotations v3](https://huggingface.co/datasets/sed-i/mania-pattern-annotations/tree/b22a7a443783e05fee4db4b1d22b8e573ad448ae):
+592 human records and 4,403 independently audited Astra judgments.
+The default human layer and opt-in machine layer remain separate, with exact
+human precedence. The [frozen method](../annotation/methods/astra-1000-20260912/README.md)
+records the model, skill and harness identities. The
 [publication record](annotation/dataset-publication.md#published-snapshots) includes
-immutable version identities and the preserved first release.
+immutable version identities, scope, limitations, and preserved earlier releases.
 
 ## Decisions
 

@@ -27,13 +27,14 @@ past experiment is not a public maintenance commitment.
 
 Annotations are published on Hugging Face as
 [sed-i/mania-pattern-annotations](https://huggingface.co/datasets/sed-i/mania-pattern-annotations).
-The MIT snapshot [v0.2.0](https://huggingface.co/datasets/sed-i/mania-pattern-annotations/tree/a8ee5391b5f9dd68e9b2fb478674a46f354c7375) contains 467 human records and
-2,419 independently audited machine judgments across 332 annotated charts.
-The human layer is the default; two machine method layers are separate opt-ins
-and exclude exact cells with effective human judgments. The
-[frozen method](annotation/methods/scale-500-20260910/README.md) and
-[expert review findings](docs/research/annotation-scale.md#expert-review-and-method-freeze)
-are public.
+The MIT snapshot [v3](https://huggingface.co/datasets/sed-i/mania-pattern-annotations/tree/b22a7a443783e05fee4db4b1d22b8e573ad448ae) contains 592 human records and
+4,403 independently audited Astra judgments across 545 annotated charts.
+The human layer is the default; the opt-in machine layer selects only eligible
+judgments from the latest 1,000-section campaign, with exact human precedence.
+The [frozen method](annotation/methods/astra-1000-20260912/README.md) records
+`gpt-6-astra`, skill and harness hashes, prompts, and independent auditor identities.
+Machine audit is not human confirmation or a measured accuracy claim. Earlier
+machine layers remain available at their immutable historical dataset versions.
 Dataset releases are independent of the npm package.
 The [publication pipeline](docs/annotation/dataset-publication.md) builds compact
 Parquet snapshots with pinned GitHub artifacts and hash-verified external chart references.
