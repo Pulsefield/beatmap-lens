@@ -1,0 +1,50 @@
+{
+  "contract": "beatmap-lens-frozen-harness-inventory",
+  "source_commit": "eb233598c6d0fcf5e9931416948d105f23ca8a71",
+  "entrypoint": "harness/annotation-harness.py",
+  "frozen_bundle_manifest_sha256": "296804d611d117cd7ebdf067faf8fdbd0101570df2075dd9d6763d7af42e8bc7",
+  "preparer_sha256": "3ce5cb61617289c6a8d16d471a62669fe07f065849fe028a876cc830cd73eaa1",
+  "tools": [
+    {
+      "bundle_path": "tools/annotation-facts.py",
+      "repository_path": "harness/annotation-facts.py",
+      "sha256": "e976214446fcbc815dbd5a9e5352cfc14e4c306cb64a2f6f49314b481716f8bf"
+    },
+    {
+      "bundle_path": "tools/annotation-harness.py",
+      "repository_path": "harness/annotation-harness.py",
+      "sha256": "7755bc61aa0721a9f530e8611e317198f5cbaea739b50247e5fbd6bb9b2f2ad0"
+    },
+    {
+      "bundle_path": "tools/annotation-queries.py",
+      "repository_path": "harness/annotation-queries.py",
+      "sha256": "70aa572cb360f061465afff61f57455eb3b3cbe0df5fce58565cbec346c4ac59"
+    },
+    {
+      "bundle_path": "tools/harness_examples.py",
+      "repository_path": "harness/harness_examples.py",
+      "sha256": "6331df2acdd344521da23f656283e56310de44150c7cc27fe48ca10dbba89457"
+    },
+    {
+      "bundle_path": "tools/harness_inspection.py",
+      "repository_path": "harness/harness_inspection.py",
+      "sha256": "c35ec787f2b52258a0921aa3f3d3526129a0b6c56436c5e63f027b576fb0c721"
+    },
+    {
+      "bundle_path": "tools/harness_playback.py",
+      "repository_path": "harness/harness_playback.py",
+      "sha256": "75308d6dd4825969cfa48b039b6af1f03ce6eee42b8af7f33b7a468e0e990dbd"
+    },
+    {
+      "bundle_path": "tools/harness_render.py",
+      "repository_path": "harness/harness_render.py",
+      "sha256": "28ca3b220fe74f742b495b173719e2e94842c3a6a9840df96a57170af5e66e9d"
+    },
+    {
+      "bundle_path": "tools/playback_rate.py",
+      "repository_path": "annotation/playback_rate.py",
+      "sha256": "3ae0f1f18d40d1a58ea55e8937f49ba9a84ffe983b6140bcd5daf6ece9aef774"
+    }
+  ],
+  "note": "The private bundle manifest also binds chart and human-example data. Its digest is an identity, not an assertion that those private inputs are published."
+}

@@ -1,0 +1,70 @@
+{
+  "type": "object",
+  "properties": {
+    "cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "caseId": {
+            "type": "string"
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "claimId": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "supported",
+                    "needs-revision",
+                    "needs-expert"
+                  ]
+                },
+                "rationale": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "question": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "claimId",
+                "status",
+                "rationale",
+                "question"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "coverageRationale": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "caseId",
+          "results",
+          "coverageRationale"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "cases"
+  ],
+  "additionalProperties": false
+}

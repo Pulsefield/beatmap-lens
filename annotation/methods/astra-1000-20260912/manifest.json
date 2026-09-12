@@ -1,0 +1,59 @@
+{
+  "contract": "beatmap-lens-frozen-annotation-method",
+  "version": 1,
+  "campaign": "subagent-annotation-1000-20260912",
+  "source_commit": "eb233598c6d0fcf5e9931416948d105f23ca8a71",
+  "model": "gpt-6-astra",
+  "reasoning_effort": {
+    "labeler": "medium",
+    "auditor": "high"
+  },
+  "tool_version": "codex-cli 0.154.0-alpha.6.2",
+  "skill": {
+    "name": "mania-pattern-judgment",
+    "version": "fine-harness:eb233598c6d0fcf5e9931416948d105f23ca8a71",
+    "sha256": "bf56212bc04c99b4bcc5736917285680f0fba756864bd8222c8a22ca3a186299"
+  },
+  "foundation_sha256": "15fa68913bdb2bf395a189df7ab433f6d5b126fc35c46c1dbc8e607ce2182e97",
+  "harness_bundle_manifest_sha256": "296804d611d117cd7ebdf067faf8fdbd0101570df2075dd9d6763d7af42e8bc7",
+  "batch": {
+    "sections": 1000,
+    "sources": 500,
+    "tranches": 125,
+    "final_labeler_jobs": 257,
+    "final_auditor_jobs": 257,
+    "sections_per_job_max": 4,
+    "playback_rate": 1
+  },
+  "artifacts": {
+    "auditor.md": "5ff0cca21af245419370d0875a912404555c2b493df91ab2a2f0414ef9eed136",
+    "harness.json": "bc8f56c86c7609b3f7112e1b8b0cb92f881042a3e432e8793e6da83739819089",
+    "inputs/auditor-prompt.txt": "fc769494f02ad0c41fc76ab6e14c02bb05a6e086cf02ff05366648a70d79b5ea",
+    "inputs/auditor-response-schema.json": "b7a03a443c5e99671a9d6b09d3ac23a1aaff375bb95beeb5a8cfe3d3e692bf54",
+    "inputs/foundation-definitions.json": "21d96dffd1d25bb40fca67520c6933d8bfe42373aef2b1fa45e890f91495a9ff",
+    "inputs/labeler-prompt.txt": "89d0fde661b98259b3045c4008edbd18e4ff492519f97773956cee181cb414ca",
+    "inputs/labeler-response-schema.json": "2a6044cc319f1f906edb85d9795827b64da35ac6603f58b75b52f4ce675bc671",
+    "inputs/worker-instructions.md": "349d7575a2185844ab09e09a651b613a3cb7b376ba1b4c032424ab919c2b7e53",
+    "labeler.md": "342a58f45064d7fd67afc76ed3b6e6809b8f528b90d568a41213fac46852217a",
+    "skill/SKILL.md": "26fb711ba8598f03301da570428ae69161a09671fcb831eeae72713bd42cb6a7",
+    "skill/agents/openai.yaml": "ccf36cf046af3bb2919a79be0498afbb9a00304fc99e3cee2bb9b404da2be06a",
+    "skill/references/beatmap-lens-exchange.md": "4c11d831416d895ce8ea8bc5507e7de78b9e00f519a2ec1ebe566c74ea00f304",
+    "skill/references/corpus-learning.md": "6c42a80ac5f637531786583ccfb6c229901e0f2505555ba3d069d2a51c7234a0",
+    "skill/references/feedback-maintenance.md": "03d7036e34b4210d6c4188b08f5fb86830d3c9c7fe385b28641a9ab0ebf65e16",
+    "skill/references/judgment-guide.md": "4459231d52a69c1c4048c4c1b5e477d56e65a8cbb5f841b55fd7542e04cf3683",
+    "skill/references/structural-queries.md": "3a136cdc46cd192c93c0c373508e54b09b2fb41d7177589c0a062ebe43e991c9",
+    "skill/references/tech-pack-20260907.md": "1e1ef39c5c791a8b077f3c66bb577b6efc89f895569261388180af686d4a7280",
+    "README.md": "7e4d45a129afbaaec92d82c394c9bdea46325813604d719006d1431da6874aff"
+  },
+  "verification": {
+    "final_run_records": 514,
+    "input_hashes_verified": 11252,
+    "harness_files_verified": 512,
+    "shared_inputs_identical_across_final_runs": true
+  },
+  "limitations": [
+    "Independent fresh producers use the same recorded model; audit is not human confirmation.",
+    "Model weights and historical executable digests were not recorded.",
+    "This archive contains no chart bytes, normalized notes, audio, human-example bank, raw responses or trace logs."
+  ]
+}

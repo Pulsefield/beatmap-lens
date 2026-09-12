@@ -45,6 +45,13 @@ Fill the release configuration with:
 - `foundations`: public artifact references for the selected frozen Foundation hashes.
 - `policy.agent_methods`: optional exact method IDs from the collected inventory.
   The default empty list publishes only human judgments.
+- `policy.agent_handoff_ids`: optional exact handoff allowlist for a particular
+  campaign. Other handoffs, including other runs of the same method, are excluded
+  as `handoff-not-selected`. Omission keeps method-wide selection; an empty list
+  admits no machine rows. Human records and their ancestry are not filtered by it.
+- `release_notes`: optional Markdown describing this release's scope, model and
+  method references, limitations, and acknowledgments. The text is retained in
+  the manifest and Dataset Card, outside its generated configuration metadata.
 - `policy.human_precedence`: new configurations set this to `true`. An effective
   human assessment at the exact same source hash, start, end, tag and playback
   rate excludes an otherwise eligible machine row, even on a different handoff.

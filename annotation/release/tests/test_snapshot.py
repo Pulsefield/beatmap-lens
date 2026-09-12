@@ -112,6 +112,33 @@ class SnapshotTests(unittest.TestCase):
     def rewrite_manifest(self, path, manifest):
         (path / "manifest.json").write_bytes(canonical_json(manifest))
 
+    def test_batch_allowlist_excludes_other_handoffs_of_the_same_method(self):
+        included = add_agent(self.projection, self.config)
+        other_batch = deepcopy(included)
+        other_batch.update(record_id="agent:other-batch", handoff_id="other-batch")
+        self.projection["agents"].append(other_batch)
+        self.config["policy"]["agent_handoff_ids"] = ["handoff"]
+        path, manifest = self.build()
+        self.assertEqual(manifest["counts"]["human"], 1)
+        self.assertEqual(manifest["counts"]["agents"], {METHOD: 1})
+        self.assertEqual(manifest["exclusions"]["agents"], {"handoff-not-selected": 1})
+        self.assertEqual(pq.read_table(path / f"data/agent/{METHOD}.parquet")["handoff_id"].to_pylist(), ["handoff"])
+        manifest["policy"]["agent_handoff_ids"] = ["other-batch"]
+        self.rewrite_manifest(path, manifest)
+        with self.assertRaisesRegex(ValueError, "Agent handoff is outside release policy"):
+            validate_snapshot(path)
+
+    def test_release_notes_are_bound_to_the_manifest_and_card(self):
+        notes = "## Release notes\n\nA frozen machine batch.\n\nThanks to LuckyCosine7042 for moral support."
+        self.config["release_notes"] = notes
+        path, manifest = self.build()
+        self.assertEqual(manifest["release_notes"], notes)
+        self.assertIn(notes, (path / "README.md").read_text())
+        manifest["release_notes"] = "Different release scope."
+        self.rewrite_manifest(path, manifest)
+        with self.assertRaisesRegex(ValueError, "declared release notes"):
+            validate_snapshot(path)
+
     def downgrade_snapshot(self, path, manifest, version):
         """Materialize the original Arrow contract; no new metadata survives."""
         manifest["version"] = version

@@ -20,7 +20,9 @@
     {
       "includes": [
         "annotation/methods/scale-500-20260910/skill/**",
-        "annotation/methods/scale-500-20260910/inputs/**"
+        "annotation/methods/scale-500-20260910/inputs/**",
+        "annotation/methods/astra-1000-20260912/skill/**",
+        "annotation/methods/astra-1000-20260912/inputs/**"
       ],
       "formatter": { "enabled": false }
     }

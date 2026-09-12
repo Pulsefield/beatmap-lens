@@ -247,12 +247,19 @@ def _policy(config: dict) -> dict:
     value = deepcopy(config.get("policy", {}))
     value.setdefault("excluded_sources", {})
     required = {"agent_methods", "auxiliary_evidence", "allow_partial_method_provenance", "excluded_sources"}
-    _fail(required <= set(value) <= required | {"human_precedence"}, "policy must declare agent_methods, auxiliary_evidence and allow_partial_method_provenance, with optional excluded_sources and human_precedence")
+    _fail(required <= set(value) <= required | {"human_precedence", "agent_handoff_ids"}, "policy must declare agent_methods, auxiliary_evidence and allow_partial_method_provenance, with optional excluded_sources, human_precedence and agent_handoff_ids")
     _fail(isinstance(value["agent_methods"], list) and len(value["agent_methods"]) == len(set(value["agent_methods"])), "policy agent_methods must be unique")
     _fail(isinstance(value["auxiliary_evidence"], list) and not set(value["auxiliary_evidence"]) - {"current", "changed", "untracked"}, "policy auxiliary_evidence must explicitly select supported statuses")
     _fail(isinstance(value["allow_partial_method_provenance"], bool), "allow_partial_method_provenance must be boolean")
     if "human_precedence" in value:
         _fail(isinstance(value["human_precedence"], bool), "human_precedence must be boolean")
+    if "agent_handoff_ids" in value:
+        handoffs = value["agent_handoff_ids"]
+        _fail(isinstance(handoffs, list), "agent_handoff_ids must be a list")
+        for handoff in handoffs:
+            _text(handoff, "Agent handoff ID")
+        _fail(len(handoffs) == len(set(handoffs)), "agent_handoff_ids must be unique")
+        value["agent_handoff_ids"] = sorted(handoffs)
     _fail(isinstance(value["excluded_sources"], dict), "policy excluded_sources must map source hashes to reasons")
     for source_sha, reason in value["excluded_sources"].items():
         _digest(source_sha, "Excluded source hash")
@@ -436,7 +443,10 @@ def _dataset_card(manifest: dict) -> str:
     lines += ["---", "", f"# {manifest['title']}", "", f"Snapshot `{manifest['release_id']}` uses publication schema `{CONTRACT}` version {card_version}.", "",
               f"This snapshot contains {manifest['counts']['human']} human judgments, {sum(manifest['counts']['agents'].values())} agent judgments, and {manifest['counts']['sources']} source identities (annotation and required calibration sources).", "",
               f"Export implementation: [GitHub commit {manifest['exporter']['commit'][:12]}]({manifest['exporter']['repository'].removesuffix('.git')}/tree/{manifest['exporter']['commit']}).", "",
-              "Normative Foundation definitions:"]
+              ]
+    if manifest.get("release_notes"):
+        lines += [manifest["release_notes"], ""]
+    lines += ["Normative Foundation definitions:"]
     for foundation_id, value in manifest["foundations"].items():
         ref = value["artifact"]
         url = f"{ref['repository'].removesuffix('.git')}/blob/{ref['commit']}/{quote_uri(ref['path'], safe='/')}"
@@ -453,6 +463,8 @@ def _dataset_card(manifest: dict) -> str:
         lines += ["The exported annotations and accompanying dataset documentation use the MIT license in `LICENSE`. Externally referenced beatmaps remain subject to their own terms; this snapshot does not distribute or relicense their contents.", ""]
     if manifest["policy"].get("excluded_sources"):
         lines += [f"This is a partial source selection: {len(manifest['policy']['excluded_sources'])} source(s) were explicitly omitted. `manifest.json` records each original source hash and exclusion reason in `policy.excluded_sources`, and omitted judgment counts under `exclusions`. The omitted workspace judgments remain intact. Required Foundation calibration sources cannot be excluded.", ""]
+    if "agent_handoff_ids" in manifest["policy"]:
+        lines += [f"Machine admission is restricted to {len(manifest['policy']['agent_handoff_ids'])} exact handoff IDs listed in `policy.agent_handoff_ids`. Other runs of the same method are excluded as `handoff-not-selected`. This batch restriction does not filter human records or their ancestry.", ""]
     if "human_precedence" in manifest["policy"]:
         lines += ["For training, identify an exact judgment cell by `(source_sha256, start_ms, end_ms, tag_id, playback_rate)`. The human table preserves distinct effective observations, including agreeing duplicates at the same cell. Deduplicate agreeing human assessments by this key before weighting examples; retain their record IDs as provenance. Keep `unresolved` and `unreviewed` cells masked from supervision and do not replace human uncertainty with a machine label. Conflicting supervised human assessments at the same cell block publication.", ""]
         if manifest["policy"]["human_precedence"]:
@@ -498,6 +510,7 @@ def build_snapshot(projection: dict, config: dict, output: Path, previous: Path 
     retained.update({method_id: [] for method_id in policy["agent_methods"]})
     exclusions = {"human": Counter(), "agents": Counter()}
     human_cells = {_judgment_cell(row) for row in projection["human"]} if policy.get("human_precedence") else set()
+    selected_handoffs = set(policy["agent_handoff_ids"]) if "agent_handoff_ids" in policy else None
     for channel, rows in (("human", projection["human"]), ("agents", projection["agents"])):
         for row in rows:
             reason = None
@@ -511,6 +524,8 @@ def build_snapshot(projection: dict, config: dict, output: Path, previous: Path 
                 method_id = row.get("method_id")
                 if method_id not in policy["agent_methods"]:
                     reason = "method-not-selected"
+                elif selected_handoffs is not None and row.get("handoff_id") not in selected_handoffs:
+                    reason = "handoff-not-selected"
                 elif row.get("review_status") not in {"agent-reviewed", "accepted"}:
                     reason = "not-effective-agent-review"
                 elif row.get("audit_status") != "supported":
@@ -574,6 +589,9 @@ def build_snapshot(projection: dict, config: dict, output: Path, previous: Path 
         "exclusions": {key: dict(sorted(value.items())) for key, value in exclusions.items()},
         "foundations": foundations, "methods": {key: methods[key] for key in sorted(method_ids)}, "provenance": provenance,
     }
+    if "release_notes" in config:
+        _text(config["release_notes"], "release_notes")
+        manifest["release_notes"] = config["release_notes"]
     manifest["removed_records"] = _removals(Path(previous) if previous else None, all_rows, manifest, config)
     output.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=f".{output.name}-", dir=output.parent))
@@ -735,6 +753,8 @@ def _validate_judgment(row: dict, subset: str, sources: dict, manifest: dict) ->
             _text(row["decision_id"], "Human decision_id")
     else:
         _fail(row["origin"] == "agent-reviewed" and packet is not None, "Agent configuration requires machine provenance")
+        if "agent_handoff_ids" in manifest["policy"]:
+            _fail(row["handoff_id"] in manifest["policy"]["agent_handoff_ids"], "Agent handoff is outside release policy")
         _fail(row["observation_id"] is None and not row["supersedes_record_ids"], "Agent row cannot claim a human observation or revision")
         method_id = subset.removeprefix("agent-")
         _fail(packet["method_id"] == method_id, "Agent configuration and packet method differ")
@@ -763,7 +783,10 @@ def validate_snapshot(path: Path) -> dict:
     manifest = json.loads((path / "manifest.json").read_text(encoding="utf-8"))
     _fail(manifest.get("contract") == CONTRACT and manifest.get("version") in JUDGMENT_SCHEMAS, "Unsupported publication schema")
     version = manifest["version"]
-    _fail(set(manifest) == {"contract", "version", "release_id", "created_at", "repo_id", "title", "license", "exporter", "exporter_files", "previous_snapshot", "previous_manifest_sha256", "scope", "policy", "files", "counts", "exclusions", "foundations", "methods", "provenance", "removed_records"}, "Manifest has missing or unexpected fields")
+    required_fields = {"contract", "version", "release_id", "created_at", "repo_id", "title", "license", "exporter", "exporter_files", "previous_snapshot", "previous_manifest_sha256", "scope", "policy", "files", "counts", "exclusions", "foundations", "methods", "provenance", "removed_records"}
+    _fail(required_fields <= set(manifest) <= required_fields | {"release_notes"}, "Manifest has missing or unexpected fields")
+    if "release_notes" in manifest:
+        _text(manifest["release_notes"], "release_notes")
     for key in ("release_id", "created_at", "title", "license"):
         _text(manifest[key], key)
     _fail(bool(REPO_ID.fullmatch(str(manifest["repo_id"]))), "Invalid manifest repo_id")
@@ -793,6 +816,8 @@ def validate_snapshot(path: Path) -> dict:
         if "LICENSE" in manifest["exporter_files"]:
             _fail(manifest["files"]["LICENSE"]["sha256"] == manifest["exporter_files"]["LICENSE"], "Snapshot LICENSE must preserve the referenced project copyright notice")
     card = (path / "README.md").read_text(encoding="utf-8")
+    if "release_notes" in manifest:
+        _fail(manifest["release_notes"] in card, "Dataset card must include the declared release notes")
     _fail(card.startswith("---\n") and "\n---\n" in card[4:], "Dataset card requires YAML metadata")
     metadata = yaml.safe_load(card.split("---\n", 2)[1])
     expected_configs = [
