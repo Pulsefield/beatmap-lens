@@ -10,7 +10,7 @@ import unicodedata
 import pyarrow.parquet as pq
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from annotation_runtime import REPO, load_module
+from annotation_runtime import REPO, load_module, check_section_limit
 from playback_rate import playback_rate_fields, same_playback_rate
 from section_evidence import brief, source_cases
 
@@ -84,7 +84,9 @@ def benchmark_gold(case, feedback):
 
 def prepare(design_path, root, campaign, python):
     design_path, root, campaign = map(lambda p: Path(p).resolve(), (design_path, root, campaign))
-    design, config = read(design_path), read(campaign / 'controller/config.json')
+    design = read(design_path)
+    check_section_limit(len(design['cases']))
+    config = read(campaign / 'controller/config.json')
     sources = {c['source']['sha256']: c for c in read(campaign / 'admin/source-map.json')}
     groups = song_groups(sources)
     target_sources = {c['sourceSha256'] for c in design['cases']}

@@ -1,5 +1,8 @@
 """Shared selected-section worker execution and response contract."""
+import argparse
+from contextlib import contextmanager
 from datetime import datetime, timezone
+import fcntl
 import hashlib
 import importlib.util
 import json
@@ -24,6 +27,14 @@ def load_module(path):
 
 
 TAGS = ('jack-organization', 'stream-organization', 'trill-organization', 'tech', 'ln-coordination')
+MAX_SECTIONS_PER_WORKER = 4
+
+
+def check_section_limit(count):
+    if not 1 <= count <= MAX_SECTIONS_PER_WORKER:
+        raise ValueError(f'Selected-section workers require 1–{MAX_SECTIONS_PER_WORKER} sections; '
+                         'prepare a new bounded batch without editing frozen jobs.')
+
 
 def read(path):
     return json.loads(Path(path).read_text())
@@ -37,14 +48,35 @@ def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+@contextmanager
+def worker_lock(job):
+    with (Path(job) / '.worker.lock').open('a') as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise ValueError('Worker job is already owned by another dispatcher: ' + str(job)) from None
+        yield
+
+
 def run_job(job, config):
     job = Path(job).resolve()
+    with worker_lock(job):
+        return _run_job(job, config)
+
+
+def _run_job(job, config):
+    """Execute while the caller holds worker_lock, including during recovery dispatch."""
     run = read(job / 'run.json')
     if run['status'] != 'prepared':
         return run
     for name, digest in run['inputHashes'].items():
         if sha(job / name) != digest:
             raise ValueError(f'Frozen benchmark input changed: {job / name}')
+    # Read the assignments, not the informational caseCount in run.json.
+    case_count = len(read(job / 'cases.json')['cases'])
+    check_section_limit(case_count)
+    if run['caseCount'] != case_count:
+        raise ValueError('Worker caseCount differs from its frozen section assignments.')
     codex = config['codexCommand']
     harness_args = []
     if run.get('harness'):
@@ -99,3 +131,18 @@ def response_schema():
             'rationale': {'type': 'array', 'items': {'type': 'string'}},
             'noteLines': {'type': 'array', 'items': {'type': 'integer'}},
             'contextLines': {'type': 'array', 'items': {'type': 'integer'}}})}})}})
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Execute one frozen selected-section worker job.')
+    parser.add_argument('--job', type=Path, required=True)
+    parser.add_argument('--config', type=Path, required=True, help='Campaign controller configuration.')
+    args = parser.parse_args()
+    run = run_job(args.job, read(args.config))
+    print(json.dumps({'job': str(args.job.resolve()), **{
+        key: run[key] for key in ('status', 'producerId', 'caseCount') if key in run}}))
+    return 0 if run['status'] == 'completed' else 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())

@@ -41,7 +41,8 @@ def initialize(root, campaign, target=None, python=None):
         save(path, {'kind': 'fine-annotation-campaign-v1', 'createdAt': now(),
                     'campaign': str(campaign), 'target': target or 4000, 'baselineCompleteCount': 0,
                     'foundationSha256': source['foundationSha256'], 'batchSize': 25,
-                    'concurrency': 5, 'maxSections': 5, 'maxBriefCharacters': 28000, 'seed': 20260907,
+                    'concurrency': 5, 'maxSections': fine.base.MAX_SECTIONS_PER_WORKER,
+                    'maxBriefCharacters': 28000, 'seed': 20260907,
                     'python': python or os.environ.get('ANNOTATION_PYTHON', sys.executable), 'batches': []})
     config = read(path)
     if (config['campaign'] != str(campaign) or config['foundationSha256'] != source['foundationSha256']
@@ -277,6 +278,7 @@ def prepare_batch(root, config, batch):
     path, snapshot, bundle = (Path(batch[k]) for k in ('path', 'snapshot', 'bundle'))
     if (path / 'preparation.json').exists():
         return
+    fine.base.check_section_limit(config['maxSections'])
     if path.exists():
         raise ValueError('Incomplete batch preparation needs controller inspection: ' + str(path))
     if not snapshot.exists():

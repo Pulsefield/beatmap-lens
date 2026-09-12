@@ -269,10 +269,24 @@ class ControllerTest(unittest.TestCase):
         self.assertEqual(target['latestLabeler']['judgments'][-1]['assessment'], {'presence': 'unresolved'})
 
     def test_empty_campaign_has_zero_baseline_and_never_fetches_old_whole_charts(self):
+        self.assertEqual(self.config['maxSections'], 4)
         result = campaign.status(self.root, self.config)
         self.assertEqual(result['completeCount'], 0)
         self.assertEqual(result['baselineCompleteCount'], 0)
         self.fetch.assert_not_called()
+
+    def test_new_batch_rejects_an_older_over_limit_config_without_touching_frozen_batches(self):
+        existing = self.batch()
+        frozen = (Path(existing['path']) / 'preparation.json').read_bytes()
+        self.config['maxSections'] = 5
+        campaign.prepare_batch(self.root, self.config, existing)
+        self.assertEqual((Path(existing['path']) / 'preparation.json').read_bytes(), frozen)
+        new_batch = {key: str(self.root / ('new-' + key)) for key in ('path', 'snapshot', 'bundle')}
+        with patch.object(campaign.subprocess, 'run') as launch:
+            with self.assertRaisesRegex(ValueError, '1–4 sections'):
+                campaign.prepare_batch(self.root, self.config, new_batch)
+            launch.assert_not_called()
+        self.assertFalse(Path(new_batch['path']).exists())
 
     def test_adoption_is_idempotent_and_pins_prepared_foundation(self):
         batch = self.batch()
@@ -355,7 +369,7 @@ class ControllerTest(unittest.TestCase):
         self.assertEqual(selector[selector.index('--exclude-sections') + 1], str(self.root / 'ledger.json'))
         self.assertEqual(harness[harness.index('--feedback-dir') + 1], str(Path(batch['snapshot']) / 'feedback'))
         self.assertEqual(harness[harness.index('--mode') + 1], 'annotation')
-        self.assertEqual(prepare.call_args.args[-2:], (5, 28000))
+        self.assertEqual(prepare.call_args.args[-2:], (4, 28000))
 
     def test_busy_campaign_lock_skips_without_initializing_or_reading_feedback(self):
         output = io.StringIO()

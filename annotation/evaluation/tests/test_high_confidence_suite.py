@@ -163,7 +163,12 @@ class HighConfidenceSuiteTest(unittest.TestCase):
             gate.save(campaign / 'common/foundation.json', {'foundationSha256': 'foundation',
                       'targets': [], 'calibrationExamples': [{'answer': 'target-secret-rationale'}]})
             gate.save(campaign / 'admin/source-map.json', sources)
-            suite = self.build(feedbacks[:1])
+            target_feedback = deepcopy(feedbacks[0])
+            for number in range(1, 6):
+                extra = observation(f'target-window-{number}')
+                extra['claim']['scope'] = {'startMs': 100 + number, 'endMs': 200 + number}
+                target_feedback['effectiveHumanObservations'].append(extra)
+            suite = self.build([target_feedback])
             suite_path = root / 'suite.json'
             gate.save(suite_path, suite)
             with patch.object(runner.runtime, 'run_job', side_effect=AssertionError('No model runs')):
@@ -206,6 +211,11 @@ class HighConfidenceSuiteTest(unittest.TestCase):
             runtime_path.write_text(runtime_path.read_text() + '\n_original_schema = response_schema\n'
                                    'def response_schema():\n'
                                    '    return {**_original_schema(), "description": "ADOPTED RUNTIME"}\n')
+            production_path = source_repo / 'annotation/pipeline/run-fine-annotation.py'
+            production_path.write_text(production_path.read_text() +
+                '\n_original_prepare = prepare\n'
+                'def prepare(root, queue_path, bundle, campaign, python, max_sections=2, max_brief_chars=28000):\n'
+                '    return _original_prepare(root, queue_path, bundle, campaign, python, max_sections, max_brief_chars)\n')
             subprocess.run(['git', 'init', '-q', str(source_repo)], check=True)
             subprocess.run(['git', '-C', str(source_repo), 'add', 'annotation/annotation_runtime.py'], check=True)
             subprocess.run(['git', '-C', str(source_repo), '-c', 'user.name=Fixture',
@@ -219,6 +229,10 @@ class HighConfidenceSuiteTest(unittest.TestCase):
             first_job = root / 'adopted' / adopted['repeats'][0]['jobs'][0]
             self.assertIn('ADOPTED CHECKOUT ROLE', (first_job / 'prompt.txt').read_text())
             self.assertEqual(gate.read(first_job / 'response-schema.json')['description'], 'ADOPTED RUNTIME')
+            for repeat in adopted['repeats']:
+                self.assertEqual(len(repeat['jobs']), 3)
+                for relative in repeat['jobs']:
+                    self.assertEqual(len(gate.read(root / 'adopted' / relative / 'cases.json')['cases']), 2)
             self.assertEqual(adopted['sources']['files']['labeler']['annotation/annotation_runtime.py'],
                              gate.sha(runtime_path))
 

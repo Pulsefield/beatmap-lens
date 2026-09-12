@@ -8,7 +8,7 @@ import uuid
 
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from annotation_runtime import REPO, TAGS, read, save, sha, run_job, response_schema
+from annotation_runtime import REPO, TAGS, read, save, sha, run_job, response_schema, check_section_limit
 PRICING = {'source': 'https://developers.openai.com/api/docs/models/gpt-6-astra',
            'checkedOn': '2026-09-07', 'inputPerMillion': 10, 'cachedInputPerMillion': 1,
            'cacheWritePerMillion': 12.5, 'outputPerMillion': 50,
@@ -16,6 +16,7 @@ PRICING = {'source': 'https://developers.openai.com/api/docs/models/gpt-6-astra'
 
 
 def prepare_job(job, cases, skill_files, foundation, config, role='labeler', extra_prompt=''):
+    check_section_limit(len(cases))
     job.mkdir(parents=True)
     for name, content in skill_files.items():
         path = job / 'skill' / name

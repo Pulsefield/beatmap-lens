@@ -105,6 +105,7 @@ def section_brief(cases):
 
 def pack_cases(cases, max_sections, max_brief_chars):
     """Balance source evidence so dense cases do not leave an avoidable one-case job."""
+    base.check_section_limit(max_sections)
     groups = [[] for _ in range((len(cases) + max_sections - 1) // max_sections)]
     order = {case['caseId']: i for i, case in enumerate(cases)}
     for case in sorted(cases, key=lambda c: len(section_brief([c])), reverse=True):
@@ -134,6 +135,7 @@ def prepare_job(root, cases, role, config, number, handoffs=None):
     job = root / 'runs' / f'{role}-{number:03d}'
     if (job / 'run.json').exists():
         return job
+    base.check_section_limit(len(cases))
     job.mkdir(parents=True, exist_ok=True)
     shutil.copytree(root / 'common/skill', job / 'skill', dirs_exist_ok=True)
     for name in ('foundation.json', 'skill-provenance.json'):
@@ -165,7 +167,8 @@ def prepare_job(root, cases, role, config, number, handoffs=None):
     return job
 
 
-def prepare(root, queue_path, bundle, campaign, python, max_sections=5, max_brief_chars=28000):
+def prepare(root, queue_path, bundle, campaign, python, max_sections=base.MAX_SECTIONS_PER_WORKER, max_brief_chars=28000):
+    base.check_section_limit(max_sections)
     root, queue_path, bundle, campaign = (Path(p).resolve() for p in (root, queue_path, bundle, campaign))
     config = read(campaign / 'controller/config.json')
     queue, manifest = read(queue_path), read(bundle / 'manifest.json')
@@ -233,9 +236,15 @@ def status(root):
 
 
 def run_worker(job, config):
+    job = Path(job).resolve()
+    with base.worker_lock(job):
+        return _run_worker(job, config)
+
+
+def _run_worker(job, config):
     run = read(job / 'run.json')
     if run['status'] != 'running':
-        return base.run_job(job, config)
+        return base._run_job(job, config)
     if not run.get('pid'):
         run.update(status='interrupted', interruptionReason='Controller stopped during launch before recording the worker PID; inspect the retained job before relaunch.')
         save(job / 'run.json', run)
@@ -375,7 +384,8 @@ def main():
     parser.add_argument('--bundle', type=Path)
     parser.add_argument('--python', default=os.environ.get('ANNOTATION_PYTHON', sys.executable))
     parser.add_argument('--concurrency', type=int, default=5)
-    parser.add_argument('--max-sections', type=int, default=5)
+    parser.add_argument('--max-sections', type=int, choices=range(1, base.MAX_SECTIONS_PER_WORKER + 1),
+                        default=base.MAX_SECTIONS_PER_WORKER, help='Hard per-worker section limit (1–4).')
     parser.add_argument('--max-brief-chars', type=int, default=28000)
     parser.add_argument('--labels-only', action='store_true')
     args = parser.parse_args()

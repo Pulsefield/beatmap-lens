@@ -2,6 +2,8 @@
 import importlib.util
 import json
 from pathlib import Path
+import subprocess
+import sys
 from tempfile import TemporaryDirectory
 from threading import Event
 from types import SimpleNamespace
@@ -53,12 +55,138 @@ class FineAnnotationTest(unittest.TestCase):
                                                'scope', 'reviewContext', 'humanComment'})
 
     def test_dense_cases_are_balanced_without_an_avoidable_tail_worker(self):
-        cases = [{'caseId': str(i), 'weight': weight} for i, weight in enumerate([1] * 20 + [6] * 5)]
+        cases = [{'caseId': str(i), 'weight': weight} for i, weight in enumerate([1] * 15 + [6] * 5)]
         with patch.object(fine, 'section_brief', side_effect=lambda group: 'x' * sum(c['weight'] for c in group)):
-            groups = fine.pack_cases(cases, 5, 15)
+            groups = fine.pack_cases(cases, 4, 15)
         self.assertEqual(len(groups), 5)
         self.assertEqual(sorted(c['caseId'] for group in groups for c in group), sorted(c['caseId'] for c in cases))
-        self.assertTrue(all(len(group) == 5 and sum(c['weight'] for c in group) <= 15 for group in groups))
+        self.assertTrue(all(len(group) == 4 and sum(c['weight'] for c in group) <= 15 for group in groups))
+
+    def test_dense_singleton_keeps_its_complete_source_brief(self):
+        cases = [{'caseId': str(i), 'weight': weight} for i, weight in enumerate([20] + [1] * 8)]
+        with patch.object(fine, 'section_brief', side_effect=lambda group: 'x' * sum(c['weight'] for c in group)):
+            groups = fine.pack_cases(cases, 4, 15)
+        self.assertIn([cases[0]], groups)
+        self.assertTrue(all(len(group) <= 4 for group in groups))
+        self.assertEqual(sum(map(len, groups)), len(cases))
+
+    def test_preparation_cannot_raise_the_worker_section_limit(self):
+        cases = [{'caseId': str(i)} for i in range(5)]
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary) / 'unprepared'
+            with self.assertRaisesRegex(ValueError, '1–4 sections'):
+                fine.prepare(root, root, root, root, 'python', max_sections=5)
+            with self.assertRaisesRegex(ValueError, '1–4 sections'):
+                fine.pack_cases(cases, 5, 28000)
+            for role in ('labeler', 'auditor'):
+                with self.subTest(role=role), self.assertRaisesRegex(ValueError, '1–4 sections'):
+                    fine.prepare_job(root, cases, role, {}, 1)
+            self.assertFalse(root.exists())
+
+    def test_runtime_counts_assignments_before_launch_and_preserves_frozen_jobs(self):
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            job = root / 'runs/labeler-001'
+            fine.save(job / 'cases.json', {'cases': [{'caseId': str(i)} for i in range(5)]})
+            fine.save(job / 'run.json', {'status': 'prepared', 'role': 'labeler', 'caseCount': 1,
+                'inputHashes': {'cases.json': fine.sha(job / 'cases.json')}})
+            frozen = {p.name: p.read_bytes() for p in job.iterdir()}
+            with patch.object(fine.base.subprocess, 'Popen') as launch:
+                with self.assertRaisesRegex(ValueError, '1–4 sections'):
+                    fine.base.run_job(job, {})
+                launch.assert_not_called()
+            self.assertEqual({p.name: p.read_bytes() for p in job.iterdir() if p.name != '.worker.lock'}, frozen)
+            run = fine.read(job / 'run.json')
+            run['status'] = 'completed'
+            fine.save(job / 'run.json', run)
+            completed = (job / 'run.json').read_bytes()
+            self.assertEqual(fine.base.run_job(job, {}), run)
+            self.assertEqual(fine.prepare_job(root, [], 'labeler', {}, 1), job)
+            self.assertEqual((job / 'run.json').read_bytes(), completed)
+
+    def test_runtime_checks_recorded_count_and_uses_a_fresh_isolated_worker(self):
+        with TemporaryDirectory() as temporary:
+            job = Path(temporary) / 'job'
+            bundle = Path(temporary) / 'harness'
+            fine.save(bundle / 'manifest.json', {'mode': 'annotation'})
+            fine.save(job / 'cases.json', {'cases': [{'caseId': str(i)} for i in range(4)]})
+            (job / 'prompt.txt').write_text('FROZEN PROMPT')
+            fine.save(job / 'response-schema.json', {})
+            run = {'status': 'prepared', 'role': 'auditor', 'caseCount': 1,
+                'requestedModel': 'test-model', 'requestedReasoningEffort': 'medium',
+                'harness': {'bundle': str(bundle.resolve()), 'manifestSha256': fine.sha(bundle / 'manifest.json'),
+                            'python': '/frozen/python'},
+                'inputHashes': {p.name: fine.sha(p) for p in job.iterdir()}}
+            fine.save(job / 'run.json', run)
+            with self.assertRaisesRegex(ValueError, 'caseCount differs'):
+                fine.base.run_job(job, {})
+            run['caseCount'] = 4
+            fine.save(job / 'run.json', run)
+            prompts = []
+
+            def communicate(prompt):
+                prompts.append(prompt)
+                fine.save(job / 'response.json', {'cases': []})
+
+            process = SimpleNamespace(pid=321, returncode=0, communicate=communicate)
+            with patch.object(fine.base.subprocess, 'check_output', return_value='test-codex'), \
+                    patch.object(fine.base.subprocess, 'Popen', return_value=process) as launch:
+                result = fine.base.run_job(job, {'codexCommand': 'test-codex'})
+            command = launch.call_args.args[0]
+            self.assertIn('--ignore-user-config', command)
+            self.assertIn('--ephemeral', command)
+            self.assertNotIn('resume', command)
+            self.assertIn('mcp_servers.lens.command="/frozen/python"', command)
+            self.assertIn('mcp_servers.lens.required=true', command)
+            self.assertIn('mcp_servers.lens.args=' + json.dumps([
+                str(bundle.resolve() / 'tools/annotation-harness.py'), '--bundle', str(bundle.resolve()),
+                '--trace', str(job.resolve() / 'harness-trace.jsonl')]), command)
+            self.assertEqual(prompts, ['FROZEN PROMPT'])
+            self.assertEqual(result['status'], 'completed')
+            self.assertTrue(result['inputsUnchanged'])
+
+    def test_runtime_refuses_a_second_dispatcher_without_overwriting_the_job(self):
+        with TemporaryDirectory() as temporary:
+            job = Path(temporary)
+            fine.save(job / 'run.json', {'status': 'prepared', 'producerId': 'original'})
+            original = (job / 'run.json').read_bytes()
+            with (job / '.worker.lock').open('a') as owner, patch.object(fine.base.subprocess, 'Popen') as launch:
+                fine.base.fcntl.flock(owner, fine.base.fcntl.LOCK_EX | fine.base.fcntl.LOCK_NB)
+                with self.assertRaisesRegex(ValueError, 'already owned by another dispatcher'):
+                    fine.base.run_job(job, {})
+                launch.assert_not_called()
+            self.assertEqual((job / 'run.json').read_bytes(), original)
+            self.assertFalse((job / 'events.jsonl').exists())
+            self.assertFalse((job / 'response.json').exists())
+
+    def test_recovery_cannot_reclassify_or_harvest_a_job_owned_by_its_launcher(self):
+        with TemporaryDirectory() as temporary:
+            job = Path(temporary)
+            for fields in ({}, {'pid': 321}):
+                fine.save(job / 'run.json', {'status': 'running', 'producerId': 'actual-launcher', **fields})
+                original = (job / 'run.json').read_bytes()
+                with fine.base.worker_lock(job), patch.object(fine.subprocess, 'run') as inspect:
+                    with self.assertRaisesRegex(ValueError, 'already owned by another dispatcher'):
+                        fine.run_worker(job, {})
+                    inspect.assert_not_called()
+                self.assertEqual((job / 'run.json').read_bytes(), original)
+                self.assertFalse((job / 'response.json').exists())
+
+    def test_single_job_cli_reports_existing_receipts_and_failure_exit_status(self):
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            fine.save(root / 'config.json', {})
+            for status, exit_code in (('completed', 0), ('failed', 1)):
+                job = root / status
+                run = {'status': status, 'producerId': 'existing-' + status, 'caseCount': 4}
+                fine.save(job / 'run.json', run)
+                frozen = (job / 'run.json').read_bytes()
+                result = subprocess.run([sys.executable, fine.base.__file__, '--job', str(job),
+                    '--config', str(root / 'config.json')], capture_output=True, text=True)
+                self.assertEqual(result.returncode, exit_code, result.stderr)
+                self.assertEqual(json.loads(result.stdout), {'job': str(job.resolve()), **run})
+                self.assertEqual((job / 'run.json').read_bytes(), frozen)
+                self.assertFalse((job / 'events.jsonl').exists())
 
     def test_compact_audit_evidence_resolves_to_the_exact_sealed_references(self):
         source = {7: {'sourceLine': 7, 'column': 0, 'kind': 'long', 'startMs': 900, 'endMs': 1400},
@@ -139,7 +267,7 @@ class FineAnnotationTest(unittest.TestCase):
                     stop_observed.set()
                 return original_status(root)
 
-            with patch.object(fine.base, 'run_job', side_effect=worker), \
+            with patch.object(fine.base, '_run_job', side_effect=worker), \
                     patch.object(fine, 'status', side_effect=status):
                 result = fine.run(root, 2, labels_only=True)
                 self.assertEqual(set(attempts), {'labeler-001', 'labeler-002'})
@@ -214,7 +342,7 @@ class FineAnnotationTest(unittest.TestCase):
                 fine.save(job / 'run.json', {'status': 'prepared', 'role': role, 'inputHashes': {}})
                 return job
 
-            with patch.object(fine.base, 'run_job', side_effect=worker), \
+            with patch.object(fine.base, '_run_job', side_effect=worker), \
                     patch.object(fine, 'prepare_job', side_effect=audit_job), \
                     patch.object(fine, 'module', return_value=SimpleNamespace(prepare_handoffs=handoffs)):
                 result = fine.run(root, 1)

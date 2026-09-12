@@ -76,7 +76,7 @@ before launch. Keep both checkouts unchanged through preparation and execution.
 
 Preparation makes three independent repeats through the actual production
 `prepare_job`, prompt, role, skill, runtime, and bounded section packing. Each job
-contains at most five sections with the production 28,000-character packing target;
+uses the selected production checkout's section limit and brief packing target;
 a single complete dense section may exceed that target, as in production. No source
 context is truncated to fit a budget. Preparation does not launch model workers.
 

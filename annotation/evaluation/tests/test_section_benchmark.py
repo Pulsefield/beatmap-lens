@@ -69,6 +69,22 @@ class SectionBenchmarkTest(unittest.TestCase):
         run = benchmark.read(job / 'run.json')
         self.assertEqual(run['inputHashes']['foundation.json'], benchmark.sha(job / 'foundation.json'))
 
+    def test_oversized_legacy_design_fails_before_creating_worker_or_bundle_files(self):
+        cases = [section(str(i)) for i in range(5)]
+        root = Path(self.temp.name)
+        with self.assertRaisesRegex(ValueError, '1–4 sections'):
+            benchmark.prepare_job(root / 'oversized-job', cases, {}, {}, {})
+        self.assertFalse((root / 'oversized-job').exists())
+        prepare_spec = importlib.util.spec_from_file_location(
+            'harness_benchmark', Path(__file__).resolve().parent.parent / 'prepare-harness-benchmark.py')
+        prepare = importlib.util.module_from_spec(prepare_spec)
+        prepare_spec.loader.exec_module(prepare)
+        design = root / 'oversized-design.json'
+        design.write_text(json.dumps({'cases': cases}))
+        with self.assertRaisesRegex(ValueError, '1–4 sections'):
+            prepare.prepare(design, root / 'oversized-bundle', root / 'campaign', 'python')
+        self.assertFalse((root / 'oversized-bundle').exists())
+
     def test_only_known_labels_count_and_average_cost_uses_cache_breakdown(self):
         self.response[0]['judgments'][0].update(presence='present', salience='prominent')
         self.gold['another-job:tech'] = {'presence': 'absent'}

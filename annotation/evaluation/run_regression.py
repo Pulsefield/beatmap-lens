@@ -1,6 +1,7 @@
 """Prepare or execute three selected-section production-prompt judgment repeats."""
 import argparse
 from concurrent.futures import ThreadPoolExecutor
+import inspect
 import json
 import os
 from pathlib import Path
@@ -102,6 +103,9 @@ def prepare(root, campaign, feedback_dir, python, suite_path, repeats=gate.REPEA
                                       for source in sorted(source_map)},
                })}
     planned = []
+    packing = inspect.signature(production.prepare).parameters
+    max_sections = packing['max_sections'].default
+    max_brief_chars = packing['max_brief_chars'].default
     for number in range(1, repeats + 1):
         repeat = root / 'repeats' / f'{number:02d}'
         shutil.copytree(common, repeat / 'common')
@@ -109,7 +113,7 @@ def prepare(root, campaign, feedback_dir, python, suite_path, repeats=gate.REPEA
             'harness': harness_binding,
         })
         jobs = []
-        for index, group in enumerate(production.pack_cases(cases, 5, 28000), 1):
+        for index, group in enumerate(production.pack_cases(cases, max_sections, max_brief_chars), 1):
             job = production.prepare_job(repeat, group, 'labeler', config, index)
             # Reuse the actual production prompt. Evaluation changes the supplied
             # record visibility, never a second copy of judgment instructions.
