@@ -13,8 +13,9 @@ frozen packets. Agent experiences remain hypotheses regardless of repetition.
    Mentioning another style supplies no salience for it.
 3. Reinspect human positives and counterexamples; explain evidence and conflicts.
    Avoid universal thresholds from one crop.
-4. Replace superseded guidance. Keep selected human records in the ledger and full
-   histories outside prescriptive prose.
+4. Replace superseded guidance. Retrieve current human observations through the
+   harness; retain consulted identities with the comparison evidence instead of
+   copying scoped verdicts into mandatory guidance. Keep human histories intact.
 5. Replay affected positive, negative, mixed/boundary, and strength cases against
    source, with an independent agent when interpretation changes. Record evidence
    IDs, outcomes, and unresolved choices. Exposed replay is regression checking,
@@ -34,9 +35,9 @@ Limits include frontmatter, tables, and examples:
 
 | Text | Maximum whitespace words | Maximum Unicode characters |
 | --- | ---: | ---: |
-| `SKILL.md` | 650 | 5,200 |
-| `references/judgment-guide.md` | 1,500 | 12,000 |
-| All Markdown in the skill combined | 3,500 | 28,000 |
+| `SKILL.md` | 450 | 3,600 |
+| `references/judgment-guide.md` | 350 | 3,000 |
+| All Markdown in the skill combined | 2,600 | 20,000 |
 
 These are ceilings. Retrieve relevant structured records; do not hide instructions
 in JSON or load whole ledgers. Consolidate before proposing a budget change.

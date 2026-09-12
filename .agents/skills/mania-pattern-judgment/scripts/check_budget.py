@@ -7,10 +7,10 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 LIMITS = {
-    "SKILL.md": (650, 5200),
-    "references/judgment-guide.md": (1500, 12000),
+    "SKILL.md": (450, 3600),
+    "references/judgment-guide.md": (350, 3000),
 }
-TOTAL_LIMIT = (3500, 28000)
+TOTAL_LIMIT = (2600, 20000)
 
 
 def main():

@@ -60,6 +60,13 @@ In particular, the local Tech concept is not an alias for a community complex-sn
 tag, an exclusive category, or a fallback for passages that lack other labels.
 Source facts support a judgment; agent agreement cannot approve a semantic change.
 
+Selected-section labelers and auditors use the shared
+[worker mounting protocol](fine-annotation.md#worker-mounting-protocol): a fresh
+context, the prepared job's frozen instructions, and at most four windows per
+worker. Source and human-reference inspection remain available inside that job's
+harness boundary. The parent prepares and delivers; it does not supply a second
+interpretation guide or carry earlier batches into the worker's context.
+
 Preserve exact human assessments and their optional original comments. Missing
 human explanation does not license an agent rationale to become expert evidence.
 Use the [curator role](../../annotation/roles/curator.md) for actual semantic

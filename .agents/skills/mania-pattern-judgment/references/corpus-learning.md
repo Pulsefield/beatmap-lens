@@ -16,8 +16,8 @@ close a stream, and both can participate in larger Tech expression. Ranges may
 overlap without nesting. Recognizing constituents does not explain composition;
 successive episodes do not establish simultaneous organization.
 
-For short LNs, compare *Who?* and *Materialize Anything* negatives with *Your
-Soulmate* and *End Time*: which roles persist into later actions? Preserve every
+For short LNs, retrieve current human positives and negatives with held-note
+arrangements, then inspect which roles persist into later actions. Preserve every
 endpoint even in a tap-like reading. Grouped attacks and changing tail contours
 can coexist. No duration cutoff follows. Deliberate judgment-window tolerance is
 a separate practice hypothesis, outside an exact-execution profile unless extended.

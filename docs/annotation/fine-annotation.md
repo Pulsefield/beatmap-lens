@@ -21,17 +21,60 @@ uv run --locked python annotation/pipeline/run-fine-annotation.py status \
   --root .local/section-annotation
 ```
 
-Each fresh ephemeral labeler receives at most five sections, with a 28,000-character
-source-brief grouping limit. A single longer section stays intact and can exceed
-that limit. Complete attack context and entering holds are preserved. The shared
-role, skill, guide and Foundation prefix remain identical within each role; raw
-source evidence is read once from the brief, with optional progressive harness
-inspection. Each completed batch goes to a separate fresh auditor. Its compact claim view uses
+## Worker mounting protocol
+
+All selected-section execution uses `annotation_runtime.run_job`, either through
+the batch controller or its single-job CLI. A parent or native dispatcher starts
+that runtime; the resulting Codex worker is the actual labeler or auditor.
+
+1. Prepare 1–4 selected windows for one labeler. `--max-sections` may reduce this
+   limit, never raise it. Preparation and the runtime both enforce four; runtime
+   counts the actual `cases.json` assignments and checks the recorded `caseCount`.
+2. Invoke the runtime on that frozen job. It verifies input hashes and assignment
+   counts, configures the job's lens MCP server and evidence trace, and starts a
+   fresh worker using `--ignore-user-config --ephemeral`. It sends `prompt.txt`
+   unchanged, including the frozen `ROLE.md`, thin skill, and Foundation once.
+   Do not add parent analysis, remembered example verdicts, global role prose, or
+   another skill copy. Native `spawn_agent` may dispatch this command with
+   `fork_turns="none"`; it does not perform semantic labeling or audit itself.
+3. Finish that batch, then use a new worker for further windows. Audit it with a
+   separate fresh producer following the same four-window cap and frozen auditor
+   role. Do not turn a labeler's accumulated conversation into its audit context.
+
+To execute one already prepared labeler or auditor job:
+
+```sh
+uv run --locked python annotation/annotation_runtime.py \
+  --job .local/section-annotation/runs/labeler-001 \
+  --config .local/campaign/controller/config.json
+```
+
+This uses the same execution and recorded producer identity as batch dispatch.
+The parent returns the job result for the controller's normal sealing and delivery.
+It must not submit native-agent prose as a worker response or run the same prepared
+job concurrently with a batch dispatcher; a nonblocking per-job lock rejects a
+second owner before execution. Existing completed jobs are reported
+without relaunch; failed or running jobs are left for controller inspection.
+
+The 28,000-character source-brief target includes human and repair records. A
+single longer section stays intact in its own batch and can exceed that target.
+It is not a full-context or token cap: instructions, claims, tool results, and
+reasoning add context. Preserve complete attack context and entering holds; use
+progressive source/example inspection when a judgment needs it. Four windows is
+a conservative execution bound, not a measured performance-degradation threshold.
+
+The stable role, skill, and Foundation prefix precedes variable job details.
+Source evidence is read once from the brief. The auditor's compact claim view uses
 source-line references into the complete brief; exact sealed task and handoff files
 remain frozen alongside it. Compact claims avoid repeating source evidence already
-present in the brief. Context is bounded per batch. Actual input/cache/output tokens and
+present in the brief. Actual input/cache/output tokens and
 worker durations remain in `run.json` and aggregate `progress.json`; a shared
-prefix permits reuse but does not guarantee a cache hit rate.
+prefix permits cache reuse without conversation reuse, but does not guarantee a
+cache hit rate. Do not edit historical frozen jobs to install these instructions.
+Previously running or completed jobs retain their inputs and outputs; prepared
+jobs above the current cap require new bounded preparation before launch. For an
+older recurring controller, set its mutable `config.json` `maxSections` to 4 or
+less before preparing a new batch; this does not change its existing frozen jobs.
 
 A derived queue may declare `selectionFocus.tag: "tech"` in its adjacent
 `quality.json`. Preparation freezes that focus into labeler and auditor prompts:
@@ -77,8 +120,9 @@ The `fine-annotation-campaign.py` controller tracks a target across section batc
 `status` refreshes canonical feedback for registered source/scope units;
 `advance` runs one unfinished or new batch under a campaign lock. The target is
 configured for the campaign.
-The controller uses 25-section rounds, five concurrent workers, and at most five
-sections per worker. The final source-brief grouping cap is 28,000 characters, including human and repair records.
+The controller uses 25-section rounds, five concurrent workers, and at most four
+sections per worker. The source-brief grouping target is 28,000 characters,
+including human and repair records, with the intact-singleton exception above.
 
 ```sh
 uv run --locked python annotation/pipeline/fine-annotation-campaign.py advance \

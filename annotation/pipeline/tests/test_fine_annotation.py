@@ -83,6 +83,27 @@ class FineAnnotationTest(unittest.TestCase):
                     fine.prepare_job(root, cases, role, {}, 1)
             self.assertFalse(root.exists())
 
+    def test_prompt_includes_frozen_instructions_once_before_variable_details(self):
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'common/skill/references').mkdir(parents=True)
+            (root / 'common/skill/SKILL.md').write_text('THIN SKILL CONTENT')
+            (root / 'common/skill/references/judgment-guide.md').write_text('DO NOT EAGERLY LOAD GUIDE')
+            fine.save(root / 'common/foundation.json', {'definitions': 'FROZEN DEFINITIONS'})
+            for role in ('labeler', 'auditor'):
+                (root / 'common' / (role + '.md')).write_text('FROZEN ' + role)
+                fine.save(root / 'preparation.json', {})
+                prompt = fine.common_prompt(root, role)
+                fine.save(root / 'preparation.json', {'annotationFocus': 'tech'})
+                focused = fine.common_prompt(root, role)
+                self.assertTrue(focused.startswith(prompt))
+                self.assertTrue(prompt.startswith('# Frozen role\nFROZEN ' + role))
+                self.assertEqual(prompt.count('THIN SKILL CONTENT'), 1)
+                self.assertEqual(prompt.count('FROZEN DEFINITIONS'), 1)
+                self.assertNotIn('DO NOT EAGERLY LOAD GUIDE', prompt)
+                self.assertNotIn('judgment-guide.md', prompt)
+                self.assertLess(prompt.index('FROZEN DEFINITIONS'), prompt.index('# Job execution'))
+
     def test_runtime_counts_assignments_before_launch_and_preserves_frozen_jobs(self):
         with TemporaryDirectory() as temporary:
             root = Path(temporary)
