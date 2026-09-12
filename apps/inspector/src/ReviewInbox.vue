@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { resolvePlaybackRate } from "./annotation/playback-rate";
+import { type ConfidenceReviewPlan, confidenceReviewRows } from "./annotation/workflow/confidence-review";
 import { type InboxClaimV2, type InboxSourceV2, type RemoteSourceV2, type ReviewInboxV2, reviewRequest } from "./annotation/workflow/remote-workspace";
 import { agentVersionLabel, auditVersionLabel, matchesReviewVersions, reviewVersionOptions } from "./annotation/workflow/review-provenance";
 import { assessmentStrength, drawReviewSample, REVIEW_TARGETS, type ReviewSampleBatch, type ReviewSampleItem, type SampleStrength, sampleCandidates, sampleKey, sampleRef } from "./annotation/workflow/review-sampling";
@@ -11,12 +12,25 @@ const connectionError = ref("");
 const loadError = ref("");
 const activeSource = shallowRef<RemoteSourceV2>();
 const openClaim = shallowRef<{ handoffId: string; claimId: string }>();
+const openHumanObservationIds = shallowRef<readonly string[]>();
+const confidencePlan = shallowRef<ConfidenceReviewPlan>();
+const confidencePlanError = ref("");
+const confidencePlanUrl = new URLSearchParams(window.location.search).get("confidencePlan");
+const activeConfidenceId = ref("");
+const confidenceRows = computed(() => confidencePlan.value ? confidenceReviewRows(confidencePlan.value, inbox.value?.sources ?? []) : []);
+const confidenceCompleted = computed(() => confidenceRows.value.reduce((sum, row) => sum + row.completed, 0));
+const confidenceTotal = computed(() => confidenceRows.value.reduce((sum, row) => sum + row.item.observationIds.length, 0));
+const nextConfidence = computed(() => {
+  const rows = confidenceRows.value;
+  const current = rows.findIndex(row => row.item.id === activeConfidenceId.value);
+  return [...rows.slice(current + 1), ...rows.slice(0, Math.max(current, 0))].find(row => row.available && !row.complete);
+});
 const showingInbox = ref(true);
 const loading = ref(false);
 const recentSources = new Map<string, RemoteSourceV2>();
 const sourceLoads = new Map<string, Promise<RemoteSourceV2>>();
 const lastSynced = ref("");
-const inboxView = ref<"requests" | "sample" | "history">("requests");
+const inboxView = ref<"requests" | "sample" | "history" | "confidence">(confidencePlanUrl ? "confidence" : "requests");
 const showingProvenance = ref(false);
 const labelerVersion = ref("");
 const auditorVersion = ref("");
@@ -103,7 +117,7 @@ watch(() => inbox.value?.workspace, workspace => {
   if (!workspace) return;
   const saved = localStorage.getItem(sampleStorageKey.value);
   sampleBatch.value = saved ? JSON.parse(saved) : undefined;
-  if (sampleBatch.value) {
+  if (sampleBatch.value && !confidencePlanUrl) {
     sampleTag.value = sampleBatch.value.tagId;
     sampleStrength.value = sampleBatch.value.strength;
     labelerVersion.value = sampleBatch.value.labelerVersion ?? "";
@@ -181,7 +195,7 @@ async function refresh(): Promise<void> {
   try {
     const next = await reviewRequest<ReviewInboxV2>("inbox");
     if (stopped) return;
-    if (!inbox.value && !next.sources.some(source => source.expertQueue.length || source.requests?.some(request => request.pendingClaimIds.length))) inboxView.value = "history";
+    if (!inbox.value && !confidencePlanUrl && !next.sources.some(source => source.expertQueue.length || source.requests?.some(request => request.pendingClaimIds.length))) inboxView.value = "history";
     inbox.value = next;
     connectionError.value = "";
     lastSynced.value = new Date().toLocaleTimeString();
@@ -217,6 +231,8 @@ async function open(source: InboxSourceV2, claim?: InboxClaimV2, sample = ""): P
       activeSource.value = loaded;
     }
     openClaim.value = claim ? { handoffId: claim.handoffId, claimId: claim.claimId } : undefined;
+    openHumanObservationIds.value = undefined;
+    activeConfidenceId.value = "";
     activeSampleKey.value = sample;
     showingInbox.value = false;
   } catch (error) {
@@ -226,7 +242,31 @@ async function open(source: InboxSourceV2, claim?: InboxClaimV2, sample = ""): P
   }
 }
 
-onMounted(poll);
+async function loadConfidencePlan(): Promise<void> {
+  if (!confidencePlanUrl) return;
+  try {
+    const url = new URL(confidencePlanUrl, window.location.href);
+    if (url.origin !== window.location.origin) throw new Error("Confidence plans must use this review service.");
+    const response = await fetch(url.pathname + url.search, { cache: "no-store" });
+    if (!response.ok) throw new Error(`Could not load confidence plan (${response.status}).`);
+    const plan = await response.json() as ConfidenceReviewPlan;
+    if (plan.version !== 1 || !Array.isArray(plan.items) || !plan.items.length)
+      throw new Error("The confidence plan must contain selected human observations.");
+    confidencePlan.value = plan;
+  } catch (cause) {
+    confidencePlanError.value = cause instanceof Error ? cause.message : String(cause);
+  }
+}
+
+async function openConfidence(row: typeof confidenceRows.value[number]): Promise<void> {
+  if (!row.available || !row.source) return;
+  await open(row.source);
+  if (loadError.value || activeSource.value?.document.source.sha256 !== row.item.sourceSha256) return;
+  activeConfidenceId.value = row.item.id;
+  openHumanObservationIds.value = row.targets.flatMap(target => target ? [target.id] : []);
+}
+
+onMounted(() => { void poll(); void loadConfidencePlan(); });
 onBeforeUnmount(() => { stopped = true; clearTimeout(timer); });
 </script>
 
@@ -239,14 +279,28 @@ onBeforeUnmount(() => { stopped = true; clearTimeout(timer); });
       <button type="button" :aria-pressed="inboxView === 'requests'" @click="inboxView = 'requests'">Requests <span>{{ tasks.length }}</span></button>
       <button type="button" :aria-pressed="inboxView === 'sample'" aria-label="Sample machine-reviewed sections" @click="inboxView = 'sample'">Sample <span v-if="sampleBatch">{{ sampleReviewed }}/{{ sampleRows.length }}</span></button>
       <button type="button" :aria-pressed="inboxView === 'history'" aria-label="Browse review history" @click="inboxView = 'history'">History <span>{{ allReviews.length }}</span></button>
+      <button v-if="confidencePlanUrl" type="button" :aria-pressed="inboxView === 'confidence'" @click="inboxView = 'confidence'">Confidence <span>{{ confidenceCompleted }}/{{ confidenceTotal }}</span></button>
     </nav>
-    <section class="inbox-version-filters" aria-label="Review version filters">
+    <section v-if="inboxView !== 'confidence'" class="inbox-version-filters" aria-label="Review version filters">
       <div class="inbox-filter-controls">
         <label>Labeler version<select v-model="labelerVersion" name="labelerVersion"><option value="">All versions · {{ labelerVersions.length }}</option><option v-if="labelerVersion && !labelerVersions.some(option => option.key === labelerVersion)" :value="labelerVersion">{{ versionSelectionLabel(labelerVersion, 'labeler') }}</option><option v-for="option in labelerVersions" :key="option.key" :value="option.key">{{ option.label }} · {{ option.count }} claims</option></select></label>
         <label>Auditor version<select v-model="auditorVersion" name="auditorVersion"><option value="">All versions · {{ auditorVersions.length }}</option><option v-if="auditorVersion && !auditorVersions.some(option => option.key === auditorVersion)" :value="auditorVersion">{{ versionSelectionLabel(auditorVersion, 'auditor') }}</option><option v-for="option in auditorVersions" :key="option.key" :value="option.key">{{ option.label }} · {{ option.count }} claims</option></select></label>
       </div>
       <div class="inbox-filter-summary"><span>{{ versionedItems.length }} / {{ allReviews.length }} claims · all views use these versions</span><button v-if="labelerVersion || auditorVersion" type="button" @click="labelerVersion = ''; auditorVersion = ''">Clear versions</button></div>
       <p v-if="auditorVersion">Shows claims reviewed by this auditor version. Their status still reflects all recorded audits and human decisions.</p>
+    </section>
+    <section v-if="inboxView === 'confidence'" class="inbox-sampler confidence-review-queue">
+      <h2>{{ confidencePlan?.title ?? 'Loading confidence review…' }}</h2>
+      <p v-if="confidencePlanError" role="alert">{{ confidencePlanError }}</p>
+      <template v-if="confidencePlan">
+        <p role="status">{{ confidenceCompleted }}/{{ confidenceTotal }} labels have confidence · {{ confidenceRows.length }} selected sections</p>
+        <p>Review each selected label and explicitly choose High or Low, then save the section. Progress follows the saved human judgment.</p>
+        <button v-if="nextConfidence" type="button" class="inbox-continue" :disabled="loading" @click="openConfidence(nextConfidence)">Continue confidence review →</button>
+        <div class="inbox-sample-list"><button v-for="(row, index) in confidenceRows" :key="row.item.id" type="button" :disabled="loading || !row.available" @click="openConfidence(row)">
+          <span>{{ index + 1 }}. {{ row.source?.source.title ?? 'Source unavailable' }}<small>{{ row.source?.source.difficulty }}<template v-if="row.targets[0]"> · {{ (row.targets[0].scope.startMs / 1000).toFixed(3) }}–{{ (row.targets[0].scope.endMs / 1000).toFixed(3) }} s · {{ row.targets[0].playbackRate }}×</template></small><small>{{ row.targets.map(target => target ? `${REVIEW_TARGETS[target.tagId] ?? target.tagId}: ${target.assessment.presence === 'present' ? target.assessment.salience : target.assessment.presence}` : 'Judgment unavailable').join(' · ') }}</small></span>
+          <span>{{ row.available ? `${row.completed}/${row.item.observationIds.length} labels · ${row.complete ? 'Saved' : 'Review →'}` : 'Current human judgment unavailable' }}</span>
+        </button></div>
+      </template>
     </section>
     <section v-if="inboxView === 'sample'" id="review-sampler" class="inbox-sampler">
       <h2>{{ sampleBatch ? 'Review your sample' : 'Sample section labels' }}</h2>
@@ -301,9 +355,9 @@ onBeforeUnmount(() => { stopped = true; clearTimeout(timer); });
     <footer v-if="inbox"><details><summary>Workspace details &amp; help</summary><div class="inbox-summary"><span>{{ counts['agent-reviewed'] ?? 0 }} machine-reviewed</span><span>{{ humanAssessments.settled }} explicit human judgments</span><span>{{ humanAssessments.unresolved + humanAssessments.unreviewed }} uncertain or unreviewed human records</span><span>{{ counts.deferred ?? 0 }} deferred</span></div><p>Version filters apply to requests, sampling and history. Skill names, revisions and content hashes identify separate versions. Evidence context is shown separately from work status and agent version.</p><p>History includes human decisions, stale results and superseded proposals. Open a result to inspect its audits and related versions.</p><p>Decisions are saved to the connected workspace and returned to the agent automatically.</p></details></footer>
   </div>
   <div v-if="activeSource" v-show="!showingInbox" class="inbox-active">
-    <div class="inbox-navigation"><button type="button" @click="showingInbox = true">{{ activeSampleKey ? `Sample · ${sampleReviewed}/${sampleRows.length}` : `Inbox · ${tasks.length}` }}{{ connectionError ? ' · offline' : '' }}</button><button v-if="activeSampleKey && nextSample" type="button" :disabled="loading" @click="openSample(nextSample)">Next sample →</button></div>
+    <div class="inbox-navigation"><button type="button" @click="showingInbox = true">{{ activeConfidenceId ? `Confidence · ${confidenceCompleted}/${confidenceTotal}` : activeSampleKey ? `Sample · ${sampleReviewed}/${sampleRows.length}` : `Inbox · ${tasks.length}` }}{{ connectionError ? ' · offline' : '' }}</button><button v-if="activeConfidenceId && nextConfidence" type="button" :disabled="loading" @click="openConfidence(nextConfidence)">Next confidence section →</button><button v-if="activeSampleKey && nextSample" type="button" :disabled="loading" @click="openSample(nextSample)">Next sample →</button></div>
     <p v-if="loadError" class="inbox-active-error" role="alert">{{ loadError }}</p>
-    <ReviewWorkspace :active="!showingInbox" :remote-source="activeSource" v-bind="openClaim ? { openClaim } : {}" @back-to-inbox="showingInbox = true" @saved="refresh" />
+    <ReviewWorkspace :active="!showingInbox" :remote-source="activeSource" v-bind="{ ...(openClaim ? { openClaim } : {}), ...(openHumanObservationIds ? { openHumanObservationIds } : {}) }" @back-to-inbox="showingInbox = true" @saved="refresh" />
   </div>
 </template>
 

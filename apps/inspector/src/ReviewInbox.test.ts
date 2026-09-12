@@ -18,13 +18,18 @@ import ReviewInbox from "./ReviewInbox.vue";
 
 vi.mock("./ReviewWorkspace.vue", () => ({
   default: defineComponent({
-    props: ["openClaim", "remoteSource"],
+    props: ["openClaim", "remoteSource", "openHumanObservationIds"],
     emits: ["saved", "back-to-inbox"],
     setup:
       (props, { emit }) =>
       () =>
         h("div", { class: "test-review" }, [
           h("output", JSON.stringify(props.openClaim)),
+          h(
+            "output",
+            { class: "test-human-targets" },
+            JSON.stringify(props.openHumanObservationIds),
+          ),
           h("output", { class: "test-trust" }, JSON.stringify(props.remoteSource?.handoffTrust)),
           h("button", { onClick: () => emit("saved") }, "Save test judgment"),
         ]),
@@ -37,6 +42,66 @@ afterEach(() => {
   for (const app of apps.splice(0)) app.unmount();
   document.body.replaceChildren();
   vi.unstubAllGlobals();
+  window.history.replaceState({}, "", "/");
+});
+
+it("opens a persistent human confidence queue and advances using saved confidence", async () => {
+  const { source, inbox, fetcher } = await fixture();
+  const first = {
+    id: "human-one",
+    previousIds: [],
+    tagId: "tech",
+    assessment: { presence: "absent" as const },
+    scope: { startMs: 1000, endMs: 1800 },
+    playbackRate: 1 as const,
+  };
+  const second = { ...first, id: "human-two" };
+  Object.assign(inbox, { sources: [{ ...source, humanObservations: [first, second] }] });
+  const plan = {
+    version: 1,
+    id: "balanced",
+    title: "Balanced confidence review",
+    items: [first, second].map((target, index) => ({
+      id: String(index),
+      sourceSha256: source.source.sha256,
+      observationIds: [target.id],
+    })),
+  };
+  window.history.replaceState({}, "", "/review?confidencePlan=/confidence.json");
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) => (url === "/confidence.json" ? Response.json(plan) : fetcher(url))),
+  );
+  const { container } = mount();
+  await vi.waitFor(() =>
+    expect(
+      container.querySelectorAll(".confidence-review-queue .inbox-sample-list button"),
+    ).toHaveLength(2),
+  );
+  expect(container.querySelector(".confidence-review-queue")?.textContent).toContain("0/2 labels");
+  await click(container, "Continue confidence review");
+  await vi.waitFor(() =>
+    expect(container.querySelector(".test-human-targets")?.textContent).toBe('["human-one"]'),
+  );
+  Object.assign(inbox, {
+    sources: [
+      {
+        ...source,
+        humanObservations: [
+          { ...first, id: "human-revised", previousIds: [first.id], confidence: "low" },
+          second,
+        ],
+      },
+    ],
+  });
+  await click(container, "Save test judgment");
+  await vi.waitFor(() =>
+    expect(container.querySelector(".inbox-navigation")?.textContent).toContain("Confidence · 1/2"),
+  );
+  await click(container, "Next confidence section");
+  await vi.waitFor(() =>
+    expect(container.querySelector(".test-human-targets")?.textContent).toBe('["human-two"]'),
+  );
 });
 
 async function fixture() {

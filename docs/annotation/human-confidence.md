@@ -32,6 +32,41 @@ Canonical feedback retains the observation-level field. Publication v4 exports
 confidence changes in the immediate `human_revision.changed_fields`. Previous
 published snapshots remain unchanged and readable.
 
+## Re-reviewing a selected human batch
+
+The Review page accepts `?confidencePlan=/confidence-review.json`, a same-origin
+static JSON file served beside the Inspector build. A plan selects current human
+observations for confidence review; it does not submit decisions or set confidence.
+
+```json
+{
+  "version": 1,
+  "id": "confidence-review-batch",
+  "title": "Confidence review",
+  "items": [
+    {
+      "id": "section-001",
+      "sourceSha256": "SOURCE_SHA256",
+      "observationIds": ["HUMAN_OBSERVATION_ID"]
+    }
+  ]
+}
+```
+
+Group targets only when they share an exact source, scope, playback rate and
+compatible original section/handoff. The queue opens the selected human labels,
+preserves their original evidence, and follows revision links to their current
+observations. Progress counts saved, explicitly recorded confidence. Use High or
+Record Low separately for each label, then save the section. Unselected labels
+remain outside the batch, and an unchanged unspecified confidence stays missing.
+
+For a balanced batch, stratify unique current human cells by label and
+absent/supporting/prominent, retain source/mapset diversity, and record the seed,
+exclusions and selected observation identities. Such a batch is a targeted review
+sample, not an estimate of the corpus distribution or a quota for High confidence.
+Keep derived plans and feedback snapshots under `.local/`; rebuilding the Inspector
+may remove a plan copied into its `dist/` directory, so retain the original under `.local/`.
+
 ## Regression selection
 
 The active [method regression gate](../../annotation/evaluation/README.md)

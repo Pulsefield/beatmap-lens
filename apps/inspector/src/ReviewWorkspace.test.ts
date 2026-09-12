@@ -49,6 +49,109 @@ afterEach(() => {
 });
 
 describe("ReviewWorkspace mounted workflow", () => {
+  it("keeps confidence drafts separate when changing selected labels on the same chart", async () => {
+    const f = await workspaceFixture(false, false, undefined, 5);
+    const initial = await f.read();
+    if (!initial) throw new Error("Missing fixture.");
+    const stored = await f.directory.addObservations(f.sourceBytes, initial.version, {
+      humanId: "historical-human",
+      claims: [f.claim, { ...f.claim, id: "claim-b", tagId: "synthetic-b" }],
+    });
+    const first = stored.document.observations[0];
+    const second = stored.document.observations[1];
+    if (!first || !second) throw new Error("Missing observations.");
+    const selected = shallowRef<readonly string[]>([first.id]);
+    const container = document.createElement("div");
+    document.body.append(container);
+    const app = createApp({
+      render: () =>
+        h(ReviewWorkspace, {
+          remoteSource: { ...stored, sourceBytes: Array.from(f.sourceBytes) },
+          openHumanObservationIds: selected.value,
+        }),
+    });
+    app.config.errorHandler = (error) => appErrors.push(error);
+    apps.push(app);
+    app.mount(container);
+    await vi.waitFor(() =>
+      expect(container.querySelectorAll('.section-sliders input[type="range"]')).toHaveLength(1),
+    );
+    await setConfidence(container, "a", true);
+    selected.value = [second.id];
+    await nextTick();
+    expect(slider(container, "synthetic-b")).toBeDefined();
+    expect(confidenceControl(container, "b").checked).toBe(false);
+    selected.value = [first.id];
+    await nextTick();
+    expect(confidenceControl(container, "a").checked).toBe(true);
+    expect((await f.read())?.document).toEqual(stored.document);
+  });
+
+  it.each(["agent", "direct"])(
+    "reviews selected %s human labels without filling other labels or changing evidence",
+    async (origin) => {
+      const f = await workspaceFixture(true, false, undefined, 5);
+      let stored = await f.read();
+      if (!stored || !f.handoff) throw new Error("Missing fixture.");
+      const handoffId = f.handoff.handoffId;
+      if (origin === "agent") {
+        stored = (await f.directory.importHandoff(f.sourceBytes, stored.version, f.handoff)).stored;
+        stored = await f.directory.decideSection(f.sourceBytes, stored.version, {
+          humanId: "historical-human",
+          decisions: ["claim-a", "claim-b"].map((claimId) => ({
+            handoffId,
+            claimId,
+            disposition: "accepted",
+          })),
+        });
+      } else {
+        stored = await f.directory.addObservations(f.sourceBytes, stored.version, {
+          humanId: "historical-human",
+          claims: [f.claim, { ...f.claim, id: "claim-b", tagId: "synthetic-b" }],
+        });
+      }
+      const before = stored;
+      const target = stored.document.observations[0];
+      if (!target) throw new Error("Missing selected observation.");
+      const { container } = mountRemote(f, stored, undefined, [target.id]);
+      await vi.waitFor(() =>
+        expect(container.querySelectorAll('.section-sliders input[type="range"]')).toHaveLength(1),
+      );
+      expect(container.textContent).toContain("Selected labels · confidence review");
+      const request = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, options) => {
+        const body = JSON.parse(String(options?.body));
+        return Response.json(
+          String(url).endsWith("decideSection")
+            ? await f.directory.decideSection(f.sourceBytes, body.expectedBase, body.input)
+            : await f.directory.addObservations(f.sourceBytes, body.expectedBase, body.input),
+        );
+      });
+      try {
+        const saveLabel = origin === "agent" ? "Submit section review" : "Save revised section";
+        await click(container, saveLabel);
+        expect(request).not.toHaveBeenCalled();
+        await click(container, "Record Low");
+        await click(container, saveLabel);
+        await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+        await vi.waitFor(() =>
+          expect(container.textContent).toContain("Section judgments saved together."),
+        );
+        const saved = await f.read();
+        expect(saved?.document.observations).toHaveLength(3);
+        expect(saved?.document.observations.slice(0, 2)).toEqual(before.document.observations);
+        expect(saved?.document.observations.at(-1)).toMatchObject({
+          confidence: "low",
+          claim: target.claim,
+        });
+        expect(saved?.document.observations[1]).not.toHaveProperty("confidence");
+        await click(container, saveLabel);
+        expect(request).toHaveBeenCalledTimes(1);
+      } finally {
+        request.mockRestore();
+      }
+    },
+  );
+
   it("saves per-label confidence together and revises confidence without changing the claim", async () => {
     const f = await workspaceFixture(false, false, undefined, 5);
     const { container } = await openWorkspace(f);
@@ -1971,13 +2074,15 @@ function mountWorkspace() {
 function mountRemote(
   fixture: Awaited<ReturnType<typeof workspaceFixture>>,
   stored: Awaited<ReturnType<WorkflowDirectoryV2["initialize"]>>,
-  openClaim: { handoffId: string; claimId: string },
+  openClaim?: { handoffId: string; claimId: string },
+  openHumanObservationIds?: readonly string[],
 ) {
   const container = document.createElement("div");
   document.body.append(container);
   const app = createApp(ReviewWorkspace, {
     remoteSource: { ...stored, sourceBytes: Array.from(fixture.sourceBytes) },
-    openClaim,
+    ...(openClaim ? { openClaim } : {}),
+    ...(openHumanObservationIds ? { openHumanObservationIds } : {}),
   });
   app.config.errorHandler = (error) => appErrors.push(error);
   apps.push(app);

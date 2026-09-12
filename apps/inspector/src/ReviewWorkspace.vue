@@ -28,7 +28,7 @@ import WorkflowSectionSliders from "./WorkflowSectionSliders.vue";
 import WorkspaceModeSwitch from "./WorkspaceModeSwitch.vue";
 import type { WorkspaceMode } from "./workspace-mode";
 
-const props = withDefaults(defineProps<{ active?: boolean; remoteSource?: RemoteSourceV2; openClaim?: { handoffId: string; claimId: string } }>(), { active: true });
+const props = withDefaults(defineProps<{ active?: boolean; remoteSource?: RemoteSourceV2; openClaim?: { handoffId: string; claimId: string }; openHumanObservationIds?: readonly string[] }>(), { active: true });
 const emit = defineEmits<{ "change-mode": [mode: WorkspaceMode]; "back-to-inbox": []; saved: [] }>();
 const source = shallowRef<InspectedOsuSourceV1>();
 const sourceBytes = shallowRef<Uint8Array>();
@@ -40,6 +40,8 @@ const stored = shallowRef<StoredReviewV2>();
 const pendingTask = shallowRef<TaskPacketV2>();
 const proposalEditing = ref(false);
 const sectionComplete = ref(false);
+const confidenceReviewActive = ref(false);
+const activeConfidenceObservationIds = shallowRef<readonly string[]>([]);
 const foundation = shallowRef<FoundationV2>(createExperimentalFoundationV2(new Date().toISOString()));
 const humanId = ref(localStorage.getItem("beatmap-lens-review-human") ?? "");
 const draftStorageWarning = ref(Object.keys(reviewDraftStorage.unsaved()).length > 0);
@@ -306,6 +308,7 @@ function createRateJudgment(): void {
   const original = activeClaim.value;
   if (!original || claimRateMatchesPlayback.value || busy.value || sourceLoading.value || savingDecision.value) return;
   stashDraft();
+  confidenceReviewActive.value = false;
   const sectionId = crypto.randomUUID();
   const copiedClaims = drafts.value;
   drafts.value = completeSection(drafts.value, original).map(claim => ({
@@ -400,12 +403,13 @@ function completeSection(claims: readonly ClaimV2[], anchor: ClaimV2): ClaimV2[]
 }
 
 function draftKey(kind = editorOrigin.value === "proposal" && activeClaim.value ? `proposal:${activeHandoffId.value}:section:${sectionIdentity(activeClaim.value)}` : "direct", rate = resolvePlaybackRate(activeClaim.value?.playbackRate)): string {
+  if (confidenceReviewActive.value) kind = `confidence:${activeConfidenceObservationIds.value.join(":")}`;
   if (kind === "direct" && rate !== 1) kind = `direct:${rate}x`;
   return `beatmap-lens-review-draft:${source.value?.source.sha256}:${stored.value?.document.documentId ?? "unbound"}:${activeFoundation.value.foundationId}:${activeFoundation.value.revision}:${kind}`;
 }
 
 function stashDraft(): void {
-  if (sectionComplete.value || restoring.value || !source.value || !drafts.value.length || !["direct", "proposal"].includes(editorOrigin.value)) return;
+  if (sectionComplete.value || restoring.value || !source.value || !drafts.value.length || (!confidenceReviewActive.value && !["direct", "proposal"].includes(editorOrigin.value))) return;
   reviewDraftStorage.set(draftKey(), {
     drafts: drafts.value, evidenceReviews: evidenceReviews.value, savedEvidenceReviews: savedEvidenceReviews.value, confidences: confidences.value, savedConfidences: savedConfidences.value, activeClaimId: activeClaimId.value, editorOrigin: editorOrigin.value,
     activeHandoffId: activeHandoffId.value, decisionNote: decisionNote.value, base: editorBase.value, reviewRevision: editorReviewRevision.value, proposalEditing: proposalEditing.value,
@@ -416,6 +420,7 @@ function stashDraft(): void {
 function restoreSection(): void {
   historicalObservation.value = undefined;
   stashDraft();
+  confidenceReviewActive.value = false;
   const text = reviewDraftStorage.get(draftKey("direct", playbackRate.value));
   if (!text) { newSection(); return; }
   const saved = JSON.parse(text);
@@ -474,14 +479,68 @@ watch(() => props.remoteSource, async (remote, _previous, onCleanup) => {
   }
 }, { immediate: true });
 watch(() => props.openClaim, openRequestedClaim);
+watch(() => props.openHumanObservationIds, openRequestedClaim);
 
 function openRequestedClaim(): void {
+  if (props.openHumanObservationIds?.length) {
+    pendingOpenClaim = true;
+    if (!document.value || document.value.source.sha256 !== props.remoteSource?.document.source.sha256) return;
+    openConfidenceObservations(props.openHumanObservationIds);
+    pendingOpenClaim = false;
+    return;
+  }
   const target = props.openClaim;
   if (!target) return;
   pendingOpenClaim = true;
   if (!document.value) return;
   const claim = document.value.handoffs.find(entry => entry.handoff.handoffId === target.handoffId)?.handoff.proposals.find(claim => claim.id === target.claimId);
   if (claim) { openProposal(target.handoffId, claim); pendingOpenClaim = false; }
+}
+
+function openConfidenceObservations(ids: readonly string[]): void {
+  const observations = ids.map(id => currentObservations.value.find(observation => observation.id === id));
+  if (observations.some(observation => !observation)) {
+    error.value = "A selected human judgment is no longer current. Return to the confidence queue to reload it.";
+    return;
+  }
+  const targets = observations as HumanObservationV2[];
+  const first = targets[0];
+  if (!first) return;
+  stashDraft();
+  confidenceReviewActive.value = true;
+  activeConfidenceObservationIds.value = [...ids];
+  historicalObservation.value = undefined;
+  sectionComplete.value = false;
+  sectionProposals.value = targets.flatMap(observation => {
+    const origin = observation.origin;
+    return origin.kind === "agent-proposal" ? document.value?.handoffs.find(entry => entry.handoff.handoffId === origin.handoffId)?.handoff.proposals.filter(claim => claim.id === origin.claimId) ?? [] : [];
+  });
+  const agentOrigin = targets.find(observation => observation.origin.kind === "agent-proposal")?.origin;
+  activeHandoffId.value = agentOrigin?.kind === "agent-proposal" ? agentOrigin.handoffId : "";
+  editorOrigin.value = agentOrigin ? "proposal" : "observation";
+  activeObservationId.value = first.id;
+  sectionObservationIds.value = Object.fromEntries(targets.filter(observation => observation.origin.kind === "direct-human").map(observation => [observation.claim.id, observation.id]));
+  drafts.value = JSON.parse(serializeCanonicalJson(targets.map(observation => observation.claim)));
+  savedSectionDrafts.value = drafts.value;
+  evidenceReviews.value = Object.fromEntries(targets.map(observation => [observation.claim.id, inheritedHumanEvidenceReview(observation)]));
+  savedEvidenceReviews.value = { ...evidenceReviews.value };
+  confidences.value = Object.fromEntries(targets.map(observation => [observation.claim.id, observation.confidence]));
+  savedConfidences.value = { ...confidences.value };
+  activeClaimId.value = first.claim.id;
+  proposalEditing.value = true;
+  decisionNote.value = "";
+  editorBase.value = stored.value?.version;
+  editorReviewRevision.value = document.value?.reviewRevision;
+  calibrationId.value = "";
+  const cached = reviewDraftStorage.get(draftKey());
+  const saved = cached ? JSON.parse(cached) : undefined;
+  if (saved?.reviewRevision === document.value?.reviewRevision) {
+    drafts.value = saved.drafts;
+    confidences.value = saved.confidences;
+    evidenceReviews.value = saved.evidenceReviews;
+    decisionNote.value = saved.decisionNote ?? "";
+  }
+  focus(first.claim.reviewContext);
 }
 
 watch(humanId, value => {
@@ -649,6 +708,7 @@ function approveFoundation(): void {
 
 function newSection(): void {
   stashDraft();
+  confidenceReviewActive.value = false;
   historicalObservation.value = undefined;
   const sectionId = crypto.randomUUID();
   const startMs = Math.max(0, Math.min(playhead.value, endMs.value - 1));
@@ -764,6 +824,7 @@ function focus(range: TimeRangeV1): void {
 
 function openProposal(handoffId: string, claim: ClaimV2, keepViewport = false): void {
   stashDraft();
+  confidenceReviewActive.value = false;
   historicalObservation.value = undefined;
   sectionComplete.value = false;
   const proposals = document.value?.handoffs.find(entry => entry.handoff.handoffId === handoffId)?.handoff.proposals.filter(current => sameSection(claim, current)) ?? [claim];
@@ -839,6 +900,7 @@ function openObservation(observation: HumanObservationV2): void {
     }
   }
   stashDraft();
+  confidenceReviewActive.value = false;
   historicalObservation.value = undefined;
   const current = currentObservations.value.find(entry => {
     let candidate: HumanObservationV2 | undefined = entry;
@@ -975,7 +1037,7 @@ async function submitSection(proposal: boolean): Promise<void> {
   const sourceSha = stored.value.document.source.sha256;
   const anchorId = activeClaim.value.id;
   const handoffId = activeHandoffId.value;
-  const key = proposal || editorOrigin.value === "direct" ? draftKey() : undefined;
+  const key = proposal || editorOrigin.value === "direct" || confidenceReviewActive.value ? draftKey() : undefined;
   const snapshot = JSON.parse(serializeCanonicalJson(drafts.value)) as ClaimV2[];
   const reviewSnapshot = JSON.parse(serializeCanonicalJson(evidenceReviews.value)) as Record<string, EvidenceReviewV2>;
   const confidenceSnapshot = { ...confidences.value };
@@ -1258,8 +1320,9 @@ onBeforeUnmount(() => { window.removeEventListener("keydown", workspaceKeydown);
             <template v-if="activeReview.supersededBy"><p class="review-copy">This proposal has been replaced.</p><button type="button" @click="openQuestion(activeReview.supersededBy.handoffId, activeReview.supersededBy.claimId)">View replacement judgment</button></template>
           </section>
           <section class="review-section review-proposed-judgment">
-            <header class="review-claim-heading"><h2>Section judgments</h2><span class="review-kicker">{{ (activeClaim.scope.startMs / 1000).toFixed(3) }}–{{ (activeClaim.scope.endMs / 1000).toFixed(3) }} s</span></header>
-            <WorkflowSectionSliders :claims="drafts" :tags="activeFoundation.tags" :disabled="!canEdit" :active-claim-id="activeClaimId" :confidences="confidences" @update:claim="updateSectionAssessment" @update:confidence="updateConfidence" @select="activeClaimId = $event" />
+            <header class="review-claim-heading"><h2>{{ confidenceReviewActive ? 'Selected labels · confidence review' : 'Section judgments' }}</h2><span class="review-kicker">{{ (activeClaim.scope.startMs / 1000).toFixed(3) }}–{{ (activeClaim.scope.endMs / 1000).toFixed(3) }} s</span></header>
+            <WorkflowSectionSliders :claims="drafts" :tags="activeFoundation.tags" :disabled="!canEdit" :active-claim-id="activeClaimId" :confidences="confidences" :explicit-low="confidenceReviewActive" @update:claim="updateSectionAssessment" @update:confidence="updateConfidence" @select="activeClaimId = $event" />
+            <p v-if="confidenceReviewActive" class="review-copy">These are the selected human labels. Choose High or Record Low for each, then save. Unchanged labels keep their existing confidence.</p>
             <p class="review-copy">Check High when confident in that label, independently of its strength. New judgments start Low; historical unrecorded confidence stays unspecified until edited.</p>
             <p v-if="drafts.some(claim => claim.assessment.presence === 'unreviewed')" class="review-copy">Unreviewed dimensions have no judgment yet.</p>
             <div class="review-actions"><button type="button" @click="focus(activeClaim.scope)">View claim range</button><button type="button" @click="focus(activeClaim.reviewContext)">View context</button></div>

@@ -41,6 +41,9 @@ export async function startReviewWorkspace(options) {
     resolve: { alias: { "beatmap-lens": join(repo, "packages/beatmap-lens/src/index.ts") } },
   });
   const domain = await vite.ssrLoadModule("/apps/inspector/src/annotation/workflow/domain.ts");
+  const { confidenceObservationSummaries } = await vite.ssrLoadModule(
+    "/apps/inspector/src/annotation/workflow/confidence-review.ts",
+  );
   const { encodeReviewResponse } = await vite.ssrLoadModule(
     "/apps/inspector/src/annotation/workflow/review-transport.ts",
   );
@@ -154,6 +157,7 @@ export async function startReviewWorkspace(options) {
         updatedAt: document.updatedAt,
         latestTaskId: task.taskId,
         counts,
+        humanObservations: confidenceObservationSummaries(document),
         expertQueue: reviews.filter((row) => row.status === "needs-expert"),
         reviews,
       },
@@ -658,6 +662,19 @@ export async function startReviewWorkspace(options) {
         }
         rows.push({
           ...current.row,
+          humanObservations:
+            current.row.humanObservations ??
+            current.feedback.effectiveHumanObservations.map((observation) => ({
+              id: observation.id,
+              previousIds: observation.supersedesObservationId
+                ? [observation.supersedesObservationId]
+                : [],
+              ...(observation.confidence ? { confidence: observation.confidence } : {}),
+              tagId: observation.summary.tagId,
+              scope: observation.summary.scope,
+              assessment: observation.summary.assessment,
+              playbackRate: observation.summary.playbackRate ?? 1,
+            })),
           reviews: current.row.reviews.map((review) => ({
             ...review,
             trust: trust[review.handoffId],

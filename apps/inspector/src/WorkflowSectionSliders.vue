@@ -8,6 +8,7 @@ const props = withDefaults(defineProps<{
   disabled?: boolean;
   activeClaimId?: string;
   confidences?: Readonly<Record<string, HumanConfidenceV2 | undefined>>;
+  explicitLow?: boolean;
 }>(), { disabled: false });
 const emit = defineEmits<{
   "update:claim": [claim: ClaimV2];
@@ -138,6 +139,8 @@ function keydown(claim: ClaimV2, event: KeyboardEvent): void {
         @change="confidenceInput(claim, $event)"
       >
       </label>
+      <button v-if="explicitLow && confidences && confidences[claim.id] === undefined" type="button" class="record-low" :disabled="disabled || !isRated(claim.assessment)" :aria-label="`Record Low confidence for ${name(claim)}`" @click="emit('update:confidence', claim.id, 'low')">Record Low</button>
+      <span v-else-if="explicitLow && confidences" class="record-low">{{ confidences[claim.id] === 'high' ? 'High' : 'Low' }} confidence</span>
     </div>
   </fieldset>
 </template>
@@ -154,6 +157,7 @@ function keydown(claim: ClaimV2, event: KeyboardEvent): void {
 .confidence-checkbox:disabled { opacity: .45; cursor: default; }
 .slider-scale { grid-column: 2; display: flex; justify-content: space-between; gap: 4px; padding: 0 2px 4px; color: var(--ink-secondary); font-size: 9px; }
 .slider-row { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: center; min-height: 48px; }
+.record-low { grid-column: 2 / -1; justify-self: end; font-size: 11px; }
 button { min-width: 0; min-height: 40px; padding: 4px 0; border: 0; border-radius: 10px; background: transparent; color: var(--ink-secondary); font: inherit; cursor: pointer; }
 button:hover { color: var(--ink); background: var(--surface-quiet); }
 button:active { transform: scale(.96); }

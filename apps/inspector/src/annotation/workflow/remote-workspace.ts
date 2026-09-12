@@ -1,5 +1,6 @@
 import type { SourceIdentityV1 } from "../contracts";
 import type { PlaybackRate } from "../playback-rate";
+import type { ConfidenceObservationSummary } from "./confidence-review";
 import type {
   AgentProvenanceV2,
   AgentReviewV2,
@@ -27,6 +28,7 @@ export interface InboxSourceV2 {
   readonly source: SourceIdentityV1;
   readonly version: ReviewBaseV2;
   readonly counts: Readonly<Record<string, number>>;
+  readonly humanObservations?: readonly ConfidenceObservationSummary[];
   readonly humanAssessmentCounts?: {
     readonly settled: number;
     readonly unresolved: number;
