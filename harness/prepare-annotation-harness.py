@@ -11,7 +11,7 @@ from playback_rate import playback_rate_fields
 
 import pyarrow.parquet as pq
 
-from harness_examples import evidence_ref, extract_examples, filter_contrast_sets, public_example
+from harness_examples import evidence_ref, extract_examples, filter_contrast_sets, public_example, source_facts
 
 REPO = Path(__file__).resolve().parents[1]
 CONTRAST_SETS = REPO / '.agents/skills/mania-pattern-judgment/references/human-contrast-sets.json'
@@ -61,7 +61,6 @@ def prepare(campaign, section_file, feedback_dir, out, mode='annotation', source
     for example in examples:
         source = sources[example['sourceSha256']]['source']
         example.update({k: source[k] for k in ('title', 'difficulty') if k in source})
-    save(out / 'examples.json', examples)
     contrast_sets_path = Path(contrast_sets_path)
     save(out / 'contrast-sets.json', {'sets': filter_contrast_sets(read(contrast_sets_path)['sets'], examples)})
     chart_refs = {}
@@ -77,11 +76,21 @@ def prepare(campaign, section_file, feedback_dir, out, mode='annotation', source
             raise ValueError('Parquet source binding differs.')
         notes = [{'sourceLine': n['source_line'], 'column': n['column'], 'kind': n['kind'],
                   'startMs': n['start_ms'], 'endMs': n['end_ms']} for n in table.to_pylist()]
+        facts_by_scope = {}
+        for example in examples:
+            if example['sourceSha256'] != sha:
+                continue
+            scope = example['scope']
+            bounds = (scope['startMs'], scope['endMs'])
+            if bounds not in facts_by_scope:
+                facts_by_scope[bounds] = source_facts(notes, scope, original['source']['keyCount'])
+            example['sourceFacts'] = facts_by_scope[bounds]
         path = f'charts/{sha}.json'
         save(out / path, {'source': original['source'], 'range': meta['range'],
                           'timingPoints': meta['timingPoints'], 'notes': notes})
         chart_refs[sha] = {'path': path, 'source': original['source'], 'groupId': groups[sha],
                            'sourceBytesVerified': True, 'parquetSha256': digest(parquet)}
+    save(out / 'examples.json', examples)
     for name in TOOL_FILES:
         (out / 'tools').mkdir(exist_ok=True)
         shutil.copyfile(REPO / 'harness' / name, out / 'tools' / name)

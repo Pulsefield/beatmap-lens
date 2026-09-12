@@ -3,7 +3,7 @@
 Search interleaves available labels and uses literal keywords, not relevance ranking.
 The caller supplies the immutable feedback snapshot and evaluation exclusions.
 """
-from collections import defaultdict
+from collections import Counter, defaultdict
 from copy import deepcopy
 import hashlib
 from itertools import zip_longest
@@ -12,10 +12,27 @@ from playback_rate import normalize_playback_rate, playback_rate_fields
 
 
 LABELS = ('absent', 'supporting', 'prominent')
+CONFIDENCES = ('high', 'low', 'unspecified')
 MAX_CARDS = 6
 RATIONALE_CHARS = 280
 HUMAN_COMMENT_ORIGINS = ('decision.rationale', 'directObservation.claim.evidence.rationale',
                          'directObservation.summary.rationale', 'effectiveHumanObservation.humanComment')
+SOURCE_FACT_FIELDS = ('keyCount', 'noteKind', 'attackRowCount', 'tapCount', 'longNoteHeadCount',
+                      'enteringHoldCount', 'chordSizeCounts')
+
+
+def source_facts(notes, scope, key_count):
+    """Describe every head and entering hold in the human scope, without style inference."""
+    start, end = scope['startMs'], scope['endMs']
+    attacks = [note for note in notes if start <= note['startMs'] < end]
+    rows = Counter(note['startMs'] for note in attacks)
+    long_heads = sum(note['kind'] == 'long' for note in attacks)
+    entering = sum(note['kind'] == 'long' and note['startMs'] < start < note['endMs'] for note in notes)
+    return {'keyCount': key_count,
+            'noteKind': 'with-ln' if long_heads or entering else 'tap-only' if attacks else 'empty',
+            'attackRowCount': len(rows), 'tapCount': len(attacks) - long_heads,
+            'longNoteHeadCount': long_heads, 'enteringHoldCount': entering,
+            'chordSizeCounts': sorted(Counter(rows.values()).items())}
 
 
 def _label(record):
@@ -23,7 +40,7 @@ def _label(record):
     return assessment.get('salience') if assessment['presence'] == 'present' else assessment['presence']
 
 
-def _record(feedback, groups, claim, identity, rationale, origin, provenance):
+def _record(feedback, groups, claim, identity, rationale, origin, provenance, confidence=None):
     source = feedback['sourceSha256']
     return deepcopy({
         'id': 'human-' + hashlib.sha256(f'{source}\0{identity}'.encode()).hexdigest()[:24],
@@ -31,6 +48,7 @@ def _record(feedback, groups, claim, identity, rationale, origin, provenance):
         'groupId': groups.get(source, source),
         **{key: claim[key] for key in ('tagId', 'assessment', 'scope', 'reviewContext')},
         **playback_rate_fields(claim),
+        **({'humanConfidence': confidence} if confidence is not None else {}),
         'rationale': rationale,
         'rationaleOrigin': origin,
         'provenance': {**provenance, 'documentVersion': feedback.get('documentVersion')},
@@ -75,7 +93,8 @@ def extract_examples(feedbacks, source_groups):
                 else:
                     provenance['disposition'] = 'direct-human'
                 records.append(_record(feedback, source_groups, claim, identity,
-                                       observation['humanComment'], 'effectiveHumanObservation.humanComment', provenance))
+                                       observation['humanComment'], 'effectiveHumanObservation.humanComment', provenance,
+                                       observation.get('confidence')))
             continue
         for review in feedback.get('agentReviews', []):
             if review['status'] not in ('accepted', 'modified'):
@@ -95,7 +114,7 @@ def extract_examples(feedbacks, source_groups):
             if observation_sha:
                 provenance['observationSha256'] = observation_sha
             records.append(_record(feedback, source_groups, claim, decision['id'],
-                                   decision['rationale'], 'decision.rationale', provenance))
+                                   decision['rationale'], 'decision.rationale', provenance, decision.get('confidence')))
         for observation in feedback.get('directObservations', []):
             claim = observation.get('claim', observation.get('summary'))
             if claim['assessment']['presence'] not in ('present', 'absent'):
@@ -107,7 +126,8 @@ def extract_examples(feedbacks, source_groups):
             provenance.update(observationId=observation['id'], claimId=claim['id'], disposition='direct-human')
             if observation.get('observationSha256'):
                 provenance['observationSha256'] = observation['observationSha256']
-            records.append(_record(feedback, source_groups, claim, observation['id'], rationale, origin, provenance))
+            records.append(_record(feedback, source_groups, claim, observation['id'], rationale, origin, provenance,
+                                   observation.get('confidence')))
     return sorted(records, key=lambda record: record['id'])
 
 
@@ -138,8 +158,12 @@ def _human_comment(record):
 
 
 def public_example(record, comment_chars=None):
-    """Project an extracted record or prior projection to judgment + human comment."""
+    """Project human judgment/comment plus independently prepared, literal source facts."""
     result = {key: record[key] for key in ('id', 'sourceSha256', 'tagId')}
+    if 'humanConfidence' in record:
+        result['humanConfidence'] = record['humanConfidence']
+    if 'sourceFacts' in record:
+        result['sourceFacts'] = {key: record['sourceFacts'][key] for key in SOURCE_FACT_FIELDS}
     result.update(playback_rate_fields(record))
     result['assessment'] = {key: record['assessment'][key] for key in ('presence', 'salience')
                             if key in record['assessment']}
@@ -173,8 +197,16 @@ def _assessment_counts(records):
     return counts
 
 
+def _confidence_counts(records):
+    counts = dict.fromkeys(CONFIDENCES, 0)
+    for record in records:
+        counts[record.get('humanConfidence', 'unspecified')] += 1
+    return counts
+
+
 def search_examples(records, tag_id='tech', assessment=None, text='', offset=0, limit=3,
-                    excluded_sources=(), excluded_groups=(), contrast_sets=(), contrast_set=None, playback_rate=None):
+                    excluded_sources=(), excluded_groups=(), contrast_sets=(), contrast_set=None, playback_rate=None,
+                    confidence=None, note_kind=None, key_count=None):
     """Return at most six cards, with no note arrays or full provenance.
 
     Assessment accepts absent, supporting, prominent, or present. Keywords match
@@ -186,27 +218,37 @@ def search_examples(records, tag_id='tech', assessment=None, text='', offset=0, 
     """
     if assessment not in (None, 'present', *LABELS):
         raise ValueError('assessment must be absent, supporting, prominent, or present')
+    if confidence not in (None, *CONFIDENCES):
+        raise ValueError('confidence must be high, low, or unspecified')
+    if note_kind not in (None, 'tap-only', 'with-ln'):
+        raise ValueError('note_kind must be tap-only or with-ln')
     if offset < 0 or limit < 1:
         raise ValueError('offset must be nonnegative and limit positive')
     limit = min(limit, MAX_CARDS)
     rate = normalize_playback_rate(playback_rate) if playback_rate is not None else None
     allowed = [record for record in records if record['tagId'] == tag_id
                and _allowed(record, excluded_sources, excluded_groups)
-               and (rate is None or normalize_playback_rate(record.get('playbackRate')) == rate)]
+               and (rate is None or normalize_playback_rate(record.get('playbackRate')) == rate)
+               and (note_kind is None or record.get('sourceFacts', {}).get('noteKind') == note_kind)
+               and (key_count is None or record.get('sourceFacts', {}).get('keyCount') == key_count)]
     sets = filter_contrast_sets(contrast_sets, allowed)
     available_sets = [
         {'id': item['id'],
-         'assessmentCounts': _assessment_counts(record for record in allowed if record['id'] in item['exampleIds'])}
+         'assessmentCounts': _assessment_counts(record for record in allowed if record['id'] in item['exampleIds']),
+         'confidenceCounts': _confidence_counts(record for record in allowed if record['id'] in item['exampleIds'])}
         for item in sets]
     if contrast_set is not None:
         selected = next((item for item in sets if item['id'] == contrast_set), None)
         if selected is None:
             raise ValueError('Contrast set is unavailable in this job/tag. Use availableContrastSets from find_human_examples.')
         allowed = [record for record in allowed if record['id'] in selected['exampleIds']]
+    available_confidence_counts = _confidence_counts(allowed)
     terms = text.casefold().split()
     buckets = defaultdict(list)
     for record in sorted(allowed, key=lambda row: row['id']):
         if assessment and assessment not in (_label(record), record['assessment']['presence']):
+            continue
+        if confidence and record.get('humanConfidence', 'unspecified') != confidence:
             continue
         searchable = ' '.join([_human_comment(record) or '',
                                *(str(record.get(key, '')) for key in ('title', 'difficulty'))]).casefold()
@@ -220,6 +262,8 @@ def search_examples(records, tag_id='tech', assessment=None, text='', offset=0, 
     result = {'cards': cards, 'total': len(ordered), 'limit': limit,
               'nextOffset': offset + len(cards) if offset + len(cards) < len(ordered) else None,
               'order': 'label-interleaved-then-id', 'matchedAssessmentCounts': counts,
+              'availableConfidenceCounts': available_confidence_counts,
+              'matchedConfidenceCounts': _confidence_counts(ordered),
               'missingContrastLabels': [label for label, count in counts.items() if not count],
               'availableContrastSets': available_sets}
     if rate is not None:
@@ -227,10 +271,10 @@ def search_examples(records, tag_id='tech', assessment=None, text='', offset=0, 
     if rate is not None or any(normalize_playback_rate(record.get('playbackRate')) != 1 for record in ordered):
         result['playbackRateMeaning'] = ('Each judgment applies only at its own playbackRate; omitted means 1x. '
                                          'A judgment at another rate is a comparison, never target gold.')
-    if assessment or terms or contrast_set is not None or result['missingContrastLabels']:
+    if assessment or confidence or terms or contrast_set is not None or result['missingContrastLabels']:
         result['contrastCaveat'] = ('Counts cover all matches, not just this page. Filters and exclusions may leave '
                                     'one-sided results; missing labels are not evidence of style absence. '
-                                    'Available sets are curated comparisons before assessment/text filters, not relevance rankings.')
+                                    'Available sets are curated comparisons before assessment/text/confidence filters, not relevance rankings.')
     return deepcopy(result)
 
 

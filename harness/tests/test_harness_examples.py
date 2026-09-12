@@ -52,6 +52,33 @@ def pool():
 
 
 class ExtractionTest(unittest.TestCase):
+    def test_current_observation_confidence_is_explicit_and_never_inherited_from_claim_or_history(self):
+        data = feedback()
+        row = review(claim())
+        row['decision']['confidence'] = 'high'
+        data['agentReviews'] = [row]
+        observation = {**direct(claim(), row['decision']['observationId']),
+                       'humanComment': 'Revised human judgment.', 'confidence': 'low'}
+        observation['summary'].update(confidence='high', agentConfidence='high')
+        data['effectiveHumanObservations'] = [observation]
+        record, = examples.extract_examples([data], {})
+        self.assertEqual(examples.public_example(record)['humanConfidence'], 'low')
+        self.assertEqual(examples.get_example([record], record['id'])['humanConfidence'], 'low')
+        self.assertEqual(examples.search_examples([record])['cards'][0]['humanConfidence'], 'low')
+        observation.pop('confidence')
+        record, = examples.extract_examples([data], {})
+        self.assertNotIn('humanConfidence', examples.public_example(record))
+
+    def test_legacy_explicit_human_confidence_survives_without_promoting_agent_fields(self):
+        data = feedback()
+        row = review(claim())
+        row['decision']['confidence'] = 'high'
+        observation = direct(claim(), 'direct-low')
+        observation['confidence'] = 'low'
+        data.update(agentReviews=[row], directObservations=[observation])
+        records = examples.extract_examples([data], {})
+        self.assertEqual({record['humanConfidence'] for record in records}, {'high', 'low'})
+
     def test_effective_gold_excludes_append_only_history_and_preserves_current_human_comment(self):
         data = feedback()
         old = review(claim(), rationale='Old human explanation.')
@@ -216,7 +243,57 @@ class PublicExampleTest(unittest.TestCase):
                 self.assertEqual(examples.public_example(value), value)
 
 
+class SourceFactsTest(unittest.TestCase):
+    def test_facts_cover_exact_scope_heads_chords_and_entering_holds_without_style_labels(self):
+        notes = [{'sourceLine': 1, 'column': 0, 'kind': 'long', 'startMs': 0, 'endMs': 200},
+                 {'sourceLine': 2, 'column': 1, 'kind': 'normal', 'startMs': 100, 'endMs': 100},
+                 {'sourceLine': 3, 'column': 2, 'kind': 'normal', 'startMs': 100, 'endMs': 100},
+                 {'sourceLine': 4, 'column': 3, 'kind': 'long', 'startMs': 150, 'endMs': 250},
+                 {'sourceLine': 5, 'column': 0, 'kind': 'normal', 'startMs': 200, 'endMs': 200}]
+        facts = examples.source_facts(notes, {'startMs': 100, 'endMs': 200}, 4)
+        self.assertEqual(facts, {'keyCount': 4, 'noteKind': 'with-ln', 'attackRowCount': 2,
+                                'tapCount': 2, 'longNoteHeadCount': 1, 'enteringHoldCount': 1,
+                                'chordSizeCounts': [(1, 1), (2, 1)]})
+        for start, end, kind, entering in ((10, 20, 'with-ln', 1), (250, 300, 'empty', 0),
+                                         (200, 201, 'with-ln', 1), (100, 101, 'with-ln', 1)):
+            with self.subTest(start=start, end=end):
+                value = examples.source_facts(notes, {'startMs': start, 'endMs': end}, 4)
+                self.assertEqual(value['noteKind'], kind)
+                self.assertEqual(value['enteringHoldCount'], entering)
+        taps = [note for note in notes if note['kind'] == 'normal']
+        self.assertEqual(examples.source_facts(taps, {'startMs': 100, 'endMs': 200}, 4)['noteKind'], 'tap-only')
+
+
 class SearchTest(unittest.TestCase):
+    def test_confidence_filters_keep_unset_distinct_and_counts_respect_exclusions(self):
+        records = pool()
+        for index, record in enumerate(records):
+            if index % 3 != 2:
+                record['humanConfidence'] = ('high', 'low')[index % 3]
+        high = examples.search_examples(records, confidence='high', text='familiar', excluded_sources=[records[0]['sourceSha256']])
+        self.assertEqual(high['availableConfidenceCounts'], {'high': 2, 'low': 3, 'unspecified': 3})
+        self.assertEqual(high['matchedConfidenceCounts'], {'high': 2, 'low': 0, 'unspecified': 0})
+        self.assertTrue(all(card['humanConfidence'] == 'high' for card in high['cards']))
+        unset = examples.search_examples(records, confidence='unspecified')
+        self.assertEqual(unset['total'], 3)
+        self.assertTrue(all('humanConfidence' not in card for card in unset['cards']))
+        missed = examples.search_examples(records, confidence='high', text='no matching words')
+        self.assertEqual(missed['matchedConfidenceCounts'], dict.fromkeys(examples.CONFIDENCES, 0))
+        self.assertEqual(missed['availableConfidenceCounts'], dict.fromkeys(examples.CONFIDENCES, 3))
+
+    def test_factual_filters_do_not_treat_missing_facts_or_empty_scopes_as_tap_only(self):
+        records = pool()[:4]
+        for record, notes, key_count in zip(records, ([{'kind': 'normal', 'startMs': 1, 'endMs': 1}],
+                                                    [{'kind': 'long', 'startMs': -1, 'endMs': 2}], []), (4, 7, 4)):
+            record['sourceFacts'] = examples.source_facts(notes, {'startMs': 0, 'endMs': 2}, key_count)
+        tap, = examples.search_examples(records, note_kind='tap-only')['cards']
+        self.assertEqual(tap['id'], records[0]['id'])
+        hold, = examples.search_examples(records, note_kind='with-ln', key_count=7)['cards']
+        self.assertEqual(hold['sourceFacts']['longNoteHeadCount'], 0)
+        self.assertEqual(hold['sourceFacts']['enteringHoldCount'], 1)
+        self.assertEqual(examples.search_examples(records, note_kind='with-ln', key_count=4)['total'], 0)
+        self.assertEqual(examples.search_examples(records, key_count=4)['total'], 2)
+
     def test_first_page_balances_labels_and_pagination_visits_each_record_once(self):
         records = pool()
         first = examples.search_examples(records)

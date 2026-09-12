@@ -84,7 +84,8 @@ class HarnessTest(unittest.TestCase):
             path.write_text(text)
             sha = hashlib.sha256(path.read_bytes()).hexdigest()
             self.source_ids.append(sha)
-            source = {'sha256': sha, 'title': f'Fixture {index}', 'keyCount': 4, 'beatmapSetId': 10 if index < 2 else 20}
+            source = {'sha256': sha, 'title': f'Fixture {index}', 'difficulty': 'Test',
+                      'keyCount': 4, 'beatmapSetId': 10 if index < 2 else 20}
             bounds = {'startMs': 0, 'endMs': 1501}
             sources.append({'source': source, 'range': bounds, 'sourcePath': str(path)})
             notes = [{'source_line': 12, 'column': 0, 'kind': 'long', 'start_ms': 1000, 'end_ms': 1500},
@@ -163,6 +164,38 @@ class HarnessTest(unittest.TestCase):
         self.assertEqual(view['sourceSha256'], example['sourceSha256'])
         self.assertTrue(view['coverage']['allEventsReturned'])
         self.assertNotIn('notes', example)
+
+    def test_preparation_preserves_current_human_confidence_and_derives_reference_facts_from_source(self):
+        source = self.source_ids[2]
+        path = self.feedback_dir / (source + '.json')
+        data = prepare.read(path)
+        row = data['agentReviews'][0]
+        row['summary']['sourceFacts'] = {'noteKind': 'machine-only-inherited-fact'}
+        data['effectiveHumanObservations'] = [{
+            'id': row['decision']['observationId'], 'summary': row['summary'],
+            'confidence': 'high', 'humanComment': '', 'observationSha256': 'a' * 64,
+            'humanId': 'local-expert', 'confirmedAt': '2026-09-11T00:00:00Z',
+            'foundationSha256': 'stored-human-foundation'}]
+        prepare.save(path, data)
+        bundle = self.root / 'reference-facts'
+        prepare.prepare(self.campaign, self.sections, self.feedback_dir, bundle, 'evaluation',
+                        contrast_sets_path=self.contrast_sets)
+        agent = harness.Harness(bundle)
+        result = agent.search(confidence='high', key_count=4, note_kind='with-ln')
+        card, = result['cards']
+        self.assertEqual(card['title'], 'Fixture 2')
+        self.assertEqual(card['difficulty'], 'Test')
+        self.assertEqual(card['humanConfidence'], 'high')
+        self.assertNotIn('humanComment', card)
+        self.assertEqual(card['sourceFacts'], {'keyCount': 4, 'noteKind': 'with-ln', 'attackRowCount': 2,
+                                             'tapCount': 1, 'longNoteHeadCount': 1, 'enteringHoldCount': 0,
+                                             'chordSizeCounts': [[1, 2]]})
+        self.assertNotIn('machine-only', json.dumps(prepare.read(bundle / 'examples.json')))
+        self.assertEqual(result['availableConfidenceCounts'], {'high': 1, 'low': 0, 'unspecified': 0})
+        self.assertEqual(agent.example(card['id'])['sourceFacts'], card['sourceFacts'])
+        self.assertEqual(agent.example(card['id'])['humanConfidence'], 'high')
+        self.assertEqual(agent.search(confidence='low')['total'], 0)
+        self.assertEqual(agent.search(note_kind='tap-only')['total'], 0)
 
     def test_trace_tracks_returned_examples_and_context_without_exposing_provenance_to_worker(self):
         bundle = self.root / 'tracked-annotation'
@@ -254,7 +287,7 @@ class HarnessTest(unittest.TestCase):
                 data['agentReviews'].append(review(value, identity=tag, rationale='Exact human comment.'))
             prepare.save(path, data)
         allowed = {'id', 'sourceSha256', 'groupId', 'tagId', 'assessment', 'scope', 'reviewContext',
-                   'humanComment', 'title', 'difficulty'}
+                   'humanComment', 'humanConfidence', 'title', 'difficulty', 'sourceFacts'}
         for mode in ('annotation', 'evaluation'):
             with self.subTest(mode=mode):
                 bundle = self.root / f'human-only-{mode}'
@@ -321,12 +354,16 @@ class HarnessTest(unittest.TestCase):
                     self.assertEqual(len(tools), 7)
                     self.assertTrue(all(t.annotations.readOnlyHint for t in tools))
                     examples = await client.call_tool('find_human_examples', {'contrast_set': 'articulation',
-                                                                             'assessment': 'supporting'})
+                                                                             'assessment': 'supporting',
+                                                                             'confidence': 'unspecified',
+                                                                             'key_count': 4, 'note_kind': 'with-ln'})
                     self.assertFalse(examples.isError)
                     search = json.loads(examples.content[0].text)
                     self.assertEqual(search['cards'][0]['id'], self.example_ids[self.source_ids[2]])
                     self.assertEqual(search['missingContrastLabels'], ['absent', 'prominent'])
                     self.assertEqual(search['availableContrastSets'][0]['id'], 'articulation')
+                    self.assertEqual(search['matchedConfidenceCounts'], {'high': 0, 'low': 0, 'unspecified': 1})
+                    self.assertEqual(search['cards'][0]['sourceFacts']['noteKind'], 'with-ln')
                     context = await client.call_tool('chart_context', {'section_id': 'case-0', 'start_ms': 0,
                                                                        'timing_offset': 0, 'timing_limit': 1})
                     self.assertFalse(context.isError)

@@ -108,14 +108,16 @@ class Harness:
         section, chart, start, end = self.bounds(section_id, start_ms, end_ms)
         return perspective(chart, start, end, section.get('playbackRate', 1))
 
-    def search(self, tag_id='tech', assessment=None, text='', offset=0, limit=3, contrast_set=None, playback_rate=None):
+    def search(self, tag_id='tech', assessment=None, text='', offset=0, limit=3, contrast_set=None, playback_rate=None,
+               confidence=None, note_kind=None, key_count=None):
         result = search_examples(self.examples, tag_id, assessment, text, offset, limit,
                                  contrast_sets=self.contrast_sets, contrast_set=contrast_set,
-                                 playback_rate=playback_rate, **self.exclusions)
+                                 playback_rate=playback_rate, confidence=confidence,
+                                 note_kind=note_kind, key_count=key_count, **self.exclusions)
         # Keep long source IDs behind the stable example handle.
         for card in result['cards']:
             source = self.manifest['charts'][card.pop('sourceSha256')]['source']
-            card['title'] = source.get('title', '')
+            card.update({key: source[key] for key in ('title', 'difficulty') if key in source})
             card['sectionId'] = 'example:' + card['id']
         return result
 
@@ -253,15 +255,17 @@ def create_server(harness):
     @server.tool(annotations=annotations, structured_output=False)
     def find_human_examples(tag_id: str = 'tech', assessment: Literal['absent', 'supporting', 'prominent', 'present'] | None = None,
                             text: str = '', offset: int = 0, limit: int = 3, contrast_set: str | None = None,
-                            playback_rate: float | None = None) -> CallToolResult:
-        """Find final human judgments with optional humanComment by tag, assessment, literal human-comment/title/difficulty words or a contrast_set ID. No agent reasoning/evidence. Check matchedAssessmentCounts/missingContrastLabels: filters can be one-sided. availableContrastSets lists IDs/counts, never relevance rankings."""
+                            playback_rate: float | None = None, confidence: Literal['high', 'low', 'unspecified'] | None = None,
+                            note_kind: Literal['tap-only', 'with-ln'] | None = None, key_count: int | None = None) -> CallToolResult:
+        """Find human references for a specific presence/strength question. Filter by tag, assessment, human confidence, literal human-comment/title/difficulty words, source note_kind/key_count, or contrast_set. Cards include sourceFacts, not inferred style. Inspect useful example sectionIds. Counts expose missing contrasts; broaden filters after misses. Unset confidence is unspecified, never low or high. No agent reasoning/evidence or relevance ranking."""
         return result('find_human_examples', {'tag_id': tag_id, 'assessment': assessment, 'text': text,
                                             'offset': offset, 'limit': limit, 'contrast_set': contrast_set,
-                                            'playback_rate': playback_rate})
+                                            'playback_rate': playback_rate, 'confidence': confidence,
+                                            'note_kind': note_kind, 'key_count': key_count})
 
     @server.tool(annotations=annotations, structured_output=False)
     def get_human_example(example_id: str) -> CallToolResult:
-        """Open one final human judgment, source/scope, and optional exact humanComment. No agent reasoning/evidence; generic confirmations have no comment. Returned sectionId works with source inspection tools."""
+        """Open one final human judgment with source/scope/facts, optional explicit humanConfidence and exact humanComment. No agent reasoning/evidence; generic confirmations have no comment. Returned sectionId works with source inspection tools."""
         return result('get_human_example', {'example_id': example_id})
 
     @server.tool(annotations=annotations, structured_output=False)

@@ -8,8 +8,9 @@ learning evidence and does not dispatch annotation jobs.
 The harness gives section labelers and independent auditors additional source
 context, inspectable human examples, and a defined player-action perspective.
 Agents start with a compact section brief and call tools only when another fact or
-representation can improve the judgment. The skill retains semantics; deterministic
-tools expose observations. This separation keeps the instruction budget bounded
+representation can improve the judgment. Foundation pins semantics; the thin skill
+guides reading and reference use, while deterministic tools expose observations.
+This separation keeps the instruction budget bounded
 while allowing difficult Tech and salience cases to receive deeper inspection.
 
 Use [the harness labeler role](../../annotation/roles/harness-labeler.md) and
@@ -31,8 +32,8 @@ for performance-time fields, example-rate filters, and source-coordinate rules.
 | `inspect_section` | Read missing rows, press/release/continuing-hold events, or LN head/tail relationships. | `view="rows"`, `"actions"`, or `"articulation"`; `offset=0`, `limit=32`, maximum 64 rows/events; explicit coverage and next offset. |
 | `section_perspective` | Reconsider organization or expression strength through player actions. | Whole-scope counts, selected recurrence/pulse/articulation examples, and interpretation questions. |
 | `query_structure` | Test a specific structural hypothesis. | `fixed-group`, `repeated-subset`, `alternation`, `roll`, or `ln-events`; default three previews, maximum six. Only `repeated-subset` accepts `columns`. |
-| `find_human_examples` | Compare a difficult target or strength distinction. | Default `tag_id="tech"`, three cards, maximum six; optional `assessment`, literal keyword `text`, `contrast_set`, and `offset`. Reports matched assessment counts, missing labels, and small curated-set descriptors. |
-| `get_human_example` | Read one final human judgment and its optional exact human comment. | Identity, source, scope, assessment, and optional `humanComment`, with a reusable `example:…` section ID. |
+| `find_human_examples` | Find references for a particular presence or strength question. | Default `tag_id="tech"`, three cards, maximum six; filters `assessment`, `confidence`, `key_count`, `note_kind`, `playback_rate`, literal `text`, and `contrast_set`; follow `nextOffset`. Cards include title/difficulty and scoped source facts. Counts expose available confidence and missing label contrasts. |
+| `get_human_example` | Open a useful reference and its exact human comment. | Source identity, scope, assessment, optional `humanConfidence`/`humanComment`, and independently derived `sourceFacts`, with a reusable `example:…` section ID. |
 | `render_section` | See spatial organization or articulation. | One PNG page, `view="time"` or `"rows"`, zero-based `page`; explicit page count and view conventions. |
 
 `find_human_examples` interleaves the matching absent, supporting, and prominent
@@ -44,10 +45,37 @@ Filters can produce one-sided results, with a `contrastCaveat`; absent positive
 examples in a search do not establish style absence. Search does not add unrelated
 cards when keywords match only one side or nothing.
 
+Start from the actual uncertainty: which dimension, presence or strength, and which
+construction needs comparison. Select a small page using the known key count,
+playback rate, and relevant source facts; prefer explicit High-confidence references
+when available. Use human-text keywords when useful, but remove them if comments
+do not name the relationship. Compare the available sides of the disputed decision
+and open promising references with source inspection. Broaden filters after a miss;
+do not fill the context with the bank or treat the first card as the closest match.
+
+`confidence="high"`, `"low"`, or `"unspecified"` filters the human's recorded
+confidence, independently of presence and strength. Omission searches all three.
+`humanConfidence` appears only when explicitly recorded; old records are not
+silently classified as Low or High. `availableConfidenceCounts` counts the eligible
+tag/rate/source-fact/contrast-set pool before assessment, text, and confidence
+filters. `matchedConfidenceCounts` counts all final matches before pagination.
+
+`sourceFacts` is computed once from the frozen source for each exact human scope.
+It contains `keyCount`, `attackRowCount`, `tapCount`, `longNoteHeadCount`,
+`enteringHoldCount`, and `chordSizeCounts` as `[chord size, attack row count]` pairs.
+These are tool observations, not human explanations or inherited selected evidence.
+`note_kind="with-ln"` includes any scoped LN head or hold entering the scope;
+`"tap-only"` requires at least one tap and no such LN. Empty scopes are reported
+as `noteKind="empty"`, never tap-only. `key_count` filters the source key count.
+Counts preserve short LNs and all chord members without assigning pattern labels,
+playable roles, or semantic similarity. Inspect the ordered source relationships
+before using a comparison; the counts cannot establish that two passages are alike.
+
 `availableContrastSets` supplies the few available curated comparisons by ID
-and `assessmentCounts`, without curation descriptions or member IDs. These counts
-respect the requested tag and evaluation exclusions, before assessment/text
-filters. Pass a discovered ID as `contrast_set` to intersect its membership with
+and `assessmentCounts`/`confidenceCounts`, without curation descriptions or member IDs.
+These counts respect the requested tag, rate, source-fact filters, and evaluation
+exclusions, before assessment/text/confidence filters. Pass a discovered ID as
+`contrast_set` to intersect its membership with
 the normal filters. Set membership is a curated comparison aid, not an automatic
 structural or style ranking, and a set may have missing labels after exclusions.
 Open useful cards through `get_human_example` and compare their actual scoped
@@ -56,9 +84,10 @@ relationships through source inspection when needed.
 Human-only examples are a universal harness contract across every dimension and
 annotation/evaluation mode. Stored `examples.json`, retrieval helpers, MCP/CLI
 responses, corpus worker feedback and generated section briefs use the same
-field allowlist. `public_example(record, comment_chars=None)` exposes
-only identity, source/scope, the final human assessment, and optional `humanComment`
-are allowed. Full records and annotation-mode `existingHumanJudgments` preserve
+field allowlist. `public_example(record, comment_chars=None)` exposes identity,
+source/scope, the final human assessment, optional explicit `humanConfidence` and
+`humanComment`, and separately named source facts when prepared by the harness.
+Full records and annotation-mode `existingHumanJudgments` preserve
 the exact human comment. Cards limit it to 280 characters and report
 `humanCommentTruncated`. Blank comments, slash-only placeholders, and the generated
 “Human confirmed the original proposal.” supply no substantive comment; their
@@ -68,8 +97,10 @@ extra record fields do not appear in these views or their keyword search. Chart
 title/difficulty remain available for identity lookup.
 
 Canonical feedback retains its original human rationale and administrative
-provenance outside worker example views. Stored harness examples include only the
-public judgment/comment plus group/title/difficulty identity used for filtering.
+provenance outside worker example views. Stored harness examples contain the
+public judgment/confidence/comment, source facts, and group/title/difficulty identity
+used for filtering. Extraction never copies source facts from an agent claim;
+preparation derives them from the complete normalized source notes.
 Callers supply extracted human records or their earlier public projections, never
 machine proposals. An unattributed `rationale` is not a human comment. Source rows
 remain independently inspectable through the returned `example:…` handle.
