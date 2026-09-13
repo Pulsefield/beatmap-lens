@@ -1463,7 +1463,7 @@ describe("ReviewWorkspace mounted workflow", () => {
     const { container, app } = await openWorkspace(f);
     await upload(container, "Import agent handoff", jsonFile(f.handoff, "handoff.json"));
     await upload(container, "Import independent audit", jsonFile(audit, "audit.json"));
-    expect(container.textContent).toContain("Expert review · 1");
+    await vi.waitFor(() => expect(container.textContent).toContain("Expert review · 1"));
     expect(container.textContent).toContain("2 agent-reviewed");
     expect(container.querySelector(".claim-fields legend")?.textContent).toBe("Synthetic C");
     expect(container.querySelector(".review-audit-result")?.textContent).toContain(
