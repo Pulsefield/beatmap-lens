@@ -44,6 +44,26 @@ function piecewiseProjection(
 }
 
 describe("render time projection", () => {
+  it("accepts fixed viewport arithmetic without accepting a different linear scale", () => {
+    const startMs = 136_781.333;
+    const pixelsPerSecond = 1783.9442751414892;
+    const current: LinearRenderTimeProjection = {
+      type: "linear",
+      range: { startMs, endMs: startMs + (768 * 1000) / pixelsPerSecond },
+      direction: "bottom-to-top",
+      pixelsPerSecond,
+      contentTopPx: 24,
+      contentHeightPx: 768,
+    };
+    expect(projectTime(current, startMs)).toBe(792);
+    expect(projectTime(current, current.range.endMs)).toBe(24);
+    expect(unprojectTime(current, projectTime(current, startMs + 100))).toBeCloseTo(
+      startMs + 100,
+      9,
+    );
+    expect(() => projectTime({ ...current, contentHeightPx: 769 }, startMs)).toThrow(RangeError);
+  });
+
   it.each([
     ["top-to-bottom", [17.5, 267.5, 517.5]],
     ["bottom-to-top", [517.5, 267.5, 17.5]],

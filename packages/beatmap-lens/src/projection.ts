@@ -119,10 +119,19 @@ export function validateRenderTimeProjection(projection: RenderTimeProjection): 
 
   if (projection.type === "linear") {
     const expectedContentHeightPx = ((endMs - startMs) * projection.pixelsPerSecond) / 1000;
+    // Fixed viewports derive their end time from a height. Allow the few ULPs lost when
+    // adding/subtracting that duration at a non-zero source timestamp.
+    const tolerancePx =
+      (8 *
+        Number.EPSILON *
+        Math.max(1, Math.abs(startMs), Math.abs(endMs)) *
+        projection.pixelsPerSecond) /
+      1000;
     if (
       !Number.isFinite(projection.pixelsPerSecond) ||
       projection.pixelsPerSecond <= 0 ||
-      projection.contentHeightPx !== expectedContentHeightPx
+      !Number.isFinite(expectedContentHeightPx) ||
+      Math.abs(projection.contentHeightPx - expectedContentHeightPx) > tolerancePx
     ) {
       throw new RangeError("Render time projection must contain finite, consistent geometry.");
     }

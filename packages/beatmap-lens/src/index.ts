@@ -4,6 +4,11 @@ export { osuLazerManiaPixelsPerSecond } from "./osu-lazer.js";
 export { iterateOsz, parseOsz } from "./osz.js";
 export { parseOsu } from "./parser.js";
 export { projectTime, unprojectTime } from "./projection.js";
+export {
+  createAnimationScene,
+  createRenderAnimation,
+  iterateAnimationFrames,
+} from "./render-animation.js";
 export { renderDefaults } from "./render-defaults.js";
 export { createRenderDocument } from "./render-document.js";
 export { createRenderScene } from "./render-scene.js";
@@ -32,6 +37,9 @@ export type {
   ParseOszOptions,
   PiecewiseLinearRenderTimeProjection,
   PlayfieldSize,
+  RenderAnimation,
+  RenderAnimationFrame,
+  RenderAnimationOptions,
   RenderDiagnostic,
   RenderDocument,
   RenderDocumentOptions,
@@ -54,6 +62,7 @@ export type {
   RenderTimeDirection,
   RenderTimeProjection,
   ResolvedPlayfieldSize,
+  ResolvedRenderAnimationOptions,
   ResolvedRenderDocumentOptions,
   ResolvedRenderDocumentScale,
   ResolvedRenderTimeAxisOptions,

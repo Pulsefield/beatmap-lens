@@ -6,8 +6,8 @@ mappers: inspect an arrangement, explain what it does, and help improve it.
 
 - **[beatmap-lens](packages/beatmap-lens/README.md)** is the DOM-free TypeScript
   package. It parses `.osu` and `.osz` input, models 4K–10K charts and shared audio,
-  and produces bounded render scenes and SVG review documents. The package README
-  owns its API, examples, and defaults.
+  and produces bounded render scenes, SVG review documents, and WebP/GIF animations in Node.js.
+  The package README owns its API, examples, and defaults.
 - **[Inspector](apps/inspector/)** is the first-party browser application. It combines
   chart inspection, audio playback, and section review with source-linked evidence
   and saved human judgments. Its current product priority is 4K–7K; the package

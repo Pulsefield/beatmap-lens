@@ -16,6 +16,11 @@ export const renderDefaults = deepFreeze({
       noteRadiusPx: 2,
     },
   },
+  animation: {
+    viewport: { widthPx: 640, heightPx: 480 },
+    scrollSpeed: 20,
+    fps: 30,
+  },
   document: {
     page: {
       size: { widthPx: 1600, heightPx: 900 },

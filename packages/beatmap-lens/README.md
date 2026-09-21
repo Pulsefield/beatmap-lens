@@ -154,6 +154,114 @@ Its SVG panels carry `data-time-scale="row-aware"`, and enabled axes mark compre
 `RenderTimeProjection` is a discriminated union; narrow on `projection.type` before reading the
 linear-only `pixelsPerSecond` field.
 
+### Animated WebP and GIF (Node.js)
+
+`renderAnimation` from `beatmap-lens/node` exports an in-memory animated image. Only `range` is
+required; the default is a lossless WebP at 640 × 480, 30 fps, with osu!lazer scroll speed 20 and
+infinite looping. Sharp is included as a dependency; no browser, external executable, or encoder
+setup is needed on its supported Node.js platforms.
+
+```ts
+import { writeFile } from "node:fs/promises";
+import { parseBeatmap } from "beatmap-lens";
+import { renderAnimation } from "beatmap-lens/node";
+
+const { chart } = parseBeatmap(osuSource);
+const image = await renderAnimation(chart, {
+  range: { startMs: 60_000, endMs: 65_000 },
+  viewport: { widthPx: 640, heightPx: 480 },
+  scrollSpeed: 22,
+  fps: 30,
+  format: "webp", // Or "gif".
+});
+await writeFile("preview.webp", image.data);
+// image also exposes format, mimeType, size, frameCount and durationMs.
+```
+
+`range` is the half-open **playback interval**, not a crop of the notes. Each frame shows the
+upcoming time window starting at its current source time. Current time stays at the lower padded
+edge by default, so future notes move down toward it. `timeDirection: "top-to-bottom"` reverses
+this movement. Upcoming notes after `range.endMs` can be visible, and active long notes remain
+clipped to the viewport. There is no preroll, trailing pause, audio, or simulated key input.
+
+| Input | Default | Meaning |
+| --- | --- | --- |
+| `range` | Required | Source-time playback interval in milliseconds |
+| `viewport` | `{ widthPx: 640, heightPx: 480 }` | Logical scene dimensions; the lanes fill this width |
+| `pixelRatio` | `1` | Raster scale; `2` exports 1280 × 960 from the default viewport without changing timing or spacing |
+| `scrollSpeed` | `20` | osu!lazer baseline speed, 1–40, using the landscape viewport |
+| `pixelsPerSecond` | Unset | Explicit logical pixel speed instead of `scrollSpeed`; also supports portrait viewports |
+| `fps` | `30` | Requested samples per source second; fractional rates are supported |
+| `format` | `"webp"` | `"webp"` or `"gif"` |
+| `loop` | `0` | Total plays; `0` repeats forever, `1` plays once |
+| `theme`, `timeDirection` | Scene defaults | The same partial metrics and time direction as static rendering |
+
+Choose either `scrollSpeed` or `pixelsPerSecond`. The former reuses the existing
+`osuLazerManiaPixelsPerSecond` adapter; it models constant visual speed, without timing/SV or rate
+mods. `viewport` and `theme` use logical pixels. The output size rounds each
+`viewport dimension × pixelRatio` to the nearest integer, with a minimum of one pixel.
+
+Format-specific controls are available through `webp` or `gif`, using Sharp's corresponding
+encoder options except `loop`, `delay`, and `force`. Delays belong to the frame pipeline.
+For example, use `webp: { lossless: false, quality: 85, effort: 4 }` or
+`format: "gif", gif: { colours: 64, dither: 0 }`. GIF defaults to no dithering and retains
+duplicate frames. The TypeScript options prevent mixing GIF and WebP controls.
+
+Frame timestamps come from their index, and the final sample is shortened to the remaining
+duration. Encoding rounds cumulative frame boundaries to WebP's 1ms or GIF's 10ms units, avoiding
+drift at rates such as 30 fps. Samples shorter than 11ms for WebP or 20ms for GIF are coalesced;
+a short remainder extends the previous frame. This avoids the much longer pauses imposed on
+tiny delays by encoders and players. Prefer WebP for 60 fps; GIF works best at 50 fps or below.
+A GIF shorter than 20ms lasts 20ms. A single-frame or entirely stationary WebP can become a still
+image with no stored duration. Result `frameCount` and `durationMs` describe the encoded file,
+including coalescing and that zero-duration still-image case. Player scheduling can vary.
+
+The core frame APIs work in browsers and Node.js without importing Sharp:
+
+```ts
+import {
+  createAnimationScene,
+  createRenderAnimation,
+  iterateAnimationFrames,
+  serializeSvg,
+} from "beatmap-lens";
+import { encodeAnimation } from "beatmap-lens/node";
+
+const animation = createRenderAnimation(chart, {
+  range: { startMs: 60_000, endMs: 65_000 },
+  viewport: { widthPx: 640, heightPx: 480 },
+  pixelsPerSecond: 700,
+});
+// Inspect animation.resolved for the scale, visible duration, metrics and sample count.
+const previewSvg = serializeSvg(createAnimationScene(animation, 61_234.5));
+
+function* customFrames() {
+  for (const frame of iterateAnimationFrames(animation)) {
+    // Every frame exposes index, timeMs, durationMs and an ordinary RenderScene.
+    yield {
+      ...frame,
+      scene: {
+        ...frame.scene,
+        notes: frame.scene.notes.map((note) => ({ ...note, fill: "#a78bfa" })),
+      },
+    };
+  }
+}
+const gif = await encodeAnimation(customFrames(), { format: "gif" });
+```
+
+`createRenderAnimation` retains the chart by reference and resolves parameters without allocating
+frames. `createAnimationScene` samples any time in the playback range independently of `fps`.
+`iterateAnimationFrames` is lazy and repeatable. Treat the retained chart as immutable while
+using the plan. Browser consumers can serialize scenes or draw their geometry themselves.
+
+`encodeAnimation` accepts synchronous or asynchronous iterables of `{ scene, durationMs }`;
+all scenes must have the same size and durations must be positive. This is the boundary for
+custom styling, frame selection, timing, or caller-owned progress/cancellation logic. The Node
+encoder rasterizes one scene at a time and retains compressed PNG frames before encoding, so
+memory still grows with clip length and resolution. The package returns bytes; the caller owns
+file writes or HTTP responses. Native encoding stays behind the `beatmap-lens/node` subpath.
+
 ### osu!lazer mania visual speed
 
 Use `osuLazerManiaPixelsPerSecond` to match lazer's baseline note spacing for its standard desktop
@@ -198,7 +306,8 @@ serializer preserves finite JavaScript numeric values when encoding text.
 
 The package is ESM-only, DOM-free, and performs no implicit file or network reads. It detects the
 key count of valid `osu!mania` files from `[Difficulty] CircleSize` and supports 4K-10K normal
-notes, long notes, bounded render scenes, SVG serialization, and in-memory `.osz` archives.
+notes, long notes, bounded render scenes, SVG serialization, animation frames, Node.js WebP/GIF
+encoding, and in-memory `.osz` archives.
 
 `Beatmap` composes `.osu` source, its parsed document, its normalized chart, and an optional pointer
 to `BeatmapAudio`. `connectBeatmapAudio` creates that connection without copying audio bytes.
@@ -234,4 +343,4 @@ status and architecture.
 
 One `RenderScene` intentionally covers one range and one playfield. Fixed-size solving, horizontal
 layout, pagination, and readable spacing live in the separate `RenderDocument` layer. Beat-aligned
-pagination, full timing/SV scroll-speed parity, and PNG/raster output remain deferred.
+pagination, full timing/SV scroll-speed parity, and standalone PNG exports remain deferred.

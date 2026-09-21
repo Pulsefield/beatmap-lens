@@ -2,6 +2,8 @@ import {
   type Beatmap,
   type BeatmapAudio,
   type BeatmapSet,
+  createAnimationScene,
+  createRenderAnimation,
   createRenderDocument,
   createRenderScene,
   type DiagnosticSeverity,
@@ -23,6 +25,9 @@ import {
   type ParseOszOptions,
   type PiecewiseLinearRenderTimeProjection,
   type PlayfieldSize,
+  type RenderAnimation,
+  type RenderAnimationFrame,
+  type RenderAnimationOptions,
   type RenderDiagnostic,
   type RenderDocument,
   type RenderDocumentOptions,
@@ -45,6 +50,7 @@ import {
   type RenderTimeDirection,
   type RenderTimeProjection,
   type ResolvedPlayfieldSize,
+  type ResolvedRenderAnimationOptions,
   type ResolvedRenderDocumentOptions,
   type ResolvedRenderDocumentScale,
   type ResolvedRenderTimeAxisOptions,
@@ -58,6 +64,13 @@ import {
   serializeSvgPages,
   type TimeRange,
 } from "../src/index.js";
+import {
+  type EncodeAnimationOptions,
+  type EncodedAnimation,
+  encodeAnimation,
+  type RenderAnimationExportOptions,
+  renderAnimation,
+} from "../src/node.js";
 
 export interface PublicTypeContract {
   Beatmap: Beatmap;
@@ -82,6 +95,13 @@ export interface PublicTypeContract {
   ParseOszOptions: ParseOszOptions;
   PiecewiseLinearRenderTimeProjection: PiecewiseLinearRenderTimeProjection;
   PlayfieldSize: PlayfieldSize;
+  RenderAnimation: RenderAnimation;
+  RenderAnimationFrame: RenderAnimationFrame;
+  RenderAnimationOptions: RenderAnimationOptions;
+  ResolvedRenderAnimationOptions: ResolvedRenderAnimationOptions;
+  EncodedAnimation: EncodedAnimation;
+  EncodeAnimationOptions: EncodeAnimationOptions;
+  RenderAnimationExportOptions: RenderAnimationExportOptions;
   RenderDiagnostic: RenderDiagnostic;
   RenderDocument: RenderDocument;
   RenderDocumentOptions: RenderDocumentOptions;
@@ -112,6 +132,30 @@ export interface PublicTypeContract {
   SerializeSvgPagesOptions: SerializeSvgPagesOptions;
   SizePx: SizePx;
   TimeRange: TimeRange;
+}
+
+export function assertAnimationContracts(chart: ManiaChart): void {
+  const animation = createRenderAnimation(chart, { range: chart.range, scrollSpeed: 22 });
+  const scene = createAnimationScene(animation, chart.range.startMs);
+  renderAnimation(chart, { range: chart.range });
+  renderAnimation(chart, { range: chart.range, format: "gif", gif: { colours: 32 } });
+  renderAnimation(chart, {
+    range: chart.range,
+    pixelsPerSecond: 240,
+    webp: { lossless: false, quality: 80 },
+  });
+  encodeAnimation([{ scene, durationMs: 100 }]);
+
+  // @ts-expect-error -- playback range is intentionally required.
+  renderAnimation(chart, {});
+  // @ts-expect-error -- speed sources cannot silently override one another.
+  createRenderAnimation(chart, { range: chart.range, scrollSpeed: 22, pixelsPerSecond: 240 });
+  // @ts-expect-error -- format-specific controls follow the chosen format.
+  renderAnimation(chart, { range: chart.range, format: "gif", webp: { quality: 80 } });
+  // @ts-expect-error -- Node encoding concerns are not part of the core animation plan.
+  createRenderAnimation(chart, { range: chart.range, format: "gif" });
+  // @ts-expect-error -- the core entry does not expose the native encoder.
+  const _encoder: typeof import("../src/index.js").renderAnimation = renderAnimation;
 }
 
 export function assertRequiredDocumentRange(chart: ManiaChart): void {

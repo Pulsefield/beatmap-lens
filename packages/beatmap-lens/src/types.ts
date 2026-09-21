@@ -216,6 +216,56 @@ export interface RenderSceneOptions {
   readonly theme?: RenderThemeInput;
 }
 
+export type RenderAnimationOptions = {
+  /** Source-time playback interval, independent of each frame's visible range. */
+  readonly range: TimeRange;
+  /** Logical scene dimensions. Defaults to 640 × 480. */
+  readonly viewport?: SizePx;
+  /** Frames per source second. Defaults to 30. */
+  readonly fps?: number;
+  readonly timeDirection?: RenderTimeDirection;
+  readonly theme?: RenderThemeInput;
+} & (
+  | {
+      /** osu!lazer baseline speed, 1–40, for a landscape viewport. Defaults to 20. */
+      readonly scrollSpeed?: number;
+      readonly pixelsPerSecond?: never;
+    }
+  | {
+      /** Direct linear speed in logical pixels per source second; also supports portrait viewports. */
+      readonly pixelsPerSecond: number;
+      readonly scrollSpeed?: never;
+    }
+);
+
+export interface ResolvedRenderAnimationOptions {
+  readonly viewport: SizePx;
+  readonly fps: number;
+  readonly pixelsPerSecond: number;
+  readonly timeDirection: RenderTimeDirection;
+  readonly metrics: RenderMetrics;
+  readonly playfield: ResolvedPlayfieldSize;
+  readonly contentHeightPx: number;
+  readonly visibleDurationMs: number;
+  readonly durationMs: number;
+  readonly frameCount: number;
+}
+
+export interface RenderAnimation {
+  readonly kind: "mania-animation";
+  /** Retained by reference; frame generation does not copy the chart. */
+  readonly chart: ManiaChart;
+  readonly range: TimeRange;
+  readonly resolved: ResolvedRenderAnimationOptions;
+}
+
+export interface RenderAnimationFrame {
+  readonly index: number;
+  readonly timeMs: number;
+  readonly durationMs: number;
+  readonly scene: RenderScene;
+}
+
 export type RenderDocumentScaleInput =
   | {
       readonly type: "linear";
