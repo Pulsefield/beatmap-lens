@@ -1,4 +1,4 @@
-"""Source-aligned Mel and chart views using Pulsefield's existing music frontend."""
+"""Source-aligned Mel and chart views using ensomi's existing music frontend."""
 from dataclasses import asdict
 import hashlib
 import importlib.metadata
@@ -14,7 +14,7 @@ def digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
-def render_audio(corpus, handle, start_ms, end_ms, out: Path, pulsefield_root: Path):
+def render_audio(corpus, handle, start_ms, end_ms, out: Path, ensomi_root: Path):
     """Create a fresh image, raw feature slice and sealed provenance record."""
     section, chart, start, end = corpus.bounds(handle, start_ms, end_ms)
     sha = section['sourceSha256']
@@ -22,16 +22,16 @@ def render_audio(corpus, handle, start_ms, end_ms, out: Path, pulsefield_root: P
     audio = ref['audio']
     if not audio or not Path(audio['path']).is_file():
         raise FileNotFoundError(f'Audio unavailable for {handle}.')
-    out, pulsefield_root = Path(out).resolve(), Path(pulsefield_root).resolve()
+    out, ensomi_root = Path(out).resolve(), Path(ensomi_root).resolve()
     if out.exists():
         raise FileExistsError(f'Choose a fresh audio output directory: {out}')
-    python = Path(os.environ.get('PULSEFIELD_PYTHON', pulsefield_root / '.venv/bin/python'))
+    python = Path(os.environ.get('ENSOMI_PYTHON', ensomi_root / '.venv/bin/python'))
     if not python.is_file():
-        raise FileNotFoundError(f'Pulsefield Python runtime unavailable: {python}')
+        raise FileNotFoundError(f'ensomi Python runtime unavailable: {python}')
     notes = [note for note in chart['notes']
              if (note['startMs'] < end and note['endMs'] >= start if note['kind'] == 'long'
                  else start <= note['startMs'] < end)]
-    payload = {'pulsefieldRoot': str(pulsefield_root), 'out': str(out),
+    payload = {'ensomiRoot': str(ensomi_root), 'out': str(out),
                'sourceSha256': sha, 'source': chart['source'], 'handle': handle,
                'scope': {'startMs': start, 'endMs': end}, 'notes': notes,
                'audio': {'path': str(Path(audio['path']).resolve()),
@@ -46,9 +46,9 @@ def render_audio(corpus, handle, start_ms, end_ms, out: Path, pulsefield_root: P
 
 def _extract(payload):
     # Imports stay in the configured runtime; the learning CLI needs no ML packages.
-    sys.path.insert(0, str(Path(payload['pulsefieldRoot']) / 'src'))
+    sys.path.insert(0, str(Path(payload['ensomiRoot']) / 'src'))
     import numpy as np
-    from pulsefield_model.features import audio, mel_base
+    from ensomi_model.features import audio, mel_base
 
     config = mel_base.MUSIC_MEL_CACHE_CONFIG
     audio_path = Path(payload['audio']['path'])
@@ -102,14 +102,14 @@ def _extract(payload):
                    'frontend': {'window': 'hann', 'center': False, 'power': 2.0, 'norm': 1,
                                 'logFloor': mel_base.LOG_MEL_FLOOR}},
         'implementation': {
-            'pulsefieldRoot': payload['pulsefieldRoot'],
+            'ensomiRoot': payload['ensomiRoot'],
             'sources': {name: {'path': str(path), 'sha256': digest(path)}
                         for name, path in implementation_paths.items()},
             'versions': {name: importlib.metadata.version(name)
                          for name in ('nnAudio', 'torch', 'numpy', 'pydub', 'matplotlib')},
             'ffmpeg': subprocess.run(['ffmpeg', '-version'], capture_output=True, text=True,
                                      check=True).stdout.splitlines()[0]},
-        'normalization': {'loader': 'pulsefield_model.features.audio.load_audio_file',
+        'normalization': {'loader': 'ensomi_model.features.audio.load_audio_file',
                           'mono': True, 'speed': 1.0, 'normalize': True,
                           'scope': 'Entire decoded, resampled, mono track; global absolute peak scaled to 1 when nonzero.'},
         'frames': {'fullTrackCount': len(full_mel), 'selectedCount': len(indexes),

@@ -1,5 +1,5 @@
 {
-  "name": "@pulsefield/beatmap-lens-inspector",
+  "name": "@ensomi/beatmap-lens-inspector",
   "version": "0.0.0",
   "description": "Private browser inspection surface for Beatmap Lens.",
   "private": true,

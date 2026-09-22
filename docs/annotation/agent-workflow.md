@@ -78,7 +78,7 @@ Run the local service against the persistent workspace containing the registered
 sources and approved Foundation. Build the Inspector before serving it:
 
 ```sh
-pnpm --filter @pulsefield/beatmap-lens-inspector build
+pnpm --filter @ensomi/beatmap-lens-inspector build
 pnpm review:workspace --workspace .local/campaign/workspace
 ```
 
@@ -89,7 +89,7 @@ expert cases, explicit spot-check requests, ordinary agent review status, and sa
 human responses. Normal review requires no JSON import/export or directory picker.
 The selected chart's left rail shows difficulty-level community tags, per-tag votes,
 their sum, and the dataset snapshot date. The service reads metadata on demand from
-`PULSEFIELD_DATASET` or the configured Pulsefield checkout; use `--dataset PATH`
+`ENSOMI_DATASET` or the configured ensomi checkout; use `--dataset PATH`
 for another dataset root. See [runtime configuration](corpus-annotation.md#local-inputs-and-runtime). These
 display-only tags are joined by beatmapset and beatmap IDs and are excluded from
 canonical review documents, frozen agent tasks, and agent feedback.

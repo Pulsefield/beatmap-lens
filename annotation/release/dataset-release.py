@@ -12,7 +12,7 @@ from snapshot import build_snapshot, validate_snapshot
 
 
 REPO = Path(__file__).resolve().parents[2]
-REPOSITORY = 'https://github.com/Pulsefield/beatmap-lens'
+REPOSITORY = 'https://github.com/ensomi-labs/beatmap-lens'
 
 
 def read(path):

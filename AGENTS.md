@@ -3,7 +3,7 @@
 ## Owners
 
 - `packages/beatmap-lens/` is the independently published npm toolkit. Keep its APIs
-  DOM-free and separate from campaign policy, local storage, and Pulsefield runtimes.
+  DOM-free and separate from campaign policy, local storage, and ensomi runtimes.
 - `apps/inspector/` owns the human inspection and review experience, including its
   local service. Follow `apps/inspector/DESIGN.md` for interface changes.
 - `harness/` exposes read-only source evidence and human examples to workers.
@@ -27,11 +27,11 @@ annotation research workflow.
   document their actual supported key counts separately.
 - Keep one implementation of source identity, judgment contracts, and human review
   transitions. Application adapters may consume it without adding a public API.
-- Paired Pulsefield development is supported. Configure repository, dataset, and
+- Paired ensomi development is supported. Configure repository, dataset, and
   runtime paths explicitly rather than assuming one machine's layout.
 - Manage Python tooling with the root `pyproject.toml` and `uv.lock`. Use
   `uv sync --locked` and `uv run --locked python`; keep the project `.venv` local.
-  Pulsefield audio extraction retains its separately configured runtime.
+  ensomi audio extraction retains its separately configured runtime.
 - Breaking repository changes are allowed. Do not add old-path wrappers or preserve
   obsolete controller behavior without a current consumer requirement.
 - Preserve real human records and their meanings. Repository cleanup is not authority

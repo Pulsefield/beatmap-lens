@@ -27,8 +27,8 @@ learning in `annotation/learning`. Snapshot publication belongs in
 repository skills live in `.agents/skills`. `scripts/` is for repository maintenance.
 Do not narrow the package's support range to match an annotation campaign.
 
-Paired Pulsefield development is supported. Pass dataset, checkout, and runtime
-locations through the supported configuration or CLI options. Keep Pulsefield
+Paired ensomi development is supported. Pass dataset, checkout, and runtime
+locations through the supported configuration or CLI options. Keep ensomi
 model execution and training code in that repository. Do not introduce format
 adapters without a concrete consumer need.
 
@@ -68,8 +68,8 @@ method's missing evaluation does not block a valid human-only dataset.
 Python dependencies live in the root `pyproject.toml` and `uv.lock`; `.python-version`
 selects Python 3.10. Run `uv sync --locked` to prepare `.venv`, and use
 `uv run --locked python SCRIPT` for Python tools. Update the project dependency
-specification and lockfile together when changing dependencies. Pulsefield audio
-keeps its separate runtime, configurable through `PULSEFIELD_PYTHON`.
+specification and lockfile together when changing dependencies. ensomi audio
+keeps its separate runtime, configurable through `ENSOMI_PYTHON`.
 
 Run the checks relevant to the changed behavior, then the repository check before
 merging:

@@ -10,14 +10,14 @@
     "svg"
   ],
   "license": "MIT",
-  "homepage": "https://github.com/Pulsefield/beatmap-lens#readme",
+  "homepage": "https://github.com/ensomi-labs/beatmap-lens#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Pulsefield/beatmap-lens.git",
+    "url": "git+https://github.com/ensomi-labs/beatmap-lens.git",
     "directory": "packages/beatmap-lens"
   },
   "bugs": {
-    "url": "https://github.com/Pulsefield/beatmap-lens/issues"
+    "url": "https://github.com/ensomi-labs/beatmap-lens/issues"
   },
   "type": "module",
   "sideEffects": false,

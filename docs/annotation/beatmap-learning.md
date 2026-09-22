@@ -43,7 +43,7 @@ histories do not enter the human-example library.
 
 ```sh
 uv run --locked python annotation/learning/beatmap-learning.py prepare \
-  --dataset ../Pulsefield-model/dataset \
+  --dataset ../ensomi-model/dataset \
   --beatmapset 1986822 \
   --out .local/beatmap-learning/corpus
 ```
@@ -108,15 +108,15 @@ detail. Follow real variants in the same chart, sibling difficulties, and other
 works. No synthetic edit, new expert annotation, fixed curriculum size, or
 five-dimension prediction is required for a reading study.
 
-## Read audio through Pulsefield Mel views
+## Read audio through ensomi Mel views
 
-The `audio` command uses the neighboring Pulsefield checkout's existing Python
+The `audio` command uses the neighboring ensomi checkout's existing Python
 runtime and calls its actual `load_audio_file` and `compute_log_mel_10ms` with
 `MUSIC_MEL_CACHE_CONFIG`: mono 24 kHz, 128 Mel bins, 10 ms hop, 40 ms Hann window,
 20–12,000 Hz, natural-log power with a `1e-5` floor. It uses the general-music
-frontend selected in Pulsefield, not the legacy 16 kHz frontend or the separate
+frontend selected in ensomi, not the legacy 16 kHz frontend or the separate
 MIR teacher experiment. This reuses a feature extractor without adopting a V3
-architecture or changing Pulsefield's caches.
+architecture or changing ensomi's caches.
 
 ```sh
 uv run --locked python annotation/learning/beatmap-learning.py audio \
@@ -124,8 +124,8 @@ uv run --locked python annotation/learning/beatmap-learning.py audio \
   --start-ms 168400 --end-ms 174400 --out .local/audio-reading
 ```
 
-Use `--pulsefield-root PATH` or `PULSEFIELD_ROOT` for a different checkout, and
-`PULSEFIELD_PYTHON` for its audio runtime. That runtime must provide Pulsefield's
+Use `--ensomi-root PATH` or `ENSOMI_ROOT` for a different checkout, and
+`ENSOMI_PYTHON` for its audio runtime. That runtime must provide ensomi's
 audio dependencies; see [configuration](corpus-annotation.md#local-inputs-and-runtime). The output directory must be
 fresh. Open the returned `imagePath` to inspect the Mel spectrum and four-lane
 attack/hold/release panel on the same absolute source-time axis. The command also

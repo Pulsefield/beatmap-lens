@@ -23,8 +23,8 @@ export async function startReviewWorkspace(options) {
   const workspace = resolve(options.workspace);
   const dataset = resolve(
     options.dataset ??
-      process.env.PULSEFIELD_DATASET ??
-      join(process.env.PULSEFIELD_ROOT ?? join(repo, "../Pulsefield-model"), "dataset"),
+      process.env.ENSOMI_DATASET ??
+      join(process.env.ENSOMI_ROOT ?? join(repo, "../ensomi-model"), "dataset"),
   );
   const communityTags = createCommunityTagReader(dataset);
   const exchange = join(workspace, "exchange");

@@ -7,7 +7,7 @@ holds still contribute occupancy and continuing-hold relationships.
 
 MinaCalc's local half-second density, hand split, and same-column timing inspire
 the measurements, not its implementation or ratings. The reference is
-../Pulsefield-model/ref-proj/Mug-Diffusion/scripts/MinaCalc-1.0.tar.gz
+../ensomi-model/ref-proj/Mug-Diffusion/scripts/MinaCalc-1.0.tar.gz
 (MinaCalc.h and Dependent/HD_Sequencers/GenericSequencing.h). These values are
 neither style judgments nor difficulty or model-uncertainty scores.
 """

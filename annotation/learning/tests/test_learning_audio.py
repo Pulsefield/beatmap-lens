@@ -15,11 +15,11 @@ from learning_experience import recall, remember
 from test_learning_corpus import source_text
 
 
-PULSEFIELD = Path(os.environ.get('PULSEFIELD_ROOT', Path(__file__).resolve().parents[4] / 'Pulsefield-model'))
-PYTHON = Path(os.environ.get('PULSEFIELD_PYTHON', PULSEFIELD / '.venv/bin/python'))
+ENSOMI = Path(os.environ.get('ENSOMI_ROOT', Path(__file__).resolve().parents[4] / 'ensomi-model'))
+PYTHON = Path(os.environ.get('ENSOMI_PYTHON', ENSOMI / '.venv/bin/python'))
 
 
-@unittest.skipUnless(PYTHON.is_file(), 'Requires Pulsefield source and its existing audio Python runtime')
+@unittest.skipUnless(PYTHON.is_file(), 'Requires ensomi source and its existing audio Python runtime')
 class LearningAudioTest(unittest.TestCase):
     def setUp(self):
         temp = TemporaryDirectory()
@@ -56,8 +56,8 @@ from pathlib import Path
 import sys
 import numpy as np
 sys.path.insert(0, str(Path(sys.argv[1]) / 'src'))
-from pulsefield_model.features.audio import load_audio_file
-from pulsefield_model.features.mel_base import MUSIC_MEL_CACHE_CONFIG, compute_log_mel_10ms
+from ensomi_model.features.audio import load_audio_file
+from ensomi_model.features.mel_base import MUSIC_MEL_CACHE_CONFIG, compute_log_mel_10ms
 c = MUSIC_MEL_CACHE_CONFIG
 wave = load_audio_file(sys.argv[2], c.sample_rate, speed=1.0, normalize=True)
 full = compute_log_mel_10ms(wave, sample_rate=c.sample_rate, config=c)
@@ -72,14 +72,14 @@ with np.load(sys.argv[3]) as sliced:
                       'fullFrames': len(full), 'melConfigHash': c.mel_config_hash,
                       'waveformPeak': float(np.abs(wave).max())}))
 '''
-        result = subprocess.run([str(PYTHON), '-c', script, str(PULSEFIELD), str(self.audio), str(features_path)],
+        result = subprocess.run([str(PYTHON), '-c', script, str(ENSOMI), str(self.audio), str(features_path)],
                                 capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         return json.loads(result.stdout)
 
     def test_off_grid_view_matches_full_source_and_seals_shared_scope(self):
         before = {str(path): digest(path) for path in self.root.rglob('*') if path.is_file()}
-        result = render_audio(self.corpus, self.handle, 1257, 1703, self.root / 'view', PULSEFIELD)
+        result = render_audio(self.corpus, self.handle, 1257, 1703, self.root / 'view', ENSOMI)
         reference = self.check_source_parity(result['featuresPath'])
         metadata = read(result['evidencePath'])
         scope = {'startMs': 1257, 'endMs': 1703}
@@ -113,7 +113,7 @@ with np.load(sys.argv[3]) as sliced:
         self.assertEqual(before, {path: digest(path) for path in before})
 
     def test_eof_uses_only_source_frontend_padding_and_fixed_color_scale(self):
-        result = render_audio(self.corpus, self.handle, 1703, 1751, self.root / 'tail', PULSEFIELD)
+        result = render_audio(self.corpus, self.handle, 1703, 1751, self.root / 'tail', ENSOMI)
         reference = self.check_source_parity(result['featuresPath'])
         metadata = read(result['evidencePath'])
         self.assertEqual(reference['indexes'], list(range(167, 174)))
@@ -127,16 +127,16 @@ with np.load(sys.argv[3]) as sliced:
         self.assertAlmostEqual(metadata['display']['color']['min'], math.log(1e-5))
         self.assertFalse(metadata['frames']['sectionBoundaryPadding'])
         with self.assertRaisesRegex(FileExistsError, 'fresh audio output'):
-            render_audio(self.corpus, self.handle, 1703, 1751, self.root / 'tail', PULSEFIELD)
+            render_audio(self.corpus, self.handle, 1703, 1751, self.root / 'tail', ENSOMI)
 
     def test_missing_external_audio_is_explicit(self):
         self.audio.unlink()
         with self.assertRaisesRegex(FileNotFoundError, 'Audio unavailable'):
-            render_audio(self.corpus, self.handle, 1257, 1703, self.root / 'missing', PULSEFIELD)
+            render_audio(self.corpus, self.handle, 1257, 1703, self.root / 'missing', ENSOMI)
         self.assertFalse((self.root / 'missing').exists())
 
     def test_view_can_ground_a_revision_without_becoming_human_evidence(self):
-        result = render_audio(self.corpus, self.handle, 1257, 1703, self.root / 'view', PULSEFIELD)
+        result = render_audio(self.corpus, self.handle, 1257, 1703, self.root / 'view', ENSOMI)
         metadata = read(result['evidencePath'])
         sha, scope = metadata['sourceSha256'], metadata['scope']
         value = {'id': 'retained-hold', 'title': 'A tap within a retained hold',

@@ -234,7 +234,7 @@ identifiers remain available for revision and provenance links.
 
 The user explicitly selected MIT for the exported annotations and accompanying
 dataset documentation. MIT snapshots include `LICENSE` with the complete terms
-and the repository's notice, `Copyright (c) 2026 Pulsefield contributors`. Its file
+and the repository's notice, `Copyright (c) 2026 ensomi contributors`. Its file
 hash appears in the manifest and the exporter reference inventory. This choice
 does not distribute or relicense externally referenced beatmaps.
 

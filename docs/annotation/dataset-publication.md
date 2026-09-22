@@ -286,7 +286,7 @@ to the Foundation or frozen labels. The published v0.2.0 files remain unchanged.
 [v3](https://huggingface.co/datasets/sed-i/mania-pattern-annotations/tree/b22a7a443783e05fee4db4b1d22b8e573ad448ae) was published on 2026-09-12 under MIT at HF commit
 `b22a7a443783e05fee4db4b1d22b8e573ad448ae`; the `v3` tag resolves to that commit. GitHub was synchronized
 and its 24 preparation files were publicly downloaded and hash-verified before HF
-publication. The exporter and [frozen method package](https://github.com/Pulsefield/beatmap-lens/tree/647009ab60ed69d98190712a6ab025807cca07b8/annotation/methods/astra-1000-20260912) are pinned to
+publication. The exporter and [frozen method package](https://github.com/ensomi-labs/beatmap-lens/tree/647009ab60ed69d98190712a6ab025807cca07b8/annotation/methods/astra-1000-20260912) are pinned to
 GitHub commit `647009ab60ed69d98190712a6ab025807cca07b8`.
 
 | Layer | Records | Annotated charts |
@@ -355,7 +355,7 @@ tags remain immutable.
 [v0.2.0](https://huggingface.co/datasets/sed-i/mania-pattern-annotations/tree/a8ee5391b5f9dd68e9b2fb478674a46f354c7375) was published on 2026-09-10 under MIT at HF commit
 `a8ee5391b5f9dd68e9b2fb478674a46f354c7375`; the `v0.2.0` tag resolves to that
 commit. The exporter and public
-[frozen method bundle](https://github.com/Pulsefield/beatmap-lens/tree/d0427e9aa3efb79c421964f99883b0d285743772/annotation/methods/scale-500-20260910)
+[frozen method bundle](https://github.com/ensomi-labs/beatmap-lens/tree/d0427e9aa3efb79c421964f99883b0d285743772/annotation/methods/scale-500-20260910)
 are pinned to GitHub commit `d0427e9aa3efb79c421964f99883b0d285743772`.
 The skill and Foundation semantics remain unchanged.
 

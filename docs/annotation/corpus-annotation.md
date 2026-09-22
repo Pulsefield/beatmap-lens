@@ -26,7 +26,7 @@ invents a Foundation approval or configures every possible dataset.
 
 ## Local inputs and runtime
 
-Paired development with Pulsefield is the default. Keep dataset and workspace paths
+Paired development with ensomi is the default. Keep dataset and workspace paths
 configurable. The root uv project manages Python 3.10 and the annotation dependencies
 in `.venv`, using `pyproject.toml`, `uv.lock`, and `.python-version`:
 
@@ -39,14 +39,14 @@ Shared configuration is:
 
 | Setting | Use |
 | --- | --- |
-| `PULSEFIELD_ROOT` | Pulsefield checkout; defaults to `../Pulsefield-model` |
-| `PULSEFIELD_PYTHON` | Pulsefield audio runtime; defaults to that checkout's `.venv/bin/python` |
-| `PULSEFIELD_DATASET` | Review metadata dataset; `--dataset` overrides it |
+| `ENSOMI_ROOT` | ensomi checkout; defaults to `../ensomi-model` |
+| `ENSOMI_PYTHON` | ensomi audio runtime; defaults to that checkout's `.venv/bin/python` |
+| `ENSOMI_DATASET` | Review metadata dataset; `--dataset` overrides it |
 | `ANNOTATION_PYTHON` | Optional annotation helper runtime override; otherwise use the current Python interpreter |
 
-Learning also accepts `--dataset` and `--pulsefield-root`. Annotation helpers use
+Learning also accepts `--dataset` and `--ensomi-root`. Annotation helpers use
 the launching interpreter unless explicitly overridden; under `uv run --locked`
-this is the project `.venv`. Pulsefield audio extraction still uses its separately
+this is the project `.venv`. ensomi audio extraction still uses its separately
 configured runtime and audio dependencies.
 
 `.local/` paths below are example destinations for new work. They do not refer to
@@ -80,7 +80,7 @@ Prepare inputs before dispatch and keep an active job's inputs fixed.
 Build and run the Inspector against the campaign's persistent workspace:
 
 ```sh
-pnpm --filter @pulsefield/beatmap-lens-inspector build
+pnpm --filter @ensomi/beatmap-lens-inspector build
 pnpm review:workspace --workspace .local/campaign/workspace
 ```
 

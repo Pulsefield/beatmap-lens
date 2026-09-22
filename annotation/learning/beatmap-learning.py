@@ -41,9 +41,9 @@ def main():
             command.add_argument('--out', type=Path, required=True)
         if name == 'audio':
             command.add_argument('--out', type=Path, required=True, help='Fresh directory for the Mel view, numerical frames, and evidence.')
-            command.add_argument('--pulsefield-root', type=Path,
-                                 default=Path(os.environ.get('PULSEFIELD_ROOT', Path(__file__).resolve().parents[3] / 'Pulsefield-model')),
-                                 help='Pulsefield checkout with its existing .venv music frontend.')
+            command.add_argument('--ensomi-root', type=Path,
+                                 default=Path(os.environ.get('ENSOMI_ROOT', Path(__file__).resolve().parents[3] / 'ensomi-model')),
+                                 help='ensomi checkout with its existing .venv music frontend.')
         if name == 'examples':
             command.add_argument('--tag', default='tech')
             command.add_argument('--assessment', choices=['absent', 'supporting', 'prominent', 'present'])
@@ -81,7 +81,7 @@ def main():
                 result['imagePath'] = str(args.out.resolve())
             case 'audio':
                 from learning_audio import render_audio
-                result = render_audio(corpus, args.handle, args.start_ms, args.end_ms, args.out, args.pulsefield_root)
+                result = render_audio(corpus, args.handle, args.start_ms, args.end_ms, args.out, args.ensomi_root)
             case 'examples':
                 result = corpus.search(args.tag, args.assessment, args.text, args.offset, args.limit)
             case 'example':

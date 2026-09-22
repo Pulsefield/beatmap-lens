@@ -354,7 +354,7 @@ from snapshot import build_snapshot, validate_snapshot
 import pyarrow.parquet as pq
 root = Path(sys.argv[1])
 data = json.loads((root/'input.json').read_text())
-artifact = lambda sha: dict(repository='https://github.com/Pulsefield/beatmap-lens', commit='a'*40, path='annotation/test.json', sha256=sha)
+artifact = lambda sha: dict(repository='https://github.com/ensomi-labs/beatmap-lens', commit='a'*40, path='annotation/test.json', sha256=sha)
 sources = {s['sha256']: s for s in data['sources']}
 for foundation in data['foundations'].values():
  for example in foundation['calibrationExamples']:

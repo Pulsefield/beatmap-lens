@@ -191,10 +191,10 @@ class PublicationTests(unittest.TestCase):
         self.api.create_commit.assert_not_called()
 
     def test_public_artifact_uses_pinned_commit(self):
-        ref = {'repository': 'https://github.com/Pulsefield/beatmap-lens', 'commit': 'c'*40,
+        ref = {'repository': 'https://github.com/ensomi-labs/beatmap-lens', 'commit': 'c'*40,
                'path': 'annotation/foundations/definition.json', 'sha256': 'd'*64}
         self.assertEqual(publish._public_artifact_url(ref),
-                         'https://raw.githubusercontent.com/Pulsefield/beatmap-lens/' + 'c'*40 +
+                         'https://raw.githubusercontent.com/ensomi-labs/beatmap-lens/' + 'c'*40 +
                          '/annotation/foundations/definition.json')
         with self.assertRaisesRegex(ValueError, 'full Git commit'):
             publish._public_artifact_url({**ref, 'commit': 'main'})

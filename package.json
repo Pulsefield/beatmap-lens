@@ -1,5 +1,5 @@
 {
-  "name": "@pulsefield/beatmap-lens",
+  "name": "@ensomi/beatmap-lens-workspace",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -19,7 +19,7 @@
     "check": "pnpm check:source && pnpm check:skill && pnpm typecheck && pnpm test && pnpm test:python && pnpm build && pnpm check:package && pnpm test:corpus-validator && pnpm test:pattern-category-map",
     "check:package": "pnpm --filter beatmap-lens pack --dry-run",
     "check:source": "biome ci .",
-    "dev": "pnpm --filter @pulsefield/beatmap-lens-inspector dev",
+    "dev": "pnpm --filter @ensomi/beatmap-lens-inspector dev",
     "format": "biome check --write .",
     "release": "pnpm build && changeset publish",
     "test": "uv run --locked vitest run",

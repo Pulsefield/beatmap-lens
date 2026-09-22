@@ -338,7 +338,7 @@ rather than separate per-key-count APIs. The first-party Inspector prioritizes 4
 layer; that narrower delivery priority does not reduce the package range.
 
 Semantic chart-quality findings and synchronized audio playback remain project direction, not
-current package features. See the [repository](https://github.com/Pulsefield/beatmap-lens) for the
+current package features. See the [repository](https://github.com/ensomi-labs/beatmap-lens) for the
 status and architecture.
 
 One `RenderScene` intentionally covers one range and one playfield. Fixed-size solving, horizontal

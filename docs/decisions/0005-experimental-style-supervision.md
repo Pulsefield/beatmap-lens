@@ -2,8 +2,8 @@
 
 - Status: Four-dimension Foundation approved with expert calibration corrections;
   community targets and alignments remain proposals
-- Scope: Beatmap Lens observations consumed by Pulsefield research
-- Formulation reference: Pulsefield-model `7faff4cbdef5ebc93fb11fb4acce5a95d7bfc713`,
+- Scope: Beatmap Lens observations consumed by ensomi research
+- Formulation reference: ensomi-model `7faff4cbdef5ebc93fb11fb4acce5a95d7bfc713`,
   `docs/formulation/gameplay-state.md` sections 2, 5, 10–18 and
   `docs/formulation/notation.md` sections 8–9
 
@@ -172,7 +172,7 @@ controlled continuation probes: repeated-role versus distributed use, different
 recovery intervals, hold occupancy with free-role taps, or release followed by a
 chord. Preserve exact state and legal continuations. Model-defined probe responses
 need independent grounding under the canonical profile; experts do not invent
-demand values when annotating style. This is a Pulsefield experiment, not a Lens
+demand values when annotating style. This is an ensomi experiment, not a Lens
 simulator or a claim that such responses have already been validated.
 
 ## What a strength control must demonstrate
@@ -218,7 +218,7 @@ catalogue correspondence alone is not a complete weak-supervision alignment: the
 consumer also needs direction, scope, and pooling meaning. The four-dimension
 Foundation starts with no declared correspondences while those decisions are open.
 
-Source-ms half-open intervals remain the Lens contract. A Pulsefield consumer must
+Source-ms half-open intervals remain the Lens contract. An ensomi consumer must
 explicitly adapt milliseconds and endpoint membership to its coordinates, including
 entering LN occupancy. It must not silently reinterpret an interval or fill unknown
 labels during adaptation.

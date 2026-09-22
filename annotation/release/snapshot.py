@@ -223,7 +223,7 @@ def _validate_mit_license(content: bytes) -> None:
 
 def _mit_license() -> bytes:
     path = REPO / "LICENSE"
-    content = path.read_bytes() if path.is_file() else ("MIT License\n\nCopyright (c) 2026 Pulsefield contributors\n\n" + MIT_TERMS).encode("utf-8")
+    content = path.read_bytes() if path.is_file() else ("MIT License\n\nCopyright (c) 2026 ensomi contributors\n\n" + MIT_TERMS).encode("utf-8")
     _validate_mit_license(content)
     return content
 

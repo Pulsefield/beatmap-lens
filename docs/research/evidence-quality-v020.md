@@ -206,14 +206,14 @@ creating additional omitted-note judgments is outside this annotation procedure.
 ## Reproduce the plan
 
 Run from the Beatmap Lens repository with the frozen release, workflow journals,
-exact source bytes referenced by the hygiene provenance, and the Pulsefield
+exact source bytes referenced by the hygiene provenance, and the ensomi
 hygiene artifact available:
 
 ```sh
 uv run --locked python -m annotation.evidence_review.plan \
   --release .local/releases/mania-pattern-annotations/v0.2.0 \
   --workflow .local/corpus-500-v2/workspace/workflow \
-  --hygiene ../Pulsefield-model/artifacts/evidence_hygiene/20260910-v020/valid-data-final \
+  --hygiene ../ensomi-model/artifacts/evidence_hygiene/20260910-v020/valid-data-final \
   --output .local/selection-supplement-20260910/candidates
 ```
 
@@ -230,7 +230,7 @@ command writes to the release, source charts or workflow. Outputs are:
   exact input hashes and output checksums.
 
 Cell IDs reuse the publication exporter's `judgment_cell_id`; the shorter
-Pulsefield hygiene identity is retained separately as `upstream_cell_id` for
+ensomi hygiene identity is retained separately as `upstream_cell_id` for
 cross-project joins.
 
 The generator verifies the release manifest and all release file bytes, checks

@@ -14,7 +14,7 @@ mappers: inspect an arrangement, explain what it does, and help improve it.
   retains its full 4K–10K boundary. See the [design guide](apps/inspector/DESIGN.md).
 
 This repository also develops agent annotation and dataset production with
-Pulsefield. The main workflow joins **whole-chart discovery
+ensomi. The main workflow joins **whole-chart discovery
 and selected-section annotation**, followed by independent agent review and human
 corrections. The harness provides inspection tools; the judgment skill owns the
 reading guidance. Neither numerical features nor agent agreement create human
@@ -74,10 +74,10 @@ pnpm dev
 method changes; missing semantic replay remains missing evidence, not a quality
 pass. Dataset publication checks its own frozen snapshot and declared policy.
 
-Paired development with the neighboring Pulsefield checkout is the default for
+Paired development with the neighboring ensomi checkout is the default for
 annotation work. Paths and Python environments are configurable; see the
 [annotation workflow](docs/annotation/corpus-annotation.md) and
-[contribution guide](CONTRIBUTING.md). The npm package does not depend on Pulsefield.
+[contribution guide](CONTRIBUTING.md). The npm package does not depend on ensomi.
 
 ## License
 

@@ -116,7 +116,7 @@ not mastery. Replaying known human examples is calibration, not held-out accurac
 The [regression gate](../../annotation/evaluation/README.md) checks candidate updates
 against previous cases; reasoning still needs evidence review.
 
-These findings also suggest questions for Pulsefield's history representation:
+These findings also suggest questions for ensomi's history representation:
 with the same next action, what changes when prior holding, alternation, adjacent
 repetition, or a gap differs? Does a gap remain LN-occupied? Does a released column
 become free while others remain held? The observations motivate these questions

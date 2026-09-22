@@ -6,7 +6,7 @@ description: Write, review, and archive local Beatmap Lens research and decision
 # Local Agent Notes
 
 Keep working decisions and useful research evidence in `.local/agent-notes/`.
-This adapts Pulsefield's writing and archival practice to local storage. Create the
+This adapts ensomi's writing and archival practice to local storage. Create the
 needed directories as part of an authorized recording task; no notes branch,
 worktree, commit, or publication procedure is required.
 
