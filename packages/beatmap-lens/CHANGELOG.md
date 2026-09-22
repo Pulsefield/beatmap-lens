@@ -1,5 +1,11 @@
 # beatmap-lens
 
+## 0.3.1
+
+### Patch Changes
+
+- b84a5d1: Point the package metadata and documentation to the ensomi-labs repository.
+
 ## 0.3.0
 
 ### Minor Changes
